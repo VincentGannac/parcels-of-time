@@ -32,18 +32,20 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     public_url: publicUrl,
   })
 
-     // pdf est un Uint8Array<...>. On le “re-normalise” en Uint8Array standard,
-  // puis on le met dans un Blob pour satisfaire BodyInit.
-  const bytes: Uint8Array = new Uint8Array(pdf);
-  const blob = new Blob([bytes], { type: 'application/pdf' });
+    // --- PDF (Uint8Array) -> ArrayBuffer propre -> Response ---
+  // On recopie explicitement pour obtenir un ArrayBuffer garanti (pas SharedArrayBuffer).
+  const bytes = new Uint8Array(pdf.length);
+  bytes.set(pdf);
+  const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
-  return new Response(blob, {
+  return new Response(ab, {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="cert-${encodeURIComponent(decodedTs)}.pdf"`,
       'Cache-Control': 'no-store',
     },
   });
+
 
   
 }
