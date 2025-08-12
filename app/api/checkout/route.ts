@@ -1,36 +1,29 @@
-export const runtime = 'nodejs'
+export const runtime = 'nodejs';
 
-import { NextResponse } from 'next/server'
-import Stripe from 'stripe'
-import { priceFor } from '@/lib/pricing'
+import { NextResponse } from 'next/server';
+import Stripe from 'stripe';
+import { priceFor } from '@/lib/pricing';
 
-type Body = {
-  ts: string
-  email: string
-  display_name?: string
-  message?: string
-  link_url?: string
-}
+type Body = { ts: string; email: string; display_name?: string; message?: string; link_url?: string };
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as Body
-  if (!body.ts || !body.email) {
-    return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-  }
+  const body = (await req.json()) as Body;
+  if (!body.ts || !body.email) return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
 
-  const d = new Date(body.ts)
-  if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
-  d.setMilliseconds(0)
-  const tsISO = d.toISOString()
+  const d = new Date(body.ts);
+  if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 });
+  d.setMilliseconds(0);
+  const tsISO = d.toISOString();
 
-  const origin = new URL(req.url).origin
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
+  const origin = new URL(req.url).origin;
 
-  const { price_cents, currency } = priceFor(tsISO)
+  // ✅ pas d'apiVersion ici non plus
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+
+  const { price_cents, currency } = priceFor(tsISO);
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
-    payment_method_types: ['card'],
     line_items: [{
       quantity: 1,
       price_data: {
@@ -52,7 +45,7 @@ export async function POST(req: Request) {
     },
     success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&cancelled=1`,
-  })
+  });
 
-  return NextResponse.json({ url: session.url })
+  return NextResponse.json({ url: session.url });
 }
