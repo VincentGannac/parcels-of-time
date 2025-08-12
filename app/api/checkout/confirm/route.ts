@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const session_id = url.searchParams.get('session_id')
   if (!session_id) return NextResponse.redirect(new URL('/', url).toString(), { status: 302 })
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!); // ✅ pas d'apiVersion
   const s = await stripe.checkout.sessions.retrieve(session_id, { expand: ['payment_intent'] })
 
   if (s.payment_status !== 'paid') {
