@@ -32,11 +32,14 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     public_url: publicUrl,
   })
 
-  return new Response(pdf, {
+  // ✅ Fix: envelopper en Blob pour satisfaire le type BodyInit
+  const blob = new Blob([pdf], { type: 'application/pdf' });
+
+  return new Response(blob, {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="cert-${encodeURIComponent(decodedTs)}.pdf"`,
       'Cache-Control': 'no-store',
-    }
+    },
   })
 }
