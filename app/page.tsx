@@ -1,103 +1,79 @@
-import Image from "next/image";
+// app/page.tsx — Parcels of Time landing (copy-first, minimal styling)
 
-export default function Home() {
+import Link from 'next/link'
+
+export default function Page() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main style={{fontFamily:'Inter, system-ui, -apple-system, Segoe UI, Roboto', background:'#FAF9F7', color:'#0B0B0C'}}>
+      <section style={{maxWidth:960, margin:'0 auto', padding:'96px 24px 56px'}}>
+        <div style={{display:'flex', alignItems:'center', gap:16}}>
+          <img src="/logo.svg" alt="Parcels of Time" width={40} height={40} />
+          <h1 style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:32, margin:0}}>Parcels of Time</h1>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        <h2 style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:56, lineHeight:1.05, margin:'32px 0 12px'}}>
+          Own a second, forever.
+        </h2>
+        <p style={{fontSize:20, maxWidth:680, opacity:.9}}>
+          Claim the exclusive, symbolic ownership of a single second — past or future —
+          recorded in a public registry and sealed by a signed certificate.
+        </p>
+        <div style={{marginTop:28, display:'flex', gap:12}}>
+          <Link href="/claim" style={{background:'#0B0B0C', color:'#FAF9F7', padding:'14px 18px', borderRadius:8, textDecoration:'none', fontWeight:600}}>
+            Claim your second
+          </Link>
+          <a href="#how" style={{padding:'14px 18px', borderRadius:8, border:'1px solid #D9D7D3', textDecoration:'none', color:'#0B0B0C'}}>How it works</a>
+        </div>
+      </section>
+
+      <section id="how" style={{maxWidth:960, margin:'0 auto', padding:'48px 24px'}}>
+        <h3 style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:28}}>How it works</h3>
+        <ol style={{fontSize:18, lineHeight:1.5}}>
+          <li><strong>Choose</strong> an exact UTC timestamp (to the second).</li>
+          <li><strong>Pay</strong> securely.</li>
+          <li><strong>Receive</strong> your signed certificate and public page.</li>
+        </ol>
+      </section>
+
+      <section id="editions" style={{maxWidth:960, margin:'0 auto', padding:'24px'}}>
+        <h3 style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:28}}>Editions & pricing</h3>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:16}}>
+          <div style={{border:'1px solid #D9D7D3', borderRadius:12, padding:16}}>
+            <h4 style={{marginTop:0}}>Classic</h4>
+            <p>Any free second.</p>
+            <p><strong>€79</strong></p>
+          </div>
+          <div style={{border:'1px solid #D9D7D3', borderRadius:12, padding:16}}>
+            <h4 style={{marginTop:0}}>Premium</h4>
+            <p>Pattern seconds (11:11:11, palindromes, leap day).</p>
+            <p><strong>€790</strong></p>
+          </div>
+          <div style={{border:'1px solid #D9D7D3', borderRadius:12, padding:16}}>
+            <h4 style={{marginTop:0}}>Iconic</h4>
+            <p>24h auctions for mythic timestamps.</p>
+            <p><strong>Variable</strong></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" style={{maxWidth:960, margin:'0 auto', padding:'24px 24px 80px'}}>
+        <h3 style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:28}}>FAQ</h3>
+        <details style={{marginBottom:12}}>
+          <summary>What do I own, exactly?</summary>
+          <p>You own the exclusive symbolic claim to a specific second, recorded in our public registry, plus a signed certificate. This is not a financial instrument nor legal ownership of time.</p>
+        </details>
+        <details style={{marginBottom:12}}>
+          <summary>Can I resell?</summary>
+          <p>Yes, through our secondary market (with provenance and a 10% creator royalty).</p>
+        </details>
+        <details style={{marginBottom:12}}>
+          <summary>Right of withdrawal?</summary>
+          <p>Digital content delivered immediately: you agree to waive the EU right of withdrawal at checkout.</p>
+        </details>
+        <details style={{marginBottom:12}}>
+          <summary>Moderation & safety?</summary>
+          <p>Public messages/links are moderated. Illegal or harmful content is refused.</p>
+        </details>
+      </section>
+    </main>
   );
 }

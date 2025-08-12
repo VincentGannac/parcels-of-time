@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Parcels of Time — Logo</title>
+  <desc id="desc">A thin circular dial with a single tick at twelve o’clock.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round">
+    <!-- Dial -->
+    <circle cx="128" cy="128" r="112"></circle>
+    <!-- Twelve o'clock tick -->
+    <line x1="128" y1="16" x2="128" y2="48"></line>
+  </g>
+  <!-- Center dot -->
+  <circle cx="128" cy="128" r="4" fill="currentColor"></circle>
+</svg>
