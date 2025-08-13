@@ -1,0 +1,11 @@
+{
+    "redirects": [
+      {
+        "source": "/:path*",
+        "has": [{ "type": "host", "value": "www.parcelsoftime.com" }],
+        "destination": "https://parcelsoftime.com/:path*",
+        "permanent": true
+      }
+    ]
+  }
+  

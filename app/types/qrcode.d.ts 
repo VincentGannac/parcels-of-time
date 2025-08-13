@@ -1,0 +1,7 @@
+declare module 'qrcode' {
+  const QRCode: {
+    toDataURL(text: string, opts?: any): Promise<string>;
+    // (tu peux ajouter d'autres signatures si besoin)
+  };
+  export default QRCode;
+}

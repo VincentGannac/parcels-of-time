@@ -31,13 +31,19 @@ export default async function Page({ params }: { params: Promise<Params> }) {
             {data.message && <blockquote style={{margin:'0 0 12px', fontStyle:'italic'}}>&ldquo;{data.message}&rdquo;</blockquote>}
             {data.link_url && <p><a href={data.link_url} rel="nofollow noopener" target="_blank">{data.link_url}</a></p>}
             {data.claimed_at && <p style={{opacity:.7, fontSize:14}}>Claimed at {formatISOAsNice(data.claimed_at)}</p>}
+            {/* 👇 Bouton certificat */}
+            <a
+              href={data.cert_url || `/api/cert/${encodeURIComponent(ts)}`}
+              target="_blank"
+              style={{display:'inline-block', marginTop:12, background:'#0B0B0C', color:'#FAF9F7', padding:'10px 14px', borderRadius:8, textDecoration:'none', fontWeight:600}}
+            >
+              Download certificate (PDF)
+            </a>
           </div>
         ) : (
           <div style={{border:'1px dashed #D9D7D3', borderRadius:12, padding:20, background:'#fff'}}>
             <p>This second is not yet claimed.</p>
-            <a href={`/claim?ts=${encodeURIComponent(ts)}`} style={{background:'#0B0B0C', color:'#FAF9F7', padding:'10px 14px', borderRadius:8, textDecoration:'none', fontWeight:600}}>
-              Claim this second
-            </a>
+            <a href={`/claim?ts=${encodeURIComponent(ts)}`}>Claim this second</a>
           </div>
         )}
       </section>

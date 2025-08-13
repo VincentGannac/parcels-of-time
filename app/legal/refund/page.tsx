@@ -1,3 +1,5 @@
+//app/legal/refund/page.tsx
+
 export default function Page() {
   return (
     <main style={{ fontFamily:'Inter, system-ui', background:'#FAF9F7', color:'#0B0B0C', minHeight:'100vh', padding:32 }}>
