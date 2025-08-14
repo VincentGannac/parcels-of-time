@@ -1,3 +1,4 @@
+//lib/labels.ts
 export type Edition = 'classic' | 'premium' | 'iconic';
 
 export function isLeapDay(d: Date) {

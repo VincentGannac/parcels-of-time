@@ -1,3 +1,4 @@
+// lib/cert.ts
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import QRCode from 'qrcode'
 

@@ -1,3 +1,4 @@
+// lib/db.ts
 import { Pool } from 'pg';
 
 declare global {

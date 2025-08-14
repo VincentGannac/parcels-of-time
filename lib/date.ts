@@ -1,3 +1,4 @@
+// lib/date.ts
 export function formatISOAsNice(iso: string) {
   try {
     const d = new Date(iso);
