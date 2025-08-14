@@ -28,17 +28,14 @@ export default function ClientClaim() {
     link_url: '',
     ts: prefillTs,
   })
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
 
-    // 1) Nettoie / décode
     let tsInput = safeDecode((form.ts || '').trim())
-
-    // 2) Normalise en ISO Z à la seconde
     const d = new Date(tsInput)
     if (isNaN(d.getTime())) {
       setStatus('error')
@@ -48,7 +45,6 @@ export default function ClientClaim() {
     d.setMilliseconds(0)
     const tsISO = d.toISOString()
 
-    // 3) Stripe Checkout
     const res = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

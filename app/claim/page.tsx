@@ -2,7 +2,8 @@
 import { Suspense } from 'react'
 import ClientClaim from './ClientClaim'
 
-export const dynamic = 'force-dynamic' // évite la pré-génération et l'erreur de prerender
+export const dynamic = 'force-dynamic' // opt-out SSG pour cette page
+export const revalidate = 0
 
 export default function Page() {
   return (
