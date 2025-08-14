@@ -26,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div style={{display:'flex', gap:14}}>
               <Link href="/company" style={{textDecoration:'none', color:'#0B0B0C'}}>About</Link>
               <Link href="/support" style={{textDecoration:'none', color:'#0B0B0C'}}>Support</Link>
+              <Link href="/search" style={{textDecoration:'none', color:'#0B0B0C'}}>Search</Link>
               <Link href="/claim" style={{background:'#0B0B0C', color:'#FAF9F7', padding:'8px 12px', borderRadius:8, textDecoration:'none', fontWeight:600}}>Claim</Link>
             </div>
           </nav>
