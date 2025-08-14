@@ -6,17 +6,33 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 import { pool } from '@/lib/db';
 
+type CertStyle =
+  | 'neutral'
+  | 'romantic'
+  | 'birthday'
+  | 'wedding'
+  | 'birth'
+  | 'christmas'
+  | 'newyear'
+  | 'graduation'
+
+const ALLOWED_STYLES: readonly CertStyle[] = [
+  'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'
+] as const
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const session_id = url.searchParams.get('session_id');
   if (!session_id) return NextResponse.redirect(new URL('/', url).toString(), { status: 302 });
 
-  // ✅ pas d'apiVersion ici
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-
   const s = await stripe.checkout.sessions.retrieve(session_id, { expand: ['payment_intent'] });
+
   if (s.payment_status !== 'paid') {
-    return NextResponse.redirect(new URL(`/claim?ts=${encodeURIComponent(String(s.metadata?.ts || ''))}&status=unpaid`, url).toString(), { status: 302 });
+    return NextResponse.redirect(
+      new URL(`/claim?ts=${encodeURIComponent(String(s.metadata?.ts || ''))}&status=unpaid`, url).toString(),
+      { status: 302 }
+    );
   }
 
   const ts = String(s.metadata?.ts || '');
@@ -26,21 +42,35 @@ export async function GET(req: Request) {
   const link_url = (s.metadata?.link_url || '') || null;
   const amount_total = s.amount_total ?? 0;
 
+  // re-valider le style (jamais faire confiance au client)
+  const styleCandidate = String(s.metadata?.cert_style || 'neutral').toLowerCase();
+  const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
+    ? (styleCandidate as CertStyle)
+    : 'neutral';
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const { rows: ownerRows } = await client.query(
-      'INSERT INTO owners(email, display_name) VALUES($1,$2) ON CONFLICT(email) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, owners.display_name) RETURNING id',
+      `INSERT INTO owners(email, display_name)
+       VALUES($1,$2)
+       ON CONFLICT(email) DO UPDATE
+         SET display_name = COALESCE(EXCLUDED.display_name, owners.display_name)
+       RETURNING id`,
       [email.toLowerCase(), display_name]
     );
     const ownerId = ownerRows[0].id;
 
     const { rows: claimRows } = await client.query(
-      `INSERT INTO claims (ts, owner_id, price_cents, currency, message, link_url)
-       VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5)
-       ON CONFLICT (ts) DO UPDATE SET message = EXCLUDED.message, link_url = EXCLUDED.link_url
+      `INSERT INTO claims (ts, owner_id, price_cents, currency, message, link_url, cert_style)
+       VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6)
+       ON CONFLICT (ts) DO UPDATE
+         SET message   = EXCLUDED.message,
+             link_url  = EXCLUDED.link_url,
+             cert_style= EXCLUDED.cert_style
        RETURNING id, created_at`,
-      [ts, ownerId, amount_total, message, link_url]
+      [ts, ownerId, amount_total, message, link_url, cert_style]
     );
     const claim = claimRows[0];
 
@@ -48,20 +78,23 @@ export async function GET(req: Request) {
     const data = `${ts}|${ownerId}|${amount_total}|${claim.created_at.toISOString()}|${salt}`;
     const hash = crypto.createHash('sha256').update(data).digest('hex');
     const cert_url = `/api/cert/${encodeURIComponent(ts)}`;
-    await client.query('UPDATE claims SET cert_hash=$1, cert_url=$2 WHERE id=$3', [hash, cert_url, claim.id]);
+
+    await client.query(
+      'UPDATE claims SET cert_hash=$1, cert_url=$2 WHERE id=$3',
+      [hash, cert_url, claim.id]
+    );
 
     await client.query('COMMIT');
-    // après COMMIT
-try {
-  const publicUrl = `${process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin}/s/${encodeURIComponent(ts)}`
-  const certUrl = `${process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin}/api/cert/${encodeURIComponent(ts)}`
-  const { sendClaimReceiptEmail } = await import('@/lib/email')
-  await sendClaimReceiptEmail({
-    to: email, ts, displayName: display_name,
-    publicUrl, certUrl,
-  })
-} catch {}
 
+    // email post-commit
+    try {
+      const publicUrl = `${process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin}/s/${encodeURIComponent(ts)}`
+      const certUrl = `${process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin}/api/cert/${encodeURIComponent(ts)}`
+      const { sendClaimReceiptEmail } = await import('@/lib/email')
+      await sendClaimReceiptEmail({
+        to: email, ts, displayName: display_name, publicUrl, certUrl,
+      })
+    } catch {}
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;

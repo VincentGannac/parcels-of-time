@@ -15,7 +15,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   // 1) Récupère la claim
   const { rows } = await pool.query(
     `SELECT
-       c.id AS claim_id, c.ts, c.message, c.link_url, c.cert_hash, c.created_at,
+       c.id AS claim_id, c.ts, c.message, c.link_url, c.cert_hash, c.created_at, c.cert_style,
        o.display_name
      FROM claims c
      JOIN owners o ON o.id = c.owner_id
@@ -30,7 +30,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const publicUrl =
     `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/s/${encodeURIComponent(decodedTs)}`;
 
-  // 2) Génère le PDF (Uint8Array)
+  // 2) Génère le PDF (Uint8Array) avec style
   const pdfBytes = await generateCertificatePDF({
     ts: row.ts.toISOString(),
     display_name: row.display_name || 'Anonymous',
@@ -39,9 +39,10 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     claim_id: row.claim_id,
     hash: row.cert_hash || 'no-hash',
     public_url: publicUrl,
+    style: row.cert_style || 'neutral',
   });
 
-  // 3) ✅ Conversion Node : Buffer → BodyInit (typesafe sur Vercel)
+  // 3) Buffer → Response
   const buf = Buffer.from(pdfBytes);
 
   return new Response(buf as unknown as BodyInit, {

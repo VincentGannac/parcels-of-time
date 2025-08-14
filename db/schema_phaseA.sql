@@ -1,4 +1,4 @@
--- Parcels of Time — Phase A schema (free-claim MVP)
+-- app/db/schema_phaseA.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS owners (
@@ -26,16 +26,27 @@ CREATE TABLE IF NOT EXISTS claims (
   currency TEXT NOT NULL DEFAULT 'EUR',
   message TEXT,
   link_url TEXT,
+  cert_style TEXT NOT NULL DEFAULT 'neutral',
   cert_hash TEXT,
   cert_url TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT ts_is_second CHECK (date_trunc('second', ts) = ts),
-  CONSTRAINT one_owner_per_second UNIQUE (ts)
+  CONSTRAINT one_owner_per_second UNIQUE (ts),
+  CONSTRAINT cert_style_valid CHECK (cert_style IN (
+    'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'
+  ))
 );
+
 
 CREATE INDEX IF NOT EXISTS idx_claims_owner ON claims(owner_id);
 CREATE INDEX IF NOT EXISTS idx_instants_edition ON instants(edition);
 
 CREATE OR REPLACE VIEW second_public AS
-SELECT c.ts, o.display_name, c.message, c.link_url, c.cert_url, c.created_at AS claimed_at
+SELECT c.ts, o.display_name, c.message, c.link_url, c.cert_url, c.created_at AS claimed_at, c.cert_style
 FROM claims c JOIN owners o ON o.id = c.owner_id;
+
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS cert_style TEXT NOT NULL DEFAULT 'neutral';
+DO $$ BEGIN
+  ALTER TABLE claims ADD CONSTRAINT cert_style_valid
+  CHECK (cert_style IN ('neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

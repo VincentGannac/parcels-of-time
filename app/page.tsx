@@ -51,23 +51,38 @@ export default function Page() {
 
       {/* CERTIFICATE PREVIEW */}
       <section aria-labelledby="preview" style={{maxWidth:1040, margin:'0 auto', padding:'12px 24px 8px'}}>
-        <h3 id="preview" style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:28, marginBottom:12}}>What you receive</h3>
+        <h3 id="preview" style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:28, marginBottom:12}}>
+          What you receive
+        </h3>
+
         <div style={{display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:16}}>
+          {/* Grand aperçu type "Romantic" */}
           <div style={{border:'1px solid #D9D7D3', borderRadius:16, background:'#fff', padding:20}}>
             <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10}}>
               <strong style={{fontSize:16}}>Parcels of Time — Certificate of Claim</strong>
-              <span style={{fontSize:12, opacity:.6}}>PDF sample</span>
+              <span style={{fontSize:12, opacity:.6}}>PDF sample • Romantic</span>
             </div>
-            <div style={{border:'1px dashed #E3E1DC', borderRadius:12, padding:16}}>
-              <div style={{fontSize:22, fontWeight:700, marginBottom:6}}>2030-01-01 00:00:00 UTC</div>
+
+            <div style={{
+              border:'1px dashed #E3E1DC', borderRadius:12, padding:16,
+              background:'linear-gradient(135deg,#FFE6EE,#FFF)'}}
+            >
+              <div style={{fontSize:22, fontWeight:700, marginBottom:6}}>2017-06-24 21:13:07 UTC</div>
               <div style={{fontSize:12, opacity:.7, marginBottom:8}}>Owned by</div>
-              <div style={{fontSize:15, fontWeight:600, marginBottom:12}}>Anonymous</div>
+              <div style={{fontSize:15, fontWeight:600, marginBottom:12}}>A.&nbsp;L.</div>
+
               <div style={{fontSize:12, opacity:.7, marginBottom:6}}>Message</div>
-              <blockquote style={{margin:0, fontSize:14, fontStyle:'italic'}}>“A fresh start.”</blockquote>
+              <blockquote style={{margin:0, fontSize:14, fontStyle:'italic'}}>
+                “The exact second of our first kiss on the Pont des Arts.
+                A warm June night, the city lights blinking like fireflies — time stood still.”
+              </blockquote>
+
               <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:16}}>
                 <div>
                   <div style={{fontSize:11, opacity:.6}}>Certificate ID</div>
-                  <div style={{fontSize:12, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>#000000000000</div>
+                  <div style={{fontSize:12, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                    #2F9C-LOVE-24
+                  </div>
                 </div>
                 <div>
                   <div style={{fontSize:11, opacity:.6}}>Integrity (SHA-256)</div>
@@ -77,30 +92,103 @@ export default function Page() {
                 </div>
               </div>
             </div>
-            <div style={{display:'flex', gap:12, marginTop:12}}>
+
+            <div style={{display:'flex', gap:12, marginTop:12, flexWrap:'wrap'}}>
               <Link href="/claim" style={{background:'#0B0B0C', color:'#FAF9F7', padding:'10px 14px', borderRadius:8, textDecoration:'none', fontWeight:600}}>
                 Get yours now
               </Link>
-              <a href="#faq" style={{padding:'10px 14px', borderRadius:8, border:'1px solid #D9D7D3', textDecoration:'none', color:'#0B0B0C'}}>FAQ</a>
+              <a href="#inspire" style={{padding:'10px 14px', borderRadius:8, border:'1px solid #D9D7D3', textDecoration:'none', color:'#0B0B0C'}}>
+                See real inspirations
+              </a>
             </div>
           </div>
 
+          {/* Points de valeur */}
           <ul style={{margin:0, padding:0, listStyle:'none', display:'grid', gap:12, alignContent:'start'}}>
             <li style={{background:'#fff', border:'1px solid #D9D7D3', borderRadius:12, padding:14}}>
               ✅ Public page for your second
             </li>
             <li style={{background:'#fff', border:'1px solid #D9D7D3', borderRadius:12, padding:14}}>
-              ✅ Signed, shareable PDF certificate
+              ✅ Signed, shareable PDF certificate (multiple styles)
             </li>
             <li style={{background:'#fff', border:'1px solid #D9D7D3', borderRadius:12, padding:14}}>
-              ✅ Message & link (moderated)
+              ✅ Personal message & optional link (moderated)
             </li>
             <li style={{background:'#fff', border:'1px solid #D9D7D3', borderRadius:12, padding:14}}>
-              ✅ Instant delivery via email
+              ✅ Instant email delivery
             </li>
           </ul>
         </div>
       </section>
+
+
+            {/* INSPIRATION GALLERY */}
+      <section id="inspire" style={{maxWidth:1040, margin:'0 auto', padding:'20px 24px 8px'}}>
+        <h3 style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:28, marginBottom:12}}>
+          Inspiration gallery
+        </h3>
+
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:16}}>
+          {/* Love / Romantic */}
+          <div style={{border:'1px solid #D9D7D3', borderRadius:14, background:'#fff', overflow:'hidden', display:'grid'}}>
+            <div style={{height:110, background:'linear-gradient(135deg,#FFE6EE,#FFF)'}} />
+            <div style={{padding:14, display:'grid', gap:8}}>
+              <strong>Ode to love</strong>
+              <p style={{margin:0, opacity:.9}}>
+                “The second our paths crossed for real — a shaky laugh, a missed metro,
+                and that kiss we still talk about.”
+              </p>
+              <p style={{margin:0, fontSize:12, opacity:.65}}>2017-06-24 21:13:07 UTC • Romantic style</p>
+              <Link
+                href={`/claim?ts=${encodeURIComponent('2017-06-24T21:13:07Z')}&style=romantic`}
+                style={{textDecoration:'none', fontWeight:600}}
+              >
+                Claim a romantic second →
+              </Link>
+            </div>
+          </div>
+
+          {/* Birth */}
+          <div style={{border:'1px solid #D9D7D3', borderRadius:14, background:'#fff', overflow:'hidden', display:'grid'}}>
+            <div style={{height:110, background:'linear-gradient(135deg,#E0F2FE,#FDE68A,#FCE7F3)'}} />
+            <div style={{padding:14, display:'grid', gap:8}}>
+              <strong>Welcome to the world</strong>
+              <p style={{margin:0, opacity:.9}}>
+                “05:42:10 — Léa cried for the first time. We cried too.
+                Tiny fingers wrapped around ours; everything else disappeared.”
+              </p>
+              <p style={{margin:0, fontSize:12, opacity:.65}}>2023-11-03 05:42:10 UTC • Birth style</p>
+              <Link
+                href={`/claim?ts=${encodeURIComponent('2023-11-03T05:42:10Z')}&style=birth`}
+                style={{textDecoration:'none', fontWeight:600}}
+              >
+                Claim a birth second →
+              </Link>
+            </div>
+          </div>
+
+          {/* Proposal / Wedding */}
+          <div style={{border:'1px solid #D9D7D3', borderRadius:14, background:'#fff', overflow:'hidden', display:'grid'}}>
+            <div style={{height:110, background:'radial-gradient(circle at 30% 30%,#F7F3E9 0,#FFF 60%)'}} />
+            <div style={{padding:14, display:'grid', gap:8}}>
+              <strong>She said yes</strong>
+              <p style={{margin:0, opacity:.9}}>
+                “18:11:11 — the longest breath I ever took.
+                Trembling hands, a ring that almost fell, and her yes.”
+              </p>
+              <p style={{margin:0, fontSize:12, opacity:.65}}>2021-09-12 18:11:11 UTC • Wedding style</p>
+              <Link
+                href={`/claim?ts=${encodeURIComponent('2021-09-12T18:11:11Z')}&style=wedding`}
+                style={{textDecoration:'none', fontWeight:600}}
+              >
+                Claim a wedding second →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
 
       {/* HOW IT WORKS */}
       <section id="how" style={{maxWidth:1040, margin:'0 auto', padding:'40px 24px 16px'}}>
