@@ -59,10 +59,18 @@ export default function ClientClaim() {
 
     if (!res.ok) {
       setStatus('error')
-      try { const j = await res.json(); setError(j.error || 'Unknown error') }
-      catch { setError('Unknown error') }
+      let msg = 'Unknown error'
+      try {
+        const j = await res.json()
+        if (j.error === 'rate_limited') msg = 'Trop de tentatives. Réessaye dans ~1 minute.'
+        else if (j.error === 'invalid_ts') msg = 'Timestamp invalide. Utilise un ISO comme 2100-01-01T00:00:00Z.'
+        else if (j.error === 'missing_fields') msg = 'Renseigne au minimum l’email et le timestamp.'
+        else msg = j.error || msg
+      } catch {}
+      setError(msg)
       return
     }
+    
 
     const data = await res.json()
     window.location.href = data.url
