@@ -171,8 +171,10 @@ export default function ClientClaim() {
                       onChange={()=>setForm(f=>({...f, cert_style:s.id}))}
                       style={{display:'none'}}
                     />
-                    <div style={{height:56, borderRadius:8, border:'1px solid #E9E7E3',
-                                 background:getStylePreviewBG(s.id)}} />
+                    <div style={{
+                      height:56, borderRadius:8, border:'1px solid #E9E7E3',
+                      ...getStylePreviewStyle(s.id)
+                    }}/>
                     <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                       <span style={{fontWeight:600}}>{s.label}</span>
                       <span aria-hidden="true" style={{width:8, height:8, borderRadius:99,
@@ -197,15 +199,80 @@ export default function ClientClaim() {
   )
 }
 
-function getStylePreviewBG(style: CertStyle) {
-  switch(style){
-    case 'romantic':   return 'linear-gradient(135deg,#FFE6EE,#FFF8FB)'
-    case 'birthday':   return 'repeating-linear-gradient(45deg,#FFF,#FFF 6px,#FDE68A 6px,#FDE68A 12px,#A7F3D0 12px,#A7F3D0 18px,#93C5FD 18px,#93C5FD 24px)'
-    case 'wedding':    return 'radial-gradient(circle at 30% 30%,#F7F3E9 0,#FFF 60%)'
-    case 'birth':      return 'linear-gradient(135deg,#E0F2FE,#FDE68A,#FCE7F3)'
-    case 'christmas':  return 'linear-gradient(180deg,#F0FDF4,#FFF)'
-    case 'newyear':    return 'radial-gradient(circle at 30% 30%,#E0E7FF 0,#FFF 60%)'
-    case 'graduation': return 'linear-gradient(135deg,#F3F4F6,#FFF)'
-    default:           return '#FFF'
+function getStylePreviewStyle(style: CertStyle): React.CSSProperties {
+  // Helpers
+  const enc = (s: string) => `url("data:image/svg+xml;utf8,${encodeURIComponent(s)}")`
+
+  // Motifs SVG simples et lisibles en 56px
+  const svgHeart = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'>
+    <path d='M14 22s-6-4.8-9-8.1C3 12 3.6 8.5 6.7 7.3c2-.8 4.4-.1 5.7 1.6 1.3-1.7 3.7-2.4 5.7-1.6 3.1 1.2 3.7 4.7 1.7 6.7C20 17.2 14 22 14 22z'
+      fill='#F06' fill-opacity='.35'/></svg>`
+
+  const svgBalloon = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'>
+    <ellipse cx='9' cy='9' rx='6' ry='7' fill='#93C5FD' fill-opacity='.65'/>
+    <ellipse cx='19' cy='11' rx='6' ry='7' fill='#A7F3D0' fill-opacity='.65'/>
+    <path d='M9 16 l2 3' stroke='#777' stroke-width='1'/>
+    <path d='M19 18 l-2 4' stroke='#777' stroke-width='1'/>
+  </svg>`
+
+  const svgRings = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'>
+    <circle cx='11' cy='14' r='7' fill='none' stroke='#C7A53A' stroke-width='2.6' opacity='.8'/>
+    <circle cx='17' cy='12' r='7' fill='none' stroke='#C7A53A' stroke-width='2.6' opacity='.8'/>
+  </svg>`
+
+  const svgFoot = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'>
+    <ellipse cx='9' cy='16' rx='4' ry='6' fill='#BDBDBD' fill-opacity='.45'/>
+    <circle cx='6' cy='22' r='1.7' fill='#BDBDBD' fill-opacity='.45'/>
+    <circle cx='8' cy='23' r='1.6' fill='#BDBDBD' fill-opacity='.45'/>
+    <circle cx='10' cy='23' r='1.5' fill='#BDBDBD' fill-opacity='.45'/>
+    <circle cx='12' cy='22' r='1.4' fill='#BDBDBD' fill-opacity='.45'/>
+  </svg>`
+
+  const svgSnow = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'>
+    <g stroke='#CFE7FF' stroke-width='1.2' opacity='.85'>
+      <line x1='14' y1='6' x2='14' y2='22'/><line x1='6' y1='14' x2='22' y2='14'/>
+      <line x1='8' y1='8' x2='20' y2='20'/><line x1='20' y1='8' x2='8' y2='20'/>
+    </g>
+    <circle cx='14' cy='14' r='1.5' fill='#CFE7FF' opacity='.85'/>
+  </svg>`
+
+  const svgFireworks = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'>
+    <g opacity='.9'>
+      <g stroke='#8EA2FF' stroke-width='1.6'>
+        <line x1='14' y1='6' x2='14' y2='12'/><line x1='14' y1='22' x2='14' y2='16'/>
+        <line x1='6' y1='14' x2='12' y2='14'/><line x1='22' y1='14' x2='16' y2='14'/>
+      </g>
+      <g stroke='#FFD58A' stroke-width='1.6'>
+        <line x1='8' y1='8' x2='11' y2='11'/><line x1='20' y1='20' x2='17' y2='17'/>
+        <line x1='20' y1='8' x2='17' y2='11'/><line x1='8' y1='20' x2='11' y2='17'/>
+      </g>
+    </g>
+  </svg>`
+
+  const svgLaurel = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'>
+    <ellipse cx='6' cy='20' rx='3' ry='6' fill='#D9D9D9' opacity='.8' transform='rotate(-30 6 20)'/>
+    <ellipse cx='12' cy='21' rx='3' ry='6' fill='#D9D9D9' opacity='.8' transform='rotate(-10 12 21)'/>
+    <ellipse cx='18' cy='21' rx='3' ry='6' fill='#D9D9D9' opacity='.8' transform='rotate(10 18 21)'/>
+    <ellipse cx='24' cy='20' rx='3' ry='6' fill='#D9D9D9' opacity='.8' transform='rotate(30 24 20)'/>
+  </svg>`
+
+  switch (style) {
+    case 'romantic':
+      return { backgroundImage: enc(svgHeart), backgroundRepeat: 'repeat', backgroundSize: '28px 28px', backgroundColor:'#FFF' }
+    case 'birthday':
+      return { backgroundImage: enc(svgBalloon), backgroundRepeat: 'repeat', backgroundSize: '28px 28px', backgroundColor:'#FFF' }
+    case 'wedding':
+      return { backgroundImage: enc(svgRings), backgroundRepeat: 'repeat', backgroundSize: '28px 28px', backgroundColor:'#FFF' }
+    case 'birth':
+      return { backgroundImage: enc(svgFoot), backgroundRepeat: 'repeat', backgroundSize: '28px 28px', backgroundColor:'#FFF' }
+    case 'christmas':
+      return { backgroundImage: enc(svgSnow), backgroundRepeat: 'repeat', backgroundSize: '28px 28px', backgroundColor:'#FFF' }
+    case 'newyear':
+      return { backgroundImage: enc(svgFireworks), backgroundRepeat: 'repeat', backgroundSize: '28px 28px', backgroundColor:'#FFF' }
+    case 'graduation':
+      return { backgroundImage: enc(svgLaurel), backgroundRepeat: 'repeat', backgroundSize: '28px 28px', backgroundColor:'#FFF' }
+    default:
+      return { backgroundColor:'#FFF' }
   }
 }
+
