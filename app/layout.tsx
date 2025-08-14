@@ -1,15 +1,16 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/react'
 import './globals.css'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Parcels of Time',
-  description: 'Own a second, forever.',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'),
+  title: 'Parcels of Time — Own a second, forever.',
+  description: 'Claim a unique second in UTC, get a signed certificate & public page.',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://parcelsoftime.com'),
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -31,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </header>
 
         <main>{children}</main>
-
+        <Analytics />
         <footer style={{borderTop:'1px solid #E9E7E3', marginTop:40}}>
           <div style={{maxWidth:1000, margin:'0 auto', padding:'20px', display:'flex', flexWrap:'wrap', gap:12, justifyContent:'space-between'}}>
             <span style={{opacity:.7}}>© {new Date().getFullYear()} Parcels of Time</span>
