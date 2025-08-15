@@ -31,33 +31,20 @@ async function loadBgFromPublic(style: CertStyle): Promise<{ bytes: Uint8Array; 
   return null
 }
 
-/** Safe area par style (insets depuis les bords), en points PDF (72 dpi) */
-function getSafeArea(style: CertStyle, width: number, height: number) {
-  // Par défaut : zone centrale généreuse
-  const base = { top: 120, right: 82, bottom: 170, left: 82 }
+/** Safe area (marges depuis les bords), en points PDF (72dpi) */
+function getSafeArea(style: CertStyle) {
+  // base généreuse; on ajuste style par style pour tenir compte des bordures décorées
+  const base = { top: 140, right: 90, bottom: 170, left: 90 }
 
-  // Ajustements fins selon tes fonds A4
   switch (style) {
-    case 'romantic':
-      // Motifs floraux dans les coins → marge supérieure & latérales un peu plus grandes
-      return { top: 140, right: 96, bottom: 170, left: 96 }
-    case 'birthday':
-      // Ballons & confettis sur les côtés → marge latérale plus large
-      return { top: 110, right: 120, bottom: 170, left: 120 }
-    case 'birth':
-      // Nuages/étoiles autour, centre très clair
-      return { top: 130, right: 96, bottom: 170, left: 96 }
-    case 'wedding':
-      // Anneaux/botanique dans les coins
-      return { top: 140, right: 110, bottom: 170, left: 110 }
-    case 'christmas':
-      return { top: 130, right: 96, bottom: 170, left: 96 }
-    case 'newyear':
-      return { top: 120, right: 96, bottom: 170, left: 96 }
-    case 'graduation':
-      return { top: 120, right: 96, bottom: 170, left: 96 }
-    default:
-      return base
+    case 'romantic':   return { top: 160, right: 110, bottom: 170, left: 110 }
+    case 'birthday':   return { top: 140, right: 130, bottom: 170, left: 130 }
+    case 'birth':      return { top: 150, right: 105, bottom: 170, left: 105 }
+    case 'wedding':    return { top: 160, right: 120, bottom: 170, left: 120 }
+    case 'christmas':  return { top: 150, right: 105, bottom: 170, left: 105 }
+    case 'newyear':    return { top: 150, right: 105, bottom: 170, left: 105 }
+    case 'graduation': return { top: 150, right: 105, bottom: 170, left: 105 }
+    default:           return base
   }
 }
 
@@ -67,12 +54,9 @@ function wrapText(text: string, font: any, size: number, maxWidth: number) {
   let line = ''
   for (const w of words) {
     const test = line ? line + ' ' + w : w
-    const width = font.widthOfTextAtSize(test, size)
-    if (width <= maxWidth) line = test
-    else {
-      if (line) lines.push(line)
-      line = w
-    }
+    const wpx = font.widthOfTextAtSize(test, size)
+    if (wpx <= maxWidth) line = test
+    else { if (line) lines.push(line); line = w }
   }
   if (line) lines.push(line)
   return lines
@@ -88,17 +72,15 @@ export async function generateCertificatePDF(opts: {
   public_url: string
   style?: CertStyle
 }) {
-  const {
-    ts, display_name, message, link_url, claim_id, hash, public_url,
-  } = opts
+  const { ts, display_name, message, link_url, claim_id, hash, public_url } = opts
   const style: CertStyle = (opts.style || 'neutral')
 
   const pdf = await PDFDocument.create()
-  // A4 portrait (points)
+  // A4 portrait
   const page = pdf.addPage([595.28, 841.89])
   const { width, height } = page.getSize()
 
-  // 1) Fond image pleine page
+  // Fond image
   try {
     const bg = await loadBgFromPublic(style)
     if (bg) {
@@ -111,91 +93,131 @@ export async function generateCertificatePDF(opts: {
     page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(1, 1, 1) })
   }
 
-  // 2) Cadre fin (aucune “safe area” blanche)
+  // Cadre discret
   page.drawRectangle({
     x: 24, y: 24, width: width - 48, height: height - 48,
     borderColor: rgb(0.88, 0.86, 0.83), borderWidth: 1
   })
 
-  // 3) Typo
-  const font = await pdf.embedFont(StandardFonts.Helvetica)
+  // Fonts & couleurs
+  const font     = await pdf.embedFont(StandardFonts.Helvetica)
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const dark = rgb(0.05, 0.05, 0.05)
-  const sub = rgb(0.35, 0.35, 0.35)
+  const cMain = rgb(0.05,0.05,0.05)
+  const cSub  = rgb(0.35,0.35,0.35)
 
-  // 4) Mise en page dans la safe area centrale
-  const SA = getSafeArea(style, width, height)
-  const LEFT = SA.left
-  const RIGHT = width - SA.right
-  const TOP = height - SA.top
-  const BOTTOM = SA.bottom
-  const COLW = RIGHT - LEFT
+  // ---------- ZONES ----------
+  const SA = getSafeArea(style)
+  const LEFT   = SA.left
+  const RIGHT  = width - SA.right
+  const TOP_Y  = height - SA.top
+  const BOT_Y  = SA.bottom
+  const CENTER_X = (LEFT + RIGHT) / 2
+  const COLW  = RIGHT - LEFT
 
-  let y = TOP
+  // Réserve pour pied de page (QR + meta)
+  const FOOTER_H = 132 + 20 // QR + marge
+  const FOOTER_TOP = BOT_Y + FOOTER_H
 
-  // En-tête (brand + sous-titre)
-  page.drawText('Parcels of Time', { x: LEFT, y, size: 18, font: fontBold, color: dark })
+  // 1) HEADER (descendu un peu)
+  let y = TOP_Y - 20  // 👈 "redescend un peu"
+  const brandSize = 18
+  const subtitleSize = 12
+
+  const brandW = fontBold.widthOfTextAtSize('Parcels of Time', brandSize)
+  page.drawText('Parcels of Time', { x: CENTER_X - brandW/2, y, size: brandSize, font: fontBold, color: cMain })
   y -= 22
-  page.drawText('Certificate of Claim', { x: LEFT, y, size: 12, font, color: rgb(0.18,0.18,0.18) })
+  const subW = font.widthOfTextAtSize('Certificate of Claim', subtitleSize)
+  page.drawText('Certificate of Claim', { x: CENTER_X - subW/2, y, size: subtitleSize, font, color: rgb(0.18,0.18,0.18) })
 
-  // Timestamp (titre)
-  y -= 42
-  page.drawText(ts.replace('T',' ').replace('Z',' UTC'), { x: LEFT, y, size: 26, font: fontBold, color: dark })
+  // 2) CONTENU CENTRAL — centré HORIZONTALEMENT et VERTICALEMENT dans la zone libre
+  // On calcule d'abord la hauteur du bloc (titre + owned + message + (éventuel) lien), pour centrer verticalement.
+  const tsSize = 26, labelSize = 10.5, nameSize = 15, msgSize = 12.5, linkSize = 10.5
+  const lineGap = 8, sectionGap = 14
 
-  // Owned by
-  y -= 36
-  page.drawText('Owned by', { x: LEFT, y, size: 10.5, font, color: sub })
-  y -= 18
-  page.drawText(display_name || 'Anonymous', { x: LEFT, y, size: 14.5, font: fontBold, color: dark })
+  const tsText = ts.replace('T',' ').replace('Z',' UTC')
+  const tsH = 26 // approximé (asc/desc peu prononcés en Helvetica)
+  const ownedLabelH = labelSize + 2
+  const nameH = nameSize + 4
 
-  // Message
-  if (message) {
-    y -= 28
-    page.drawText('Message', { x: LEFT, y, size: 10.5, font, color: sub })
-    y -= 18
-    const body = '“' + message + '”'
-    const lines = wrapText(body, font, 12.5, COLW)
-    const LH = 16
-    for (const line of lines) {
-      // On s’arrête si on s’approche trop du pied (QR & meta)
-      if (y - LH < BOTTOM + 86) break
-      page.drawText(line, { x: LEFT, y, size: 12.5, font, color: rgb(0.07,0.07,0.07) })
-      y -= LH
+  const contentTopMax = y - 42      // marge après header
+  const contentBottomMin = FOOTER_TOP + 16
+  const contentAvailH = contentTopMax - contentBottomMin
+
+  // Message lines (on fixe un max en fonction de l'espace)
+  const msgLinesAll = message ? wrapText('“' + message + '”', font, msgSize, COLW) : []
+  const msgLineHeight = 16
+  const msgMaxLines = Math.max(0, Math.floor((contentAvailH - (tsH + ownedLabelH + nameH + sectionGap*3)) / msgLineHeight))
+  const msgLines = msgLinesAll.slice(0, Math.min(msgLinesAll.length, msgMaxLines))
+
+  // Link lines (1 à 2 lignes max si la place le permet)
+  const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
+  const linkMaxLines = Math.min(2, Math.max(0, Math.floor((contentAvailH - (tsH + ownedLabelH + nameH + sectionGap*3 + msgLines.length*msgLineHeight)) / 14)))
+  const linkLines = linkLinesAll.slice(0, linkMaxLines)
+
+  // Hauteur totale du bloc
+  let blockH =
+    tsH +
+    sectionGap +
+    ownedLabelH + lineGap + nameH +
+    (msgLines.length ? sectionGap + msgLines.length * msgLineHeight : 0) +
+    (linkLines.length ? sectionGap + linkLines.length * 14 : 0)
+
+  // Y de départ pour centrer verticalement le bloc
+  let by = contentBottomMin + (contentAvailH - blockH) / 2
+
+  // --- Timestamp (centré)
+  const tsW = fontBold.widthOfTextAtSize(tsText, tsSize)
+  page.drawText(tsText, { x: CENTER_X - tsW/2, y: by + blockH - tsH, size: tsSize, font: fontBold, color: cMain })
+
+  // --- Owned by + Name
+  let cursor = by + blockH - tsH - sectionGap
+  const ownedW = font.widthOfTextAtSize('Owned by', labelSize)
+  page.drawText('Owned by', { x: CENTER_X - ownedW/2, y: cursor - ownedLabelH, size: labelSize, font, color: cSub })
+  cursor -= (ownedLabelH + lineGap)
+  const nameW = fontBold.widthOfTextAtSize(display_name || 'Anonymous', nameSize)
+  page.drawText(display_name || 'Anonymous', { x: CENTER_X - nameW/2, y: cursor - nameH + 4, size: nameSize, font: fontBold, color: cMain })
+  cursor -= (nameH)
+
+  // --- Message (centé, multi-lignes)
+  if (msgLines.length) {
+    cursor -= sectionGap
+    const msgLabelW = font.widthOfTextAtSize('Message', labelSize)
+    page.drawText('Message', { x: CENTER_X - msgLabelW/2, y: cursor - labelSize - 2, size: labelSize, font, color: cSub })
+    cursor -= (labelSize + 6)
+    for (const line of msgLines) {
+      const w = font.widthOfTextAtSize(line, msgSize)
+      page.drawText(line, { x: CENTER_X - w/2, y: cursor - msgLineHeight, size: msgSize, font, color: rgb(0.07,0.07,0.07) })
+      cursor -= msgLineHeight
     }
   }
 
-  // Lien optionnel (2 lignes max)
-  if (link_url) {
-    y -= 14
-    page.drawText('Link', { x: LEFT, y, size: 10.5, font, color: sub })
-    y -= 16
-    const urlLines = wrapText(link_url, font, 10.5, COLW).slice(0, 2)
-    for (const line of urlLines) {
-      if (y - 14 < BOTTOM + 86) break
-      page.drawText(line, { x: LEFT, y, size: 10.5, font, color: rgb(0.1,0.1,0.35) })
-      y -= 14
+  // --- Lien (éventuel), centré aussi
+  if (linkLines.length) {
+    cursor -= sectionGap
+    const linkLabelW = font.widthOfTextAtSize('Link', labelSize)
+    page.drawText('Link', { x: CENTER_X - linkLabelW/2, y: cursor - labelSize - 2, size: labelSize, font, color: cSub })
+    cursor -= (labelSize + 6)
+    for (const line of linkLines) {
+      const w = font.widthOfTextAtSize(line, linkSize)
+      page.drawText(line, { x: CENTER_X - w/2, y: cursor - 14, size: linkSize, font, color: rgb(0.1,0.1,0.35) })
+      cursor -= 14
     }
   }
 
-  // 5) Pied de page : métadonnées à gauche, QR à droite (ancrés dans la même ligne de base)
-  const metaTop = BOTTOM + 114 // hauteur “utile” pour meta
-  page.drawText('Certificate ID', { x: LEFT, y: metaTop, size: 9.5, font, color: sub })
-  page.drawText(claim_id, { x: LEFT, y: metaTop - 14, size: 10, font, color: dark })
-  page.drawText('Integrity (SHA-256)', { x: LEFT, y: metaTop - 34, size: 9.5, font, color: sub })
-  page.drawText(hash.slice(0, 64), { x: LEFT, y: metaTop - 48, size: 9.5, font, color: dark })
-  page.drawText(hash.slice(64), { x: LEFT, y: metaTop - 60, size: 9.5, font, color: dark })
+  // 3) Pied de page : métadonnées (gauche) + QR (droite) — inchangé
+  const metaTop = BOT_Y + 114
+  page.drawText('Certificate ID', { x: LEFT, y: metaTop, size: 9.5, font, color: cSub })
+  page.drawText(claim_id,         { x: LEFT, y: metaTop - 14, size: 10,  font: fontBold, color: cMain })
+  page.drawText('Integrity (SHA-256)', { x: LEFT, y: metaTop - 34, size: 9.5, font, color: cSub })
+  page.drawText(hash.slice(0, 64), { x: LEFT, y: metaTop - 48, size: 9.5, font, color: cMain })
+  page.drawText(hash.slice(64),    { x: LEFT, y: metaTop - 60, size: 9.5, font, color: cMain })
 
-  // QR (collé au bord droit de la safe area, posé au bas)
+  // QR à droite, collé à la safe area
   const qrSize = 132
   const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
   const pngBytes = Buffer.from(qrDataUrl.split(',')[1], 'base64')
   const png = await pdf.embedPng(pngBytes)
-  page.drawImage(png, {
-    x: RIGHT - qrSize,      // bord droit de la safe area
-    y: BOTTOM - 2 + 2,      // juste au-dessus du bas (même “ancrage visuel” que les meta)
-    width: qrSize,
-    height: qrSize
-  })
+  page.drawImage(png, { x: RIGHT - qrSize, y: BOT_Y, width: qrSize, height: qrSize })
 
   return await pdf.save()
 }
