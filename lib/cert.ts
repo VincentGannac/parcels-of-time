@@ -31,25 +31,24 @@ async function loadBgFromPublic(style: CertStyle): Promise<{ bytes: Uint8Array; 
   return null
 }
 
-/** Safe area (marges depuis les bords), en points PDF (72dpi) */
+/** Safe area (marges depuis les bords) en points (A4 @72dpi) — calibrée par style */
 function getSafeArea(style: CertStyle) {
-  // base généreuse; on ajuste style par style pour tenir compte des bordures décorées
-  const base = { top: 140, right: 90, bottom: 170, left: 90 }
-
+  // Base confortable
+  const base = { top: 140, right: 96, bottom: 160, left: 96 }
   switch (style) {
-    case 'romantic':   return { top: 160, right: 110, bottom: 170, left: 110 }
-    case 'birthday':   return { top: 140, right: 130, bottom: 170, left: 130 }
-    case 'birth':      return { top: 150, right: 105, bottom: 170, left: 105 }
-    case 'wedding':    return { top: 160, right: 120, bottom: 170, left: 120 }
-    case 'christmas':  return { top: 150, right: 105, bottom: 170, left: 105 }
-    case 'newyear':    return { top: 150, right: 105, bottom: 170, left: 105 }
-    case 'graduation': return { top: 150, right: 105, bottom: 170, left: 105 }
+    case 'romantic':   return { top: 160, right: 116, bottom: 160, left: 116 }
+    case 'birthday':   return { top: 140, right: 136, bottom: 160, left: 136 }
+    case 'birth':      return { top: 150, right: 112, bottom: 160, left: 112 }
+    case 'wedding':    return { top: 160, right: 124, bottom: 160, left: 124 }
+    case 'christmas':  return { top: 150, right: 112, bottom: 160, left: 112 }
+    case 'newyear':    return { top: 150, right: 112, bottom: 160, left: 112 }
+    case 'graduation': return { top: 150, right: 112, bottom: 160, left: 112 }
     default:           return base
   }
 }
 
 function wrapText(text: string, font: any, size: number, maxWidth: number) {
-  const words = (text || '').split(/\s+/).filter(Boolean)
+  const words = (text || '').trim().split(/\s+/).filter(Boolean)
   const lines: string[] = []
   let line = ''
   for (const w of words) {
@@ -76,11 +75,10 @@ export async function generateCertificatePDF(opts: {
   const style: CertStyle = (opts.style || 'neutral')
 
   const pdf = await PDFDocument.create()
-  // A4 portrait
-  const page = pdf.addPage([595.28, 841.89])
+  const page = pdf.addPage([595.28, 841.89]) // A4 portrait (pt)
   const { width, height } = page.getSize()
 
-  // Fond image
+  // --- Background ---
   try {
     const bg = await loadBgFromPublic(style)
     if (bg) {
@@ -93,131 +91,166 @@ export async function generateCertificatePDF(opts: {
     page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(1, 1, 1) })
   }
 
-  // Cadre discret
-  page.drawRectangle({
-    x: 24, y: 24, width: width - 48, height: height - 48,
-    borderColor: rgb(0.88, 0.86, 0.83), borderWidth: 1
-  })
+  // Fin cadre discret
+  page.drawRectangle({ x: 24, y: 24, width: width - 48, height: height - 48, borderColor: rgb(0.88,0.86,0.83), borderWidth: 1 })
 
-  // Fonts & couleurs
-  const font     = await pdf.embedFont(StandardFonts.Helvetica)
+  // --- Fonts/Couleurs ---
+  const font = await pdf.embedFont(StandardFonts.Helvetica)
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold)
   const cMain = rgb(0.05,0.05,0.05)
   const cSub  = rgb(0.35,0.35,0.35)
+  const CENTER = (x: number) => x // helper for clarity
 
-  // ---------- ZONES ----------
+  // --- Safe area ---
   const SA = getSafeArea(style)
-  const LEFT   = SA.left
-  const RIGHT  = width - SA.right
-  const TOP_Y  = height - SA.top
-  const BOT_Y  = SA.bottom
-  const CENTER_X = (LEFT + RIGHT) / 2
-  const COLW  = RIGHT - LEFT
+  const LEFT = SA.left
+  const RIGHT = width - SA.right
+  const TOP_Y = height - SA.top
+  const BOT_Y = SA.bottom
+  const COLW = RIGHT - LEFT
+  const CX = (LEFT + RIGHT) / 2
 
-  // Réserve pour pied de page (QR + meta)
-  const FOOTER_H = 132 + 20 // QR + marge
-  const FOOTER_TOP = BOT_Y + FOOTER_H
-
-  // 1) HEADER (descendu un peu)
-  let y = TOP_Y - 20  // 👈 "redescend un peu"
+  // --- Header (un peu plus bas) ---
+  let yHeader = TOP_Y - 18
+  const brand = 'Parcels of Time'
   const brandSize = 18
-  const subtitleSize = 12
+  const brandW = fontBold.widthOfTextAtSize(brand, brandSize)
+  page.drawText(brand, { x: CX - brandW/2, y: yHeader, size: brandSize, font: fontBold, color: cMain })
 
-  const brandW = fontBold.widthOfTextAtSize('Parcels of Time', brandSize)
-  page.drawText('Parcels of Time', { x: CENTER_X - brandW/2, y, size: brandSize, font: fontBold, color: cMain })
-  y -= 22
-  const subW = font.widthOfTextAtSize('Certificate of Claim', subtitleSize)
-  page.drawText('Certificate of Claim', { x: CENTER_X - subW/2, y, size: subtitleSize, font, color: rgb(0.18,0.18,0.18) })
+  yHeader -= 22
+  const sub = 'Certificate of Claim'
+  const subSize = 12
+  const subW = font.widthOfTextAtSize(sub, subSize)
+  page.drawText(sub, { x: CX - subW/2, y: yHeader, size: subSize, font, color: rgb(0.18,0.18,0.18) })
 
-  // 2) CONTENU CENTRAL — centré HORIZONTALEMENT et VERTICALEMENT dans la zone libre
-  // On calcule d'abord la hauteur du bloc (titre + owned + message + (éventuel) lien), pour centrer verticalement.
+  // --- Mesures typographiques ---
   const tsSize = 26, labelSize = 10.5, nameSize = 15, msgSize = 12.5, linkSize = 10.5
-  const lineGap = 8, sectionGap = 14
+  const gapSection = 14, gapSmall = 8
+  const lineHMsg = 16, lineHLink = 14
 
+  // Zone dispo entre la fin du header et le bas de la safe area
+  const contentTopMax = yHeader - 40
+  const contentBottomMin = BOT_Y
+  const availH = contentTopMax - contentBottomMin
+
+  // Contenu (centré et légèrement remonté)
   const tsText = ts.replace('T',' ').replace('Z',' UTC')
-  const tsH = 26 // approximé (asc/desc peu prononcés en Helvetica)
-  const ownedLabelH = labelSize + 2
-  const nameH = nameSize + 4
+  const fixedAboveMsg =
+    (tsSize + 6) +                    // timestamp approx height
+    gapSection +
+    (labelSize + 2) + gapSmall +      // "Owned by"
+    (nameSize + 4)
 
-  const contentTopMax = y - 42      // marge après header
-  const contentBottomMin = FOOTER_TOP + 16
-  const contentAvailH = contentTopMax - contentBottomMin
+  // QR + meta bloc
+  const qrSize = 120
+  const afterTextToQR = 18
+  const afterQRToMeta = 10
+  const metaBlockH = 76 // label + id + label + hash(2l) + marges
 
-  // Message lines (on fixe un max en fonction de l'espace)
+  // Wraps
   const msgLinesAll = message ? wrapText('“' + message + '”', font, msgSize, COLW) : []
-  const msgLineHeight = 16
-  const msgMaxLines = Math.max(0, Math.floor((contentAvailH - (tsH + ownedLabelH + nameH + sectionGap*3)) / msgLineHeight))
-  const msgLines = msgLinesAll.slice(0, Math.min(msgLinesAll.length, msgMaxLines))
-
-  // Link lines (1 à 2 lignes max si la place le permet)
   const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
-  const linkMaxLines = Math.min(2, Math.max(0, Math.floor((contentAvailH - (tsH + ownedLabelH + nameH + sectionGap*3 + msgLines.length*msgLineHeight)) / 14)))
-  const linkLines = linkLinesAll.slice(0, linkMaxLines)
 
-  // Hauteur totale du bloc
-  let blockH =
-    tsH +
-    sectionGap +
-    ownedLabelH + lineGap + nameH +
-    (msgLines.length ? sectionGap + msgLines.length * msgLineHeight : 0) +
-    (linkLines.length ? sectionGap + linkLines.length * 14 : 0)
+  // Nombre de lignes permis pour tout faire tenir + marge
+  const spaceForText = availH - (afterTextToQR + qrSize + afterQRToMeta + metaBlockH)
+  const maxMsgLines = Math.max(0, Math.floor((spaceForText - fixedAboveMsg - gapSection /* label msg */) / lineHMsg))
+  const msgLines = msgLinesAll.slice(0, maxMsgLines)
 
-  // Y de départ pour centrer verticalement le bloc
-  let by = contentBottomMin + (contentAvailH - blockH) / 2
+  const spaceAfterMsg = spaceForText - fixedAboveMsg - (msgLines.length ? gapSection + msgLines.length*lineHMsg : 0)
+  const maxLinkLines = Math.min(2, Math.max(0, Math.floor((spaceAfterMsg - (link_url ? gapSection : 0)) / lineHLink)))
+  const linkLines = linkLinesAll.slice(0, maxLinkLines)
 
-  // --- Timestamp (centré)
+  // Hauteur totale du bloc central (texte + QR + meta)
+  const blockH =
+    fixedAboveMsg +
+    (msgLines.length ? gapSection + msgLines.length*lineHMsg : 0) +
+    (linkLines.length ? gapSection + linkLines.length*lineHLink : 0) +
+    afterTextToQR + qrSize + afterQRToMeta + metaBlockH
+
+  // Point de départ pour centrer verticalement + léger décalage vers le haut
+  const biasUp = 12 // "remonte légèrement"
+  let by = contentBottomMin + (availH - blockH)/2 + biasUp
+
+  // ---------- Rendu centré ----------
+  let cursor = by + blockH
+
+  // Timestamp
+  cursor -= (tsSize + 6)
   const tsW = fontBold.widthOfTextAtSize(tsText, tsSize)
-  page.drawText(tsText, { x: CENTER_X - tsW/2, y: by + blockH - tsH, size: tsSize, font: fontBold, color: cMain })
+  page.drawText(tsText, { x: CX - tsW/2, y: cursor, size: tsSize, font: fontBold, color: cMain })
 
-  // --- Owned by + Name
-  let cursor = by + blockH - tsH - sectionGap
-  const ownedW = font.widthOfTextAtSize('Owned by', labelSize)
-  page.drawText('Owned by', { x: CENTER_X - ownedW/2, y: cursor - ownedLabelH, size: labelSize, font, color: cSub })
-  cursor -= (ownedLabelH + lineGap)
-  const nameW = fontBold.widthOfTextAtSize(display_name || 'Anonymous', nameSize)
-  page.drawText(display_name || 'Anonymous', { x: CENTER_X - nameW/2, y: cursor - nameH + 4, size: nameSize, font: fontBold, color: cMain })
-  cursor -= (nameH)
+  // Owned by
+  cursor -= gapSection
+  const ownedLabel = 'Owned by'
+  const ownedW = font.widthOfTextAtSize(ownedLabel, labelSize)
+  page.drawText(ownedLabel, { x: CX - ownedW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
 
-  // --- Message (centé, multi-lignes)
+  cursor -= (labelSize + 2 + gapSmall)
+  const name = display_name || 'Anonymous'
+  const nameW = fontBold.widthOfTextAtSize(name, nameSize)
+  page.drawText(name, { x: CX - nameW/2, y: cursor - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
+
+  // Message
   if (msgLines.length) {
-    cursor -= sectionGap
-    const msgLabelW = font.widthOfTextAtSize('Message', labelSize)
-    page.drawText('Message', { x: CENTER_X - msgLabelW/2, y: cursor - labelSize - 2, size: labelSize, font, color: cSub })
+    cursor -= (nameSize + 4)
+    cursor -= gapSection
+    const msgLabel = 'Message'
+    const msgLabelW = font.widthOfTextAtSize(msgLabel, labelSize)
+    page.drawText(msgLabel, { x: CX - msgLabelW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
     cursor -= (labelSize + 6)
     for (const line of msgLines) {
       const w = font.widthOfTextAtSize(line, msgSize)
-      page.drawText(line, { x: CENTER_X - w/2, y: cursor - msgLineHeight, size: msgSize, font, color: rgb(0.07,0.07,0.07) })
-      cursor -= msgLineHeight
+      page.drawText(line, { x: CX - w/2, y: cursor - lineHMsg, size: msgSize, font, color: rgb(0.07,0.07,0.07) })
+      cursor -= lineHMsg
     }
+  } else {
+    cursor -= (nameSize + 4)
   }
 
-  // --- Lien (éventuel), centré aussi
+  // Link
   if (linkLines.length) {
-    cursor -= sectionGap
-    const linkLabelW = font.widthOfTextAtSize('Link', labelSize)
-    page.drawText('Link', { x: CENTER_X - linkLabelW/2, y: cursor - labelSize - 2, size: labelSize, font, color: cSub })
+    cursor -= gapSection
+    const linkLabel = 'Link'
+    const linkLabelW = font.widthOfTextAtSize(linkLabel, labelSize)
+    page.drawText(linkLabel, { x: CX - linkLabelW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
     cursor -= (labelSize + 6)
     for (const line of linkLines) {
       const w = font.widthOfTextAtSize(line, linkSize)
-      page.drawText(line, { x: CENTER_X - w/2, y: cursor - 14, size: linkSize, font, color: rgb(0.1,0.1,0.35) })
-      cursor -= 14
+      page.drawText(line, { x: CX - w/2, y: cursor - lineHLink, size: linkSize, font, color: rgb(0.1,0.1,0.35) })
+      cursor -= lineHLink
     }
   }
 
-  // 3) Pied de page : métadonnées (gauche) + QR (droite) — inchangé
-  const metaTop = BOT_Y + 114
-  page.drawText('Certificate ID', { x: LEFT, y: metaTop, size: 9.5, font, color: cSub })
-  page.drawText(claim_id,         { x: LEFT, y: metaTop - 14, size: 10,  font: fontBold, color: cMain })
-  page.drawText('Integrity (SHA-256)', { x: LEFT, y: metaTop - 34, size: 9.5, font, color: cSub })
-  page.drawText(hash.slice(0, 64), { x: LEFT, y: metaTop - 48, size: 9.5, font, color: cMain })
-  page.drawText(hash.slice(64),    { x: LEFT, y: metaTop - 60, size: 9.5, font, color: cMain })
-
-  // QR à droite, collé à la safe area
-  const qrSize = 132
+  // QR (centré sous le texte)
+  cursor -= afterTextToQR
   const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
   const pngBytes = Buffer.from(qrDataUrl.split(',')[1], 'base64')
   const png = await pdf.embedPng(pngBytes)
-  page.drawImage(png, { x: RIGHT - qrSize, y: BOT_Y, width: qrSize, height: qrSize })
+  page.drawImage(png, { x: CX - qrSize/2, y: cursor - qrSize, width: qrSize, height: qrSize })
+  cursor -= (qrSize + afterQRToMeta)
+
+  // Métadonnées (centrées, sous le QR)
+  const idLabel = 'Certificate ID'
+  const idLabelW = font.widthOfTextAtSize(idLabel, labelSize)
+  page.drawText(idLabel, { x: CX - idLabelW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
+  cursor -= (labelSize + 6)
+
+  const idW = fontBold.widthOfTextAtSize(claim_id, 10.5)
+  page.drawText(claim_id, { x: CX - idW/2, y: cursor - 12, size: 10.5, font: fontBold, color: cMain })
+  cursor -= 20
+
+  const integ = 'Integrity (SHA-256)'
+  const integW = font.widthOfTextAtSize(integ, labelSize)
+  page.drawText(integ, { x: CX - integW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
+  cursor -= (labelSize + 6)
+
+  const h1 = hash.slice(0, 64)
+  const h2 = hash.slice(64)
+  const h1W = font.widthOfTextAtSize(h1, 9.5)
+  page.drawText(h1, { x: CX - h1W/2, y: cursor - 12, size: 9.5, font, color: cMain })
+  cursor -= 16
+  const h2W = font.widthOfTextAtSize(h2, 9.5)
+  page.drawText(h2, { x: CX - h2W/2, y: cursor - 12, size: 9.5, font, color: cMain })
 
   return await pdf.save()
 }
