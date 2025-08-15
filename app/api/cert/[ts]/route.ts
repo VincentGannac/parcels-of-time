@@ -26,7 +26,6 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   }
 
   const row = rows[0];
-
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
   const publicUrl = `${base}/s/${encodeURIComponent(decodedTs)}`;
 
@@ -39,7 +38,6 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     hash: row.cert_hash || 'no-hash',
     public_url: publicUrl,
     style: row.cert_style || 'neutral',
-    asset_base_url: base, // 👈 pour charger /public/cert_bg/<style>.png
   });
 
   const buf = Buffer.from(pdfBytes);
