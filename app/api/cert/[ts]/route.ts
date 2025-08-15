@@ -8,11 +8,10 @@ import { Buffer } from 'node:buffer';
 
 type Params = { ts: string };
 
-export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
+export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { ts } = await ctx.params;
   const decodedTs = decodeURIComponent(ts);
 
-  // 1) Récupère la claim
   const { rows } = await pool.query(
     `SELECT
        c.id AS claim_id, c.ts, c.message, c.link_url, c.cert_hash, c.created_at, c.cert_style,
@@ -27,10 +26,10 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   }
 
   const row = rows[0];
-  const publicUrl =
-    `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/s/${encodeURIComponent(decodedTs)}`;
 
-  // 2) Génère le PDF (Uint8Array) avec style
+  const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
+  const publicUrl = `${base}/s/${encodeURIComponent(decodedTs)}`;
+
   const pdfBytes = await generateCertificatePDF({
     ts: row.ts.toISOString(),
     display_name: row.display_name || 'Anonymous',
@@ -40,11 +39,10 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     hash: row.cert_hash || 'no-hash',
     public_url: publicUrl,
     style: row.cert_style || 'neutral',
+    asset_base_url: base, // 👈 pour charger /public/cert_bg/<style>.png
   });
 
-  // 3) Buffer → Response
   const buf = Buffer.from(pdfBytes);
-
   return new Response(buf as unknown as BodyInit, {
     headers: {
       'Content-Type': 'application/pdf',
