@@ -1,8 +1,8 @@
-// app/page.tsx — Parcels of Time • Landing v2.0 Ultimate (dark by default)
+// app/page.tsx — Parcels of Time • Landing v2.0 Ultimate (fix Suspense for useSearchParams)
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import UTCClock from './components/UTCClock'
 import CertificateShowcase from './components/CertificateShowcase'
@@ -42,15 +42,6 @@ const TOKENS_LIGHT = {
 function applyTheme(vars: Record<string, string>) {
   const root = document.documentElement
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v))
-}
-
-function useABVariant() {
-  const params = useSearchParams()
-  const explicit = (params.get('hero') || '').toLowerCase()
-  // 'a' = Certificat macro / 'b' = Photo moment
-  const initial = explicit === 'a' || explicit === 'b' ? (explicit as 'a'|'b') : (Math.random() > 0.5 ? 'a' : 'b')
-  const [variant, setVariant] = useState<'a' | 'b'>(initial)
-  return { variant, setVariant }
 }
 
 /** ---- UI atoms ---- */
@@ -174,14 +165,12 @@ function Hero({variant}:{variant:'a'|'b'}) {
             Rareté réelle&nbsp;: <strong>525 600</strong> minutes par année.
           </div>
           <div style={{marginTop:18}}>
-            {/* fix: pas de prop mode si non typée */}
             <UTCClock />
           </div>
         </div>
 
         <div style={{gridColumn:'span 6', position:'relative'}}>
           {variant === 'a' ? (
-            // Macro certificat + QR (parallaxe légère)
             <div style={{
               borderRadius:16, padding:16, background:'var(--color-surface)', border:'1px solid var(--color-border)',
               boxShadow:'var(--shadow-elev2)', transform:'perspective(1200px) rotateX(2deg) rotateY(-3deg)'
@@ -190,7 +179,6 @@ function Hero({variant}:{variant:'a'|'b'}) {
                    style={{width:'100%', height:'auto', borderRadius:12, display:'block'}} loading="eager" />
             </div>
           ) : (
-            // Photo moment bokeh
             <div style={{position:'relative'}}>
               <img src="/hero-life-bokeh.webp" alt="Moments de vie — mariage, naissance, concert" width={640} height={420}
                    style={{width:'100%', height:'auto', borderRadius:16, border:'1px solid var(--color-border)', boxShadow:'var(--shadow-elev2)'}} loading="eager" />
@@ -205,7 +193,27 @@ function Hero({variant}:{variant:'a'|'b'}) {
   )
 }
 
-/** ---- Carrousel d’usages (auto) ---- */
+/** ---- Composant enfant qui lit la query ?hero= et gère l’A/B (dans un <Suspense/>) ---- */
+function HeroSwitcher() {
+  const params = useSearchParams()
+  const explicit = (params.get('hero') || '').toLowerCase()
+  const initial: 'a'|'b' = explicit === 'a' || explicit === 'b' ? (explicit as 'a'|'b') : (Math.random() > 0.5 ? 'a' : 'b')
+  const [variant, setVariant] = useState<'a'|'b'>(initial)
+
+  return (
+    <>
+      <Hero variant={variant} />
+      <div style={{maxWidth:1280, margin:'0 auto', padding:'0 24px 12px', display:'flex', justifyContent:'flex-end', gap:10}}>
+        <button onClick={()=>setVariant(v=>v==='a'?'b':'a')}
+                style={{fontSize:12, color:'var(--color-muted)', background:'transparent', border:'1px dashed var(--color-border)', padding:'6px 10px', borderRadius:10}}>
+          Voir autre visuel (A/B)
+        </button>
+      </div>
+    </>
+  )
+}
+
+/** ---- Carrousel d’usages ---- */
 function UsagesCarousel() {
   const items = [
     { title:'Amour & famille', text:'Rencontre, fiançailles, mariage, naissance, premier mot.', icon:'💛' },
@@ -235,7 +243,7 @@ function UsagesCarousel() {
   )
 }
 
-/** ---- Cards simples ---- */
+/** ---- Cards ---- */
 function FeatureCard({title, text}:{title:string; text:string}) {
   return (
     <div style={{
@@ -332,11 +340,8 @@ function FAQ() {
 }
 
 export default function Page() {
-  const { variant, setVariant } = useABVariant()
   const [theme, setTheme] = useState<'dark'|'light'>('dark')
-
   useEffect(()=>{ applyTheme(theme === 'dark' ? TOKENS_DARK : TOKENS_LIGHT) },[theme])
-
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
 
   const whyText = useMemo(()=>(
@@ -347,14 +352,10 @@ export default function Page() {
     <main style={{background:'var(--color-bg)', color:'var(--color-text)'}}>
       <Header onToggleTheme={toggleTheme} />
 
-      {/* HERO A/B */}
-      <Hero variant={variant} />
-      <div style={{maxWidth:1280, margin:'0 auto', padding:'0 24px 12px', display:'flex', justifyContent:'flex-end', gap:10}}>
-        <button onClick={()=>setVariant(v=>v==='a'?'b':'a')}
-                style={{fontSize:12, color:'var(--color-muted)', background:'transparent', border:'1px dashed var(--color-border)', padding:'6px 10px', borderRadius:10}}>
-          Voir autre visuel (A/B)
-        </button>
-      </div>
+      {/* HERO A/B — la lecture de ?hero= est encapsulée dans Suspense */}
+      <Suspense fallback={<Hero variant="a" />}>
+        <HeroSwitcher />
+      </Suspense>
 
       {/* POURQUOI maintenant */}
       <section id="pourquoi" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
@@ -369,7 +370,6 @@ export default function Page() {
 
       {/* CE QUE VOUS POSSEDEZ */}
       <section aria-labelledby="possedez" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
-        {/* fix: SectionLabel accepte id */}
         <SectionLabel id="possedez">Ce que vous possédez</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
           <div style={{gridColumn:'span 3'}}><FeatureCard title="Une minute unique" text="Jamais vendue deux fois. Votre instant, pour toujours." /></div>
@@ -379,12 +379,11 @@ export default function Page() {
         </div>
       </section>
 
-      {/* CE QUE VOUS RECEVEZ (showcase) */}
+      {/* CE QUE VOUS RECEVEZ */}
       <section id="receive" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
         <SectionLabel>Ce que vous recevez</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:16}}>
           <div>
-            {/* fix: pas de prop mode si non typée */}
             <CertificateShowcase />
           </div>
           <aside style={{display:'grid', gap:12, alignContent:'start'}}>
