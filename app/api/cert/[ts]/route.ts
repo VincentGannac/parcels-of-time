@@ -1,4 +1,3 @@
-// app/api/cert/[ts]/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -27,7 +26,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   const row = rows[0];
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
-  const publicUrl = `${base}/s/${encodeURIComponent(decodedTs)}`;
+  const publicUrl = `${base}/m/${encodeURIComponent(decodedTs)}`;
 
   const pdfBytes = await generateCertificatePDF({
     ts: row.ts.toISOString(),

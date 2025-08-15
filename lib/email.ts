@@ -13,7 +13,7 @@ export async function sendClaimReceiptEmail(input: {
   try {
     await resend.emails.send({
       from: process.env.FROM_EMAIL || 'Parcels of Time <no-reply@parcelsoftime.com>',
-      to, subject: `Your second — ${ts}`,
+      to, subject: `Your minute — ${ts}`,
       text: [
         `Hi${displayName ? ' ' + displayName : ''},`,
         `Thanks for your purchase. You now own the symbolic claim to ${ts}.`,

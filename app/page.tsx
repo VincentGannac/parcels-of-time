@@ -26,17 +26,17 @@ export default function Page() {
         </div>
 
         <h2 style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:64, lineHeight:1.05, margin:'28px 0 12px', letterSpacing:-0.5}}>
-          Own a second, forever.
+          Own a minute, forever.
         </h2>
 
         <p style={{fontSize:20, maxWidth:760, opacity:.92, margin:'0 0 18px'}}>
-          Claim the <strong>exclusive, symbolic</strong> ownership of any single second in UTC — past or future.
+          Claim the <strong>exclusive, symbolic</strong> ownership of any single minute in UTC — past or future.
           It’s recorded in a public registry and sealed with a <strong>signed certificate</strong> you can share or gift.
         </p>
 
         <div style={{marginTop:22, display:'flex', flexWrap:'wrap', gap:12}}>
           <Link href="/claim" style={{background:'#0B0B0C', color:'#FAF9F7', padding:'14px 18px', borderRadius:10, textDecoration:'none', fontWeight:700}}>
-            Claim your second
+            Claim your minute
           </Link>
           <a href="#how" style={{padding:'14px 18px', borderRadius:10, border:'1px solid #D9D7D3', textDecoration:'none', color:'#0B0B0C'}}>How it works</a>
           <a href="#receive" style={{padding:'14px 18px', borderRadius:10, border:'1px solid #D9D7D3', textDecoration:'none', color:'#0B0B0C'}}>What you receive</a>
@@ -75,7 +75,7 @@ export default function Page() {
           {/* Value points */}
           <aside style={{display:'grid', gap:12, alignContent:'start'}}>
             <div style={{background:'#fff', border:'1px solid #D9D7D3', borderRadius:12, padding:14}}>
-              ✅ Public page for your second
+              ✅ Public page for your minute
             </div>
             <div style={{background:'#fff', border:'1px solid #D9D7D3', borderRadius:12, padding:14}}>
               ✅ Signed, shareable PDF certificate
@@ -92,7 +92,7 @@ export default function Page() {
 
             <div style={{marginTop:2}}>
               <Link href="/claim" style={{background:'#0B0B0C', color:'#FAF9F7', padding:'12px 14px', borderRadius:10, textDecoration:'none', fontWeight:700}}>
-                Claim your second
+                Claim your minute
               </Link>
             </div>
           </aside>
@@ -103,7 +103,7 @@ export default function Page() {
       <section id="how" style={{maxWidth:1040, margin:'0 auto', padding:'16px 24px 72px'}}>
         <h3 style={{fontFamily:'Space Grotesk, Inter, system-ui', fontSize:28}}>How it works</h3>
         <ol style={{fontSize:18, lineHeight:1.6, margin:0, paddingLeft:20}}>
-          <li>Choose an exact <strong>UTC</strong> timestamp (to the second). Tip: anniversaries, palindromes, 11:11:11…</li>
+          <li>Choose an exact <strong>UTC</strong> timestamp (to the minute). Tip: anniversaries, palindromes, 11:11:11…</li>
           <li>Pay securely with Stripe.</li>
           <li>Receive your signed PDF and your public page.</li>
         </ol>
@@ -111,7 +111,7 @@ export default function Page() {
         {/* Final CTA */}
         <div style={{marginTop:22}}>
           <Link href="/claim" style={{background:'#0B0B0C', color:'#FAF9F7', padding:'14px 18px', borderRadius:10, textDecoration:'none', fontWeight:700}}>
-            Claim your second
+            Claim your minute
           </Link>
         </div>
       </section>

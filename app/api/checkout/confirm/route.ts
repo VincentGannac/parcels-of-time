@@ -1,4 +1,3 @@
-// app/api/checkout/confirm/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -6,19 +5,8 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 import { pool } from '@/lib/db';
 
-type CertStyle =
-  | 'neutral'
-  | 'romantic'
-  | 'birthday'
-  | 'wedding'
-  | 'birth'
-  | 'christmas'
-  | 'newyear'
-  | 'graduation';
-
-const ALLOWED_STYLES: readonly CertStyle[] = [
-  'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'
-] as const;
+type CertStyle = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'newyear'|'graduation'
+const ALLOWED_STYLES: readonly CertStyle[] = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'] as const;
 
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
@@ -43,10 +31,7 @@ export async function GET(req: Request) {
     const link_url = (s.metadata?.link_url || '') || null;
 
     const styleCandidate = String(s.metadata?.cert_style || 'neutral').toLowerCase();
-    const cert_style: CertStyle =
-      (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
-        ? (styleCandidate as CertStyle)
-        : 'neutral';
+    const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral';
 
     const amount_total =
       s.amount_total ??
@@ -80,10 +65,7 @@ export async function GET(req: Request) {
       );
       const claim = claimRows[0];
 
-      const createdAtISO =
-        claim.created_at instanceof Date
-          ? claim.created_at.toISOString()
-          : new Date(claim.created_at).toISOString();
+      const createdAtISO = claim.created_at instanceof Date ? claim.created_at.toISOString() : new Date(claim.created_at).toISOString();
 
       const salt = process.env.SECRET_SALT || 'dev_salt';
       const data = `${ts}|${ownerId}|${amount_total}|${createdAtISO}|${salt}`;
@@ -94,10 +76,16 @@ export async function GET(req: Request) {
       await client.query('COMMIT');
 
       try {
-        const publicUrl = `${base}/s/${encodeURIComponent(ts)}`;
+        const publicUrl = `${base}/m/${encodeURIComponent(ts)}`;
         const certUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
         const { sendClaimReceiptEmail } = await import('@/lib/email');
-        await sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl });
+        await sendClaimReceiptEmail({
+          to: email,
+          ts,
+          displayName: display_name,
+          publicUrl,
+          certUrl,
+        })
       } catch {}
     } catch (e) {
       await client.query('ROLLBACK');
@@ -106,10 +94,10 @@ export async function GET(req: Request) {
       client.release();
     }
 
-    return NextResponse.redirect(`${base}/s/${encodeURIComponent(ts)}`, { status: 303 });
-  } catch (err) {
+    return NextResponse.redirect(`${base}/m/${encodeURIComponent(ts)}`, { status: 303 });
+  } catch {
     return new Response(
-      'Payment captured, but we hit a server error finalizing your certificate.',
+      'Payment captured, but we hit a server error finalizing your certificate (minute).',
       { status: 500 }
     );
   }

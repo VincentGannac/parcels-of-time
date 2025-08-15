@@ -1,4 +1,3 @@
-// app/api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -6,19 +5,8 @@ import Stripe from 'stripe'
 import { priceFor } from '@/lib/pricing'
 import { LRUCache } from 'lru-cache'
 
-type CertStyle =
-  | 'neutral'
-  | 'romantic'
-  | 'birthday'
-  | 'wedding'
-  | 'birth'
-  | 'christmas'
-  | 'newyear'
-  | 'graduation'
-
-const ALLOWED_STYLES: readonly CertStyle[] = [
-  'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'
-] as const
+type CertStyle = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'newyear'|'graduation'
+const ALLOWED_STYLES: readonly CertStyle[] = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'] as const
 
 type Body = {
   ts: string
@@ -29,7 +17,6 @@ type Body = {
   cert_style?: string
 }
 
-// petit bucket en mémoire (par lambda) : suffisant pour MVP
 const ipBucket = new LRUCache<string, { count:number; ts:number }>({ max: 10000 })
 function rateLimit(ip: string, limit = 8, windowMs = 60_000) {
   const now = Date.now()
@@ -42,9 +29,7 @@ function rateLimit(ip: string, limit = 8, windowMs = 60_000) {
 
 export async function POST(req: Request) {
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0] || 'unknown'
-  if (!rateLimit(ip)) {
-    return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
-  }
+  if (!rateLimit(ip)) return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const body = (await req.json()) as Body
   if (!body.ts || !body.email) {
@@ -53,15 +38,11 @@ export async function POST(req: Request) {
 
   const d = new Date(body.ts)
   if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
-  d.setMilliseconds(0)
+  d.setUTCSeconds(0,0) // ⬅️ minute
   const tsISO = d.toISOString()
 
-  // 👇 sécurise le style venant du client
   const styleCandidate = String(body.cert_style || 'neutral').toLowerCase()
-  const cert_style: CertStyle =
-    (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
-      ? (styleCandidate as CertStyle)
-      : 'neutral'
+  const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral'
 
   const origin = new URL(req.url).origin
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
@@ -77,19 +58,18 @@ export async function POST(req: Request) {
         unit_amount: price_cents,
         product_data: {
           name: `Parcels of Time — ${tsISO}`,
-          description: 'Exclusive symbolic claim to a unique second.',
+          description: 'Exclusive symbolic claim to a unique minute (UTC).',
         },
       },
     }],
     customer_email: body.email,
-    // ⬇️ on met bien le style dans la metadata Stripe
     metadata: {
       ts: tsISO,
       email: body.email,
       display_name: body.display_name ?? '',
       message: body.message ?? '',
       link_url: body.link_url ?? '',
-      cert_style, // ✅
+      cert_style,
     },
     success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&cancelled=1`,
