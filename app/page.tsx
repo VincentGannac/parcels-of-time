@@ -1,13 +1,11 @@
-// app/page.tsx — Parcels of Time • Landing v2.0 Ultimate (fix Suspense for useSearchParams)
+// app/page.tsx — Parcels of Time • Landing v2.1 (photo fix, real visuals, copy update)
 'use client'
 
 import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import UTCClock from './components/UTCClock'
-import CertificateShowcase from './components/CertificateShowcase'
 
-/** ---- Design Tokens (Dark Premium / Light Éditorial) ---- */
+/* -------------------- Design Tokens -------------------- */
 const TOKENS_DARK = {
   '--color-bg': '#0B0E14',
   '--color-surface': '#111726',
@@ -38,13 +36,12 @@ const TOKENS_LIGHT = {
   '--shadow-glow': '0 0 0 6px rgba(28,43,107,.12)',
 } as const
 
-/** ---- Helpers ---- */
 function applyTheme(vars: Record<string, string>) {
   const root = document.documentElement
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v))
 }
 
-/** ---- UI atoms ---- */
+/* -------------------- UI atoms -------------------- */
 function Button({
   href, children, variant='primary', ariaLabel,
 }: { href: string; children: React.ReactNode; variant?: 'primary'|'secondary'|'ghost'; ariaLabel?: string }) {
@@ -59,11 +56,8 @@ function Button({
     secondary: { ...base, background:'var(--color-surface)', color:'var(--color-text)' },
     ghost: { ...base, background:'transparent', color:'var(--color-text)' },
   }
-  const onKeyDown: React.KeyboardEventHandler<HTMLAnchorElement> = (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget) e.currentTarget.click()
-  }
   return (
-    <Link href={href} aria-label={ariaLabel} onKeyDown={onKeyDown}
+    <Link href={href} aria-label={ariaLabel}
       style={{ ...styles[variant] }}
       onMouseEnter={(e)=>{(e.currentTarget as any).style.boxShadow='var(--shadow-glow)'}}
       onMouseLeave={(e)=>{(e.currentTarget as any).style.boxShadow='none'}}
@@ -92,7 +86,7 @@ function SectionLabel(props: React.HTMLAttributes<HTMLDivElement>) {
   )
 }
 
-/** ---- Header sticky ---- */
+/* -------------------- Header -------------------- */
 function Header({onToggleTheme}:{onToggleTheme:()=>void}) {
   return (
     <header style={{
@@ -135,14 +129,14 @@ function Header({onToggleTheme}:{onToggleTheme:()=>void}) {
   )
 }
 
-/** ---- Hero A/B ---- */
+/* -------------------- Hero -------------------- */
 function Hero({variant}:{variant:'a'|'b'}) {
   return (
     <section style={{position:'relative', overflow:'clip', borderBottom:'1px solid var(--color-border)'}}>
-      {/* halo */}
+      {/* halo derrière, non bloquant */}
       <div aria-hidden style={{
-        position:'absolute', inset:0,
-        background: 'radial-gradient(50% 30% at 60% -10%, rgba(140,214,255,.12), transparent 60%), radial-gradient(40% 24% at 20% -6%, rgba(228,183,61,.18), transparent 60%)'
+        position:'absolute', inset:0, pointerEvents:'none',
+        background:'radial-gradient(50% 30% at 60% -10%, rgba(140,214,255,.12), transparent 60%), radial-gradient(40% 24% at 20% -6%, rgba(228,183,61,.18), transparent 60%)'
       }} />
       <div style={{maxWidth:1280, margin:'0 auto', padding:'72px 24px 40px', display:'grid', gap:24,
                    gridTemplateColumns:'repeat(12, 1fr)', alignItems:'center'}}>
@@ -165,7 +159,7 @@ function Hero({variant}:{variant:'a'|'b'}) {
             Rareté réelle&nbsp;: <strong>525 600</strong> minutes par année.
           </div>
           <div style={{marginTop:18}}>
-            <UTCClock />
+            <LiveUTCMinute />
           </div>
         </div>
 
@@ -175,17 +169,33 @@ function Hero({variant}:{variant:'a'|'b'}) {
               borderRadius:16, padding:16, background:'var(--color-surface)', border:'1px solid var(--color-border)',
               boxShadow:'var(--shadow-elev2)', transform:'perspective(1200px) rotateX(2deg) rotateY(-3deg)'
             }}>
-              <img src="/og-cert-macro.webp" alt="Certificat Parcels of Time avec QR code" width={640} height={420}
-                   style={{width:'100%', height:'auto', borderRadius:12, display:'block'}} loading="eager" />
+              <img
+                src="/og-cert-macro.webp"
+                alt="Certificat Parcels of Time avec QR code"
+                width={640} height={420}
+                onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = '/cert_bg/romantic.png' }}
+                style={{width:'100%', height:'auto', borderRadius:12, display:'block'}}
+                loading="eager"
+              />
             </div>
           ) : (
-            <div style={{position:'relative'}}>
-              <img src="/hero-life-bokeh.webp" alt="Moments de vie — mariage, naissance, concert" width={640} height={420}
-                   style={{width:'100%', height:'auto', borderRadius:16, border:'1px solid var(--color-border)', boxShadow:'var(--shadow-elev2)'}} loading="eager" />
+            <Link href="/claim" aria-label="Aller réserver sa minute" style={{display:'block'}}>
+              <picture>
+                <source srcSet="/hero/life-bokeh.avif" type="image/avif" />
+                <source srcSet="/hero/life-bokeh.webp" type="image/webp" />
+                <img
+                  src="/hero/life-bokeh.jpg"
+                  alt="Moments de vie — mariage, naissance, concert"
+                  width={640} height={420}
+                  onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = '/cert_bg/wedding.png' }}
+                  style={{width:'100%', height:'auto', borderRadius:16, border:'1px solid var(--color-border)', boxShadow:'var(--shadow-elev2)', display:'block'}}
+                  loading="eager"
+                />
+              </picture>
               <div style={{position:'absolute', bottom:12, left:12, background:'color-mix(in srgb, var(--color-bg) 74%, transparent)', padding:'8px 10px', borderRadius:10, fontSize:13, color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
                 Mariage • Naissance • Concert • Voyage
               </div>
-            </div>
+            </Link>
           )}
         </div>
       </div>
@@ -193,13 +203,12 @@ function Hero({variant}:{variant:'a'|'b'}) {
   )
 }
 
-/** ---- Composant enfant qui lit la query ?hero= et gère l’A/B (dans un <Suspense/>) ---- */
+/* --- A/B wrapper placé sous Suspense (useSearchParams inside) --- */
 function HeroSwitcher() {
   const params = useSearchParams()
   const explicit = (params.get('hero') || '').toLowerCase()
   const initial: 'a'|'b' = explicit === 'a' || explicit === 'b' ? (explicit as 'a'|'b') : (Math.random() > 0.5 ? 'a' : 'b')
   const [variant, setVariant] = useState<'a'|'b'>(initial)
-
   return (
     <>
       <Hero variant={variant} />
@@ -213,7 +222,38 @@ function HeroSwitcher() {
   )
 }
 
-/** ---- Carrousel d’usages ---- */
+/* -------------------- Live UTC minute (sans CTA) -------------------- */
+function LiveUTCMinute() {
+  const [now, setNow] = useState(new Date())
+  useEffect(()=>{
+    const t = setInterval(()=>setNow(new Date()), 1000)
+    return ()=>clearInterval(t)
+  },[])
+  const isoMinute = useMemo(()=>{
+    const d = new Date(now)
+    d.setSeconds(0,0)
+    return d.toISOString().replace('T',' ').replace('Z',' UTC')
+  },[now])
+  return (
+    <div style={{display:'flex', gap:12, alignItems:'center'}}>
+      <input
+        aria-label="Minute UTC actuelle"
+        value={isoMinute}
+        readOnly
+        style={{flex:1, padding:'14px 16px', border:'1px solid var(--color-border)', borderRadius:12, background:'var(--color-surface)', color:'var(--color-text)', opacity:.9}}
+      />
+      <button
+        onClick={()=>{ navigator.clipboard?.writeText(isoMinute) }}
+        style={{padding:'12px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)'}}
+        aria-label="Copier la minute"
+      >
+        Copier
+      </button>
+    </div>
+  )
+}
+
+/* -------------------- Usages Carousel -------------------- */
 function UsagesCarousel() {
   const items = [
     { title:'Amour & famille', text:'Rencontre, fiançailles, mariage, naissance, premier mot.', icon:'💛' },
@@ -243,7 +283,7 @@ function UsagesCarousel() {
   )
 }
 
-/** ---- Cards ---- */
+/* -------------------- Feature card -------------------- */
 function FeatureCard({title, text}:{title:string; text:string}) {
   return (
     <div style={{
@@ -256,7 +296,7 @@ function FeatureCard({title, text}:{title:string; text:string}) {
   )
 }
 
-/** ---- Pricing ---- */
+/* -------------------- Pricing (sans pack) -------------------- */
 function Pricing() {
   return (
     <section id="prix" style={{maxWidth:1280, margin:'0 auto', padding:'40px 24px 72px'}}>
@@ -264,21 +304,14 @@ function Pricing() {
       <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 18px'}}>Des minutes pour chaque histoire</h3>
       <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
         {/* Standard */}
-        <div style={{gridColumn:'span 4', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
+        <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
           <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Standard</div>
           <div style={{fontSize:32, fontWeight:800}}>9–19 €</div>
           <p style={{opacity:.9}}>Une minute unique. Certificat, QR code, page dédiée.</p>
           <Button href="/claim" variant="primary">Réserver ma minute</Button>
         </div>
-        {/* Pack */}
-        <div style={{gridColumn:'span 4', background:'var(--color-surface)', border:'2px solid var(--color-primary)', borderRadius:16, padding:20, boxShadow:'var(--shadow-glow)'}}>
-          <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Pack “Moment” ×5</div>
-          <div style={{fontSize:32, fontWeight:800}}>–20%</div>
-          <p style={{opacity:.9}}>Pour une histoire à plusieurs chapitres (familiale, tournée, marathon…)</p>
-          <Button href="/claim?bundle=5" variant="primary">Choisir le pack</Button>
-        </div>
         {/* Iconiques */}
-        <div style={{gridColumn:'span 4', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
+        <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
           <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Minutes iconiques</div>
           <div style={{fontSize:32, fontWeight:800}}>Prix selon rareté</div>
           <p style={{opacity:.9}}>Séries spéciales (Nouvel An, éclipses, finales, records).</p>
@@ -289,10 +322,10 @@ function Pricing() {
   )
 }
 
-/** ---- Témoignages ---- */
+/* -------------------- Témoignages -------------------- */
 function Testimonials() {
   const items = [
-    { q:'“Nous avons revendiqué la minute de la naissance de Léo… frissons à chaque fois !”', a:'Camille' },
+    { q:'“Nous avons revendiqué la minute de la naissance d’Aïcha… frissons à chaque fois !”', a:'Camille' },
     { q:'“Mon cadeau préféré : la minute de notre rencontre.”', a:'Thomas' },
     { q:'“La minute du diplôme de ma sœur. Simple, mémorable, classe.”', a:'Mina' },
   ]
@@ -314,7 +347,7 @@ function Testimonials() {
   )
 }
 
-/** ---- FAQ ---- */
+/* -------------------- FAQ -------------------- */
 function FAQ() {
   const rows = [
     { q:'Ma minute m’appartient-elle vraiment ?', a:'Oui. Chaque minute est vendue une seule fois. Votre certificat numérique agit comme preuve d’authenticité.' },
@@ -339,6 +372,7 @@ function FAQ() {
   )
 }
 
+/* -------------------- Page -------------------- */
 export default function Page() {
   const [theme, setTheme] = useState<'dark'|'light'>('dark')
   useEffect(()=>{ applyTheme(theme === 'dark' ? TOKENS_DARK : TOKENS_LIGHT) },[theme])
@@ -352,12 +386,12 @@ export default function Page() {
     <main style={{background:'var(--color-bg)', color:'var(--color-text)'}}>
       <Header onToggleTheme={toggleTheme} />
 
-      {/* HERO A/B — la lecture de ?hero= est encapsulée dans Suspense */}
+      {/* HERO A/B — params lus dans Suspense */}
       <Suspense fallback={<Hero variant="a" />}>
         <HeroSwitcher />
       </Suspense>
 
-      {/* POURQUOI maintenant */}
+      {/* POURQUOI */}
       <section id="pourquoi" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
         <SectionLabel>Pourquoi maintenant&nbsp;?</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16, alignItems:'start'}}>
@@ -379,26 +413,63 @@ export default function Page() {
         </div>
       </section>
 
-      {/* CE QUE VOUS RECEVEZ */}
+      {/* CE QUE VOUS RECEVEZ — vrais visuels + récits */}
       <section id="receive" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
         <SectionLabel>Ce que vous recevez</SectionLabel>
-        <div style={{display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:16}}>
-          <div>
-            <CertificateShowcase />
+        <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
+          {/* 3 récits visuels */}
+          {[
+            {
+              img:'/cert_bg/romantic.png',
+              title:'Notre premier baiser',
+              desc:'“21:34 UTC sous la pluie d’été, quand tout a basculé.”',
+              style:'romantic',
+            },
+            {
+              img:'/cert_bg/birth.png',
+              title:'Bienvenue Aïcha',
+              desc:'“06:12 UTC. Un cri, des larmes, et nos vies ont changé.”',
+              style:'birth',
+            },
+            {
+              img:'/cert_bg/wedding.png',
+              title:'Oui pour la vie',
+              desc:'“15:00 UTC. Les anneaux, les regards, l’évidence.”',
+              style:'wedding',
+            },
+          ].map((c, i)=>(
+            <a key={i} href={`/claim?style=${c.style}`} style={{gridColumn:'span 4', textDecoration:'none', color:'var(--color-text)'}}>
+              <figure style={{margin:0, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, overflow:'hidden', boxShadow:'var(--shadow-elev1)'}}>
+                <img src={c.img} alt={`Exemple de certificat style ${c.style}`}
+                     width={640} height={900}
+                     style={{width:'100%', height:'auto', display:'block'}} loading="lazy" />
+                <figcaption style={{padding:14}}>
+                  <strong style={{display:'block', marginBottom:6}}>{c.title}</strong>
+                  <span style={{opacity:.85}}>{c.desc}</span>
+                </figcaption>
+              </figure>
+            </a>
+          ))}
+        </div>
+
+        {/* Points de valeur renforcés */}
+        <div style={{display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:16, marginTop:16}}>
+          <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+            <ul style={{margin:0, paddingLeft:18, lineHeight:'28px'}}>
+              <li>Certificat numérique (PDF/JPG) haute définition prêt à imprimer</li>
+              <li>QR code à scanner (cadre, invitation, bio, faire-part)</li>
+              <li>Page souvenir partageable (message + lien), badge d’authenticité</li>
+              <li>Plusieurs styles premium : Romantic, Birth, Wedding, Christmas, New Year, Graduation…</li>
+            </ul>
           </div>
-          <aside style={{display:'grid', gap:12, alignContent:'start'}}>
-            <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>✅ Certificat numérique (PDF/JPG) haute définition</div>
-            <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>✅ QR code scannable (cadre, invitation, bio)</div>
-            <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>✅ Page souvenir (message + lien) • Badge d’authenticité</div>
-            <div style={{display:'flex', gap:10, marginTop:4}}>
-              <Button href="/claim" variant="primary">Réserver ma minute</Button>
-              <Button href="/claim?gift=1" variant="secondary">Offrir une minute</Button>
-            </div>
-          </aside>
+          <div style={{display:'flex', gap:10, alignItems:'center', justifyContent:'flex-start'}}>
+            <Button href="/claim" variant="primary">Réserver ma minute</Button>
+            <Button href="/claim?gift=1" variant="secondary">Offrir une minute</Button>
+          </div>
         </div>
       </section>
 
-      {/* COMMENT ça marche */}
+      {/* COMMENT */}
       <section id="comment" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
         <SectionLabel>Comment ça marche</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
@@ -452,7 +523,7 @@ export default function Page() {
       }}>
         <div style={{maxWidth:1280, margin:'0 auto', padding:'36px 24px 64px', textAlign:'center'}}>
           <h3 id="cta-final" style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 8px'}}>
-            Votre histoire mérite mieux qu’un simple post.
+            Transformez un instant en héritage.
           </h3>
           <p style={{margin:'0 0 16px'}}>Réservez la minute qui compte — aujourd’hui.</p>
           <div style={{display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap'}}>
