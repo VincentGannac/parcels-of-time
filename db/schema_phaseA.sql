@@ -1,4 +1,3 @@
--- app/db/schema_phaseA.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS owners (
@@ -14,7 +13,8 @@ CREATE TABLE IF NOT EXISTS instants (
   nice_label TEXT,
   is_listed BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT ts_is_second CHECK (date_trunc('second', ts) = ts),
+  -- ⬇️ unicité à la minute
+  CONSTRAINT ts_is_minute CHECK (date_trunc('minute', ts) = ts),
   CONSTRAINT edition_valid CHECK (edition IN ('classic','premium','iconic'))
 );
 
@@ -30,23 +30,18 @@ CREATE TABLE IF NOT EXISTS claims (
   cert_hash TEXT,
   cert_url TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT ts_is_second CHECK (date_trunc('second', ts) = ts),
-  CONSTRAINT one_owner_per_second UNIQUE (ts),
+  -- ⬇️ unicité à la minute
+  CONSTRAINT ts_is_minute CHECK (date_trunc('minute', ts) = ts),
+  CONSTRAINT one_owner_per_minute UNIQUE (ts),
   CONSTRAINT cert_style_valid CHECK (cert_style IN (
     'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'
   ))
 );
 
-
 CREATE INDEX IF NOT EXISTS idx_claims_owner ON claims(owner_id);
 CREATE INDEX IF NOT EXISTS idx_instants_edition ON instants(edition);
 
-CREATE OR REPLACE VIEW second_public AS
+-- Vue publique renommée à "minute_public"
+CREATE OR REPLACE VIEW minute_public AS
 SELECT c.ts, o.display_name, c.message, c.link_url, c.cert_url, c.created_at AS claimed_at, c.cert_style
 FROM claims c JOIN owners o ON o.id = c.owner_id;
-
-ALTER TABLE claims ADD COLUMN IF NOT EXISTS cert_style TEXT NOT NULL DEFAULT 'neutral';
-DO $$ BEGIN
-  ALTER TABLE claims ADD CONSTRAINT cert_style_valid
-  CHECK (cert_style IN ('neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'));
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
