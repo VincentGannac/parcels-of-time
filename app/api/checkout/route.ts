@@ -4,19 +4,33 @@ export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { priceFor } from '@/lib/pricing'
-import { LRUCache } from 'lru-cache'  // 👈 CORRECTION: named export
+import { LRUCache } from 'lru-cache'
+
+type CertStyle =
+  | 'neutral'
+  | 'romantic'
+  | 'birthday'
+  | 'wedding'
+  | 'birth'
+  | 'christmas'
+  | 'newyear'
+  | 'graduation'
+
+const ALLOWED_STYLES: readonly CertStyle[] = [
+  'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'
+] as const
 
 type Body = {
-  ts: string;
-  email: string;
-  display_name?: string;
-  message?: string;
-  link_url?: string;
+  ts: string
+  email: string
+  display_name?: string
+  message?: string
+  link_url?: string
+  cert_style?: string
 }
 
 // petit bucket en mémoire (par lambda) : suffisant pour MVP
 const ipBucket = new LRUCache<string, { count:number; ts:number }>({ max: 10000 })
-
 function rateLimit(ip: string, limit = 8, windowMs = 60_000) {
   const now = Date.now()
   const rec = ipBucket.get(ip) || { count: 0, ts: now }
@@ -42,6 +56,13 @@ export async function POST(req: Request) {
   d.setMilliseconds(0)
   const tsISO = d.toISOString()
 
+  // 👇 sécurise le style venant du client
+  const styleCandidate = String(body.cert_style || 'neutral').toLowerCase()
+  const cert_style: CertStyle =
+    (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
+      ? (styleCandidate as CertStyle)
+      : 'neutral'
+
   const origin = new URL(req.url).origin
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 
@@ -61,12 +82,14 @@ export async function POST(req: Request) {
       },
     }],
     customer_email: body.email,
+    // ⬇️ on met bien le style dans la metadata Stripe
     metadata: {
       ts: tsISO,
       email: body.email,
       display_name: body.display_name ?? '',
       message: body.message ?? '',
       link_url: body.link_url ?? '',
+      cert_style, // ✅
     },
     success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&cancelled=1`,

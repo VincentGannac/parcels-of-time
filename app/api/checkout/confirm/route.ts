@@ -20,38 +20,6 @@ const ALLOWED_STYLES: readonly CertStyle[] = [
   'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'
 ] as const;
 
-async function ensureSchema() {
-  const client = await pool.connect();
-  try {
-    const { rowCount } = await client.query(
-      `SELECT 1
-       FROM information_schema.columns
-       WHERE table_schema='public' AND table_name='claims' AND column_name='cert_style'`
-    );
-    if (rowCount === 0) {
-      // Ajout de la colonne + contrainte (idempotent)
-      await client.query(`ALTER TABLE claims ADD COLUMN IF NOT EXISTS cert_style TEXT NOT NULL DEFAULT 'neutral';`);
-      await client.query(`
-        DO $$ BEGIN
-          ALTER TABLE claims ADD CONSTRAINT cert_style_valid
-          CHECK (cert_style IN ('neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'));
-        EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-      `);
-      // Optionnel : exposer dans la vue publique si elle existe
-      await client.query(`
-        DO $$ BEGIN
-          CREATE OR REPLACE VIEW second_public AS
-          SELECT c.ts, o.display_name, c.message, c.link_url, c.cert_url, c.created_at AS claimed_at, c.cert_style
-          FROM claims c JOIN owners o ON o.id = c.owner_id;
-        EXCEPTION WHEN others THEN NULL; END $$;
-      `);
-      console.log('[confirm] added cert_style column on claims');
-    }
-  } finally {
-    client.release();
-  }
-}
-
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
 
@@ -59,9 +27,6 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const session_id = url.searchParams.get('session_id');
     if (!session_id) return NextResponse.redirect(`${base}/`, { status: 302 });
-
-    // 1) S'assure que le schéma est prêt (no-op si déjà en place)
-    await ensureSchema();
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
     const s = await stripe.checkout.sessions.retrieve(session_id, { expand: ['payment_intent'] });
@@ -72,27 +37,22 @@ export async function GET(req: Request) {
     }
 
     const ts = String(s.metadata?.ts || '');
-    if (!ts) {
-      console.error('[confirm] missing ts in session metadata', { session_id });
-      return NextResponse.redirect(`${base}/claim?status=missing_ts`, { status: 302 });
-    }
-
     const email = String(s.customer_details?.email || s.metadata?.email || '');
     const display_name = (s.metadata?.display_name || '') || null;
     const message = (s.metadata?.message || '') || null;
     const link_url = (s.metadata?.link_url || '') || null;
-
-    const amount_total =
-      s.amount_total ??
-      (typeof s.payment_intent !== 'string' && s.payment_intent
-        ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
-        : 0);
 
     const styleCandidate = String(s.metadata?.cert_style || 'neutral').toLowerCase();
     const cert_style: CertStyle =
       (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
         ? (styleCandidate as CertStyle)
         : 'neutral';
+
+    const amount_total =
+      s.amount_total ??
+      (typeof s.payment_intent !== 'string' && s.payment_intent
+        ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
+        : 0);
 
     const client = await pool.connect();
     try {
@@ -131,7 +91,6 @@ export async function GET(req: Request) {
       const cert_url = `/api/cert/${encodeURIComponent(ts)}`;
 
       await client.query('UPDATE claims SET cert_hash=$1, cert_url=$2 WHERE id=$3', [hash, cert_url, claim.id]);
-
       await client.query('COMMIT');
 
       try {
@@ -139,12 +98,9 @@ export async function GET(req: Request) {
         const certUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
         const { sendClaimReceiptEmail } = await import('@/lib/email');
         await sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl });
-      } catch (e) {
-        console.warn('[confirm] email send failed (ignored)', (e as Error)?.message);
-      }
+      } catch {}
     } catch (e) {
       await client.query('ROLLBACK');
-      console.error('[confirm] transaction error', e);
       throw e;
     } finally {
       client.release();
@@ -152,9 +108,8 @@ export async function GET(req: Request) {
 
     return NextResponse.redirect(`${base}/s/${encodeURIComponent(ts)}`, { status: 303 });
   } catch (err) {
-    console.error('[confirm] fatal error', err);
     return new Response(
-      'Payment captured, but we hit a server error finalizing your certificate. Your payment is safe. Please contact support@parcelsoftime.com with your email and timestamp.',
+      'Payment captured, but we hit a server error finalizing your certificate.',
       { status: 500 }
     );
   }
