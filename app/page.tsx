@@ -86,6 +86,113 @@ function SectionLabel(props: React.HTMLAttributes<HTMLDivElement>) {
   )
 }
 
+
+/* ---------- CertificatePreview (visuel proche PDF) ---------- */
+type PreviewStyle =
+  | 'romantic' | 'birth' | 'wedding' | 'birthday' | 'christmas' | 'newyear' | 'graduation' | 'neutral';
+
+function safePadding(style: PreviewStyle): string {
+  // paddings: top right bottom left (en % du conteneur)
+  switch (style) {
+    case 'romantic':   return '9% 10% 13% 10%';
+    case 'birth':      return '10% 9% 14% 9%';
+    case 'wedding':    return '9% 11% 13% 11%';
+    case 'birthday':   return '7% 12% 14% 12%';
+    case 'christmas':  return '8% 10% 14% 10%';
+    case 'newyear':    return '8% 10% 14% 10%';
+    case 'graduation': return '9% 9% 14% 9%';
+    default:           return '8% 8% 12% 8%';
+  }
+}
+
+function CertificatePreview({
+  styleId, owner, message, ts, href,
+}: {
+  styleId: PreviewStyle
+  owner: string
+  message?: string
+  ts: string // ISO or already formatted
+  href: string
+}) {
+  // format rapide
+  const tsText = ts.includes('UTC') ? ts : ts.replace('T',' ').replace('Z',' UTC')
+  return (
+    <a href={href} style={{textDecoration:'none', color:'var(--color-text)'}} aria-label={`Choisir le style ${styleId}`}>
+      <figure style={{
+        margin:0, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16,
+        overflow:'hidden', boxShadow:'var(--shadow-elev1)'
+      }}>
+        {/* Image A4 */}
+        <div style={{
+          position:'relative', width:'100%', aspectRatio:'595/842', background:'#F4F1EC'
+        }}>
+          <img
+            src={`/cert_bg/${styleId}.png`}
+            alt={`Certificat style ${styleId}`}
+            width={595} height={842}
+            style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover'}}
+          />
+          {/* Overlay = contenu du certificat */}
+          <div
+            aria-hidden
+            style={{
+              position:'absolute', inset:0,
+              padding:safePadding(styleId),
+              display:'grid', gridTemplateRows:'auto 1fr auto',
+              color:'#0B0B0C',
+            }}
+          >
+            {/* Header centré */}
+            <div style={{textAlign:'center'}}>
+              <div style={{fontWeight:800, fontSize:16, fontFamily:'Fraunces, serif'}}>Parcels of Time</div>
+              <div style={{opacity:.8, fontSize:12, marginTop:2}}>Certificate of Claim</div>
+            </div>
+
+            {/* Corps centré verticalement */}
+            <div style={{
+              display:'grid', placeItems:'center', textAlign:'center',
+              gridAutoRows:'min-content', gap:10
+            }}>
+              <div style={{fontWeight:700, fontSize:24, letterSpacing:.2}}>{tsText}</div>
+              <div style={{opacity:.7, fontSize:12}}>Owned by</div>
+              <div style={{fontWeight:700, fontSize:16}}>{owner || 'Anonymous'}</div>
+
+              {message && (
+                <>
+                  <div style={{opacity:.7, fontSize:12, marginTop:6}}>Message</div>
+                  <div style={{
+                    maxWidth:'72%', lineHeight:'1.35', fontSize:13,
+                    textWrap:'balance'
+                  }}>
+                    “{message}”
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Bas : QR + meta (centrés) */}
+            <div style={{display:'grid', placeItems:'center', gap:8}}>
+              {/* QR simplifié (propre, sans lib côté front) */}
+              <div style={{
+                width:84, height:84, border:'1px solid rgba(0,0,0,.18)', borderRadius:6,
+                background:
+                  'conic-gradient(from 45deg at 50% 50%, #000 0 90deg, #fff 0 180deg, #000 0 270deg, #fff 0 360deg)',
+                backgroundSize:'10px 10px', imageRendering:'pixelated'
+              }} />
+              <div style={{opacity:.7, fontSize:10}}>Certificate preview</div>
+            </div>
+          </div>
+        </div>
+        {/* Légende discrète sous la carte (pour SEO/lecteurs d’écran) */}
+        <figcaption style={{padding:'12px 14px', fontSize:12, color:'var(--color-muted)'}}>
+          Aperçu non contractuel — le PDF final contient un QR code scannable et l’empreinte d’intégrité.
+        </figcaption>
+      </figure>
+    </a>
+  )
+}
+
+
 /* -------------------- Header -------------------- */
 function Header({onToggleTheme}:{onToggleTheme:()=>void}) {
   return (
@@ -413,61 +520,80 @@ export default function Page() {
         </div>
       </section>
 
-      {/* CE QUE VOUS RECEVEZ — vrais visuels + récits */}
+      {/* CE QUE VOUS RECEVEZ — visuels proches PDF + récits humains */}
       <section id="receive" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
         <SectionLabel>Ce que vous recevez</SectionLabel>
+
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
-          {/* 3 récits visuels */}
-          {[
-            {
-              img:'/cert_bg/romantic.png',
-              title:'Notre premier baiser',
-              desc:'“21:34 UTC sous la pluie d’été, quand tout a basculé.”',
-              style:'romantic',
-            },
-            {
-              img:'/cert_bg/birth.png',
-              title:'Bienvenue Aïcha',
-              desc:'“06:12 UTC. Un cri, des larmes, et nos vies ont changé.”',
-              style:'birth',
-            },
-            {
-              img:'/cert_bg/wedding.png',
-              title:'Oui pour la vie',
-              desc:'“15:00 UTC. Les anneaux, les regards, l’évidence.”',
-              style:'wedding',
-            },
-          ].map((c, i)=>(
-            <a key={i} href={`/claim?style=${c.style}`} style={{gridColumn:'span 4', textDecoration:'none', color:'var(--color-text)'}}>
-              <figure style={{margin:0, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, overflow:'hidden', boxShadow:'var(--shadow-elev1)'}}>
-                <img src={c.img} alt={`Exemple de certificat style ${c.style}`}
-                     width={640} height={900}
-                     style={{width:'100%', height:'auto', display:'block'}} loading="lazy" />
-                <figcaption style={{padding:14}}>
-                  <strong style={{display:'block', marginBottom:6}}>{c.title}</strong>
-                  <span style={{opacity:.85}}>{c.desc}</span>
-                </figcaption>
-              </figure>
-            </a>
-          ))}
+          {/* 1. Romantic — Notre premier baiser */}
+          <div style={{gridColumn:'span 4'}}>
+            <CertificatePreview
+              styleId="romantic"
+              owner="Clara & Sam"
+              ts="2018-07-14T21:34:00Z"
+              message="Sous l’averse, boulevard Voltaire. On riait comme des idiots, trempés jusqu’aux os. Tu m’as pris la main, j’ai oublié le monde."
+              href="/claim?style=romantic"
+            />
+            <div style={{marginTop:10}}>
+              <strong>Notre premier baiser</strong>
+              <p style={{margin:'6px 0 0', opacity:.9}}>
+                Cette minute-là, on ne l’a jamais re-vécue. On l’a gardée. Gravée. C’est notre balise pour les jours de doute.
+              </p>
+            </div>
+          </div>
+
+          {/* 2. Birth — Bienvenue Aïcha */}
+          <div style={{gridColumn:'span 4'}}>
+            <CertificatePreview
+              styleId="birth"
+              owner="Nora & Mehdi"
+              ts="2023-03-02T06:12:00Z"
+              message="Un cri minuscule. Tes doigts comme des pétales. Le silence après, rempli d’une nouvelle lumière : tu étais là."
+              href="/claim?style=birth"
+            />
+            <div style={{marginTop:10}}>
+              <strong>Bienvenue Aïcha</strong>
+              <p style={{margin:'6px 0 0', opacity:.9}}>
+                On avait préparé la chambre, les vêtements, les playlists. Mais personne ne prépare le cœur à cette minute-là.
+              </p>
+            </div>
+          </div>
+
+          {/* 3. Wedding — Oui pour la vie */}
+          <div style={{gridColumn:'span 4'}}>
+            <CertificatePreview
+              styleId="wedding"
+              owner="Lou & Adrien"
+              ts="2021-09-18T15:00:00Z"
+              message="Tes mains qui tremblent un peu. La bague qui accroche. Les rires derrière nous. Nos “oui” qui sonnent comme un départ."
+              href="/claim?style=wedding"
+            />
+            <div style={{marginTop:10}}>
+              <strong>Oui pour la vie</strong>
+              <p style={{margin:'6px 0 0', opacity:.9}}>
+                Les photos sont belles. Mais cette minute, elle porte le poids du souffle, du regard et du vertige. On voulait la garder entière.
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Points de valeur renforcés */}
-        <div style={{display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:16, marginTop:16}}>
+        {/* Points de valeur + CTAs */}
+        <div style={{display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:16, marginTop:18}}>
           <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
             <ul style={{margin:0, paddingLeft:18, lineHeight:'28px'}}>
-              <li>Certificat numérique (PDF/JPG) haute définition prêt à imprimer</li>
-              <li>QR code à scanner (cadre, invitation, bio, faire-part)</li>
-              <li>Page souvenir partageable (message + lien), badge d’authenticité</li>
-              <li>Plusieurs styles premium : Romantic, Birth, Wedding, Christmas, New Year, Graduation…</li>
+              <li>Certificat numérique haute définition (PDF/JPG) prêt à imprimer</li>
+              <li>QR code scannable qui mène à votre page souvenir</li>
+              <li>Page dédiée partageable (message + lien), badge d’authenticité</li>
+              <li>Styles premium : Romantic, Birth, Wedding, Christmas, New Year, Graduation…</li>
             </ul>
           </div>
-          <div style={{display:'flex', gap:10, alignItems:'center', justifyContent:'flex-start'}}>
+          <div style={{display:'flex', gap:10, alignItems:'center'}}>
             <Button href="/claim" variant="primary">Réserver ma minute</Button>
             <Button href="/claim?gift=1" variant="secondary">Offrir une minute</Button>
           </div>
         </div>
       </section>
+
 
       {/* COMMENT */}
       <section id="comment" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
