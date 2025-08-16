@@ -22,42 +22,43 @@ type Example = {
   cta: string
 }
 
+/** Exemples réalistes — minutes (pas de secondes) */
 const EXAMPLES: Example[] = [
   {
     style: 'romantic',
-    tsISO: '2017-06-24T21:13:07Z',
+    tsISO: '2017-06-24T21:13:00Z',
     title: 'Ode to love',
     owner: 'A. & L.',
     quote:
-      'The exact second of our first kiss — June warmth, city lights flickering, time holding its breath.',
-    cta: 'Claim a romantic second →',
+      'The minute of our first kiss — June warmth, city lights flickering, time holding its breath.',
+    cta: 'Claim a romantic minute →',
   },
   {
     style: 'birth',
-    tsISO: '2023-11-03T05:42:10Z',
+    tsISO: '2023-11-03T05:42:00Z',
     title: 'Welcome to the world',
     owner: 'Elena & Marc',
     quote:
-      '05:42:10 — Léa’s first cry. Tiny fingers wrapped around ours; everything else disappeared.',
-    cta: 'Claim a birth second →',
+      '05:42 — Léa’s first cry. Tiny fingers wrapped around ours; everything else disappeared.',
+    cta: 'Claim a birth minute →',
   },
   {
     style: 'wedding',
-    tsISO: '2021-09-12T18:11:11Z',
+    tsISO: '2021-09-12T18:11:00Z',
     title: 'She said yes',
     owner: 'Nora + Theo',
     quote:
-      '18:11:11 — trembling hands, a ring that almost slipped, and her yes that changed everything.',
-    cta: 'Claim a wedding second →',
+      '18:11 — trembling hands, a ring that almost slipped, and her yes that changed everything.',
+    cta: 'Claim a wedding minute →',
   },
   {
     style: 'christmas',
-    tsISO: '2022-12-25T07:12:03Z',
+    tsISO: '2022-12-25T07:12:00Z',
     title: 'Christmas morning',
     owner: 'The Martins',
     quote:
-      'Paper rustling, cinnamon in the air — the second they shouted “open it!” and the room burst with joy.',
-    cta: 'Claim a Christmas second →',
+      'Paper rustling, cinnamon in the air — the minute they shouted “open it!” and the room burst with joy.',
+    cta: 'Claim a Christmas minute →',
   },
   {
     style: 'newyear',
@@ -65,25 +66,26 @@ const EXAMPLES: Example[] = [
     title: 'Midnight fireworks',
     owner: 'Friends of 2029',
     quote:
-      '00:00:00 UTC — city skyline lit up, a new decade unfolding in sparks and cheers.',
-    cta: 'Claim a New Year second →',
+      '00:00 UTC — skyline lit up, a new decade unfolding in sparks and cheers.',
+    cta: 'Claim a New Year minute →',
   },
   {
     style: 'graduation',
-    tsISO: '2019-07-15T14:32:44Z',
+    tsISO: '2019-07-15T14:32:00Z',
     title: 'Diploma in hand',
     owner: 'Class of 2019',
     quote:
-      'Applause rising — one deep breath, that second on stage felt like a door opening.',
-    cta: 'Claim a graduation second →',
+      'Applause rising — one deep breath, that minute on stage felt like a door opening.',
+    cta: 'Claim a graduation minute →',
   },
 ]
 
-function formatISO(iso: string) {
+function formatISOMinute(iso: string) {
   try {
     const d = new Date(iso)
     if (isNaN(d.getTime())) return iso
-    return d.toISOString().replace('T', ' ').replace('Z', ' UTC')
+    // Affichage à la minute
+    return d.toISOString().replace('T', ' ').replace(':00.000Z', ' UTC').replace('Z',' UTC')
   } catch {
     return iso
   }
@@ -100,7 +102,7 @@ export default function CertificateShowcase() {
   // Auto-advance
   useEffect(() => {
     if (paused) return
-    timeout.current = window.setTimeout(() => go(1), 4500)
+    timeout.current = window.setTimeout(() => go(1), 4200)
     return () => {
       if (timeout.current) window.clearTimeout(timeout.current)
     }
@@ -119,6 +121,10 @@ export default function CertificateShowcase() {
   const current = EXAMPLES[idx]
   const dots = useMemo(() => Array.from({ length: EXAMPLES.length }, (_, i) => i), [])
 
+  // Texte foncé (lisible sur fonds A4 clairs, même en UI dark)
+  const previewText = 'rgba(26,31,42,.92)'
+  const previewSubtle = 'rgba(26,31,42,.70)'
+
   return (
     <div
       onMouseEnter={() => setPaused(true)}
@@ -129,10 +135,11 @@ export default function CertificateShowcase() {
       {/* Card with real A4 background preview */}
       <div
         style={{
-          border: '1px solid #D9D7D3',
+          border: '1px solid var(--color-border, #D9D7D3)',
           borderRadius: 16,
-          background: '#fff',
+          background: 'var(--color-surface, #fff)',
           overflow: 'hidden',
+          boxShadow: 'var(--shadow-elev1, 0 6px 20px rgba(0,0,0,.12))',
         }}
       >
         <div
@@ -155,39 +162,28 @@ export default function CertificateShowcase() {
               backgroundPosition: 'center',
               filter: 'saturate(1) contrast(1)',
             }}
+            aria-hidden
           />
 
-          {/* Safe area overlay */}
-          <div
-            style={{
-              position: 'absolute',
-              left: 24,
-              right: 24,
-              top: 28,
-              bottom: 24,
-              background: 'rgba(255,255,255,0.88)',
-              borderRadius: 12,
-              boxShadow: '0 1px 0 rgba(0,0,0,.02) inset',
-            }}
-          />
-
-          {/* Certificate content */}
+          {/* Certificate content — overlay (pas de voile blanc) */}
           <div
             style={{
               position: 'relative',
               display: 'grid',
-              alignContent: 'space-between',
+              gridTemplateRows: 'auto 1fr auto',
               padding: 20,
               gap: 8,
+              color: previewText,
             }}
           >
+            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div
                 style={{
                   width: 36,
                   height: 36,
                   borderRadius: 999,
-                  border: '5px solid #0B0B0C',
+                  border: '5px solid ' + previewText,
                   position: 'relative',
                 }}
                 aria-hidden
@@ -199,28 +195,32 @@ export default function CertificateShowcase() {
                     left: 12,
                     width: 5,
                     height: 18,
-                    background: '#0B0B0C',
+                    background: previewText,
                   }}
                 />
               </div>
-              <div style={{ fontWeight: 800 }}>Parcels of Time — Certificate of Claim</div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>
-                {formatISO(current.tsISO)}
+              <div style={{ fontWeight: 800 }}>
+                Parcels of Time — <span style={{ opacity: .9 }}>Certificate of Claim</span>
               </div>
-              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>Owned by</div>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{current.owner}</div>
             </div>
 
-            <div>
-              <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>Message</div>
-              <blockquote style={{ margin: 0, fontSize: 14, fontStyle: 'italic' }}>
-                “{current.quote}”
-              </blockquote>
+            {/* Middle */}
+            <div style={{ display: 'grid', alignContent: 'center', gap: 6 }}>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>
+                {formatISOMinute(current.tsISO)}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>Owned by</div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{current.owner}</div>
+
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 4 }}>Message</div>
+                <blockquote style={{ margin: 0, fontSize: 14, fontStyle: 'italic', color: previewSubtle }}>
+                  “{current.quote}”
+                </blockquote>
+              </div>
             </div>
 
+            {/* CTA + style tag */}
             <div
               style={{
                 display: 'flex',
@@ -232,12 +232,12 @@ export default function CertificateShowcase() {
               <Link
                 href={`/claim?ts=${encodeURIComponent(current.tsISO)}&style=${current.style}`}
                 style={{
-                  background: '#0B0B0C',
-                  color: '#FAF9F7',
+                  background: 'var(--color-primary, #0B0B0C)',
+                  color: 'var(--color-on-primary, #FAF9F7)',
                   padding: '10px 14px',
-                  borderRadius: 8,
+                  borderRadius: 10,
                   textDecoration: 'none',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -246,37 +246,29 @@ export default function CertificateShowcase() {
               <span
                 style={{
                   fontSize: 12,
-                  opacity: 0.65,
+                  opacity: 0.80,
                   padding: '6px 8px',
-                  border: '1px solid #E9E7E3',
-                  borderRadius: 6,
-                  background: '#fff',
+                  border: '1px solid var(--color-border, #E9E7E3)',
+                  borderRadius: 8,
+                  background: 'var(--color-surface, #fff)',
                 }}
               >
                 Style: <strong>{current.style}</strong>
               </span>
             </div>
-          </div>
 
-          {/* Controls */}
-          <button
-            aria-label="Previous example"
-            onClick={() => go(-1)}
-            style={navBtnStyle('left')}
-          >
-            ←
-          </button>
-          <button
-            aria-label="Next example"
-            onClick={() => go(1)}
-            style={navBtnStyle('right')}
-          >
-            →
-          </button>
+            {/* Nav buttons */}
+            <button aria-label="Previous example" onClick={() => go(-1)} style={navBtnStyle('left')}>
+              ←
+            </button>
+            <button aria-label="Next example" onClick={() => go(1)} style={navBtnStyle('right')}>
+              →
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Dots */}
+      {/* Dots + Pause */}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}>
         {dots.map((i) => (
           <button
@@ -288,7 +280,7 @@ export default function CertificateShowcase() {
               height: 8,
               borderRadius: 99,
               border: 'none',
-              background: i === idx ? '#0B0B0C' : '#D9D7D3',
+              background: i === idx ? 'var(--color-primary, #0B0B0C)' : 'var(--color-border, #D9D7D3)',
               cursor: 'pointer',
             }}
           />
@@ -298,12 +290,13 @@ export default function CertificateShowcase() {
           aria-label={paused ? 'Resume autoplay' : 'Pause autoplay'}
           style={{
             marginLeft: 8,
-            border: '1px solid #E4E2DE',
-            background: '#fff',
-            borderRadius: 6,
+            border: '1px solid var(--color-border, #E4E2DE)',
+            background: 'var(--color-surface, #fff)',
+            borderRadius: 8,
             padding: '4px 8px',
             fontSize: 12,
             cursor: 'pointer',
+            color: 'inherit',
           }}
         >
           {paused ? 'Play' : 'Pause'}
@@ -314,17 +307,18 @@ export default function CertificateShowcase() {
 }
 
 function navBtnStyle(side: 'left' | 'right'): React.CSSProperties {
-  return {
+  const base: React.CSSProperties = {
     position: 'absolute',
     top: '50%',
     transform: 'translateY(-50%)',
-    [side]: 8,
     width: 36,
     height: 36,
     borderRadius: 999,
-    border: '1px solid #E4E2DE',
-    background: 'rgba(255,255,255,.9)',
+    border: '1px solid var(--color-border, #E4E2DE)',
+    background: 'rgba(255,255,255,.92)',
     cursor: 'pointer',
     fontWeight: 700,
-  } as React.CSSProperties
+  }
+  ;(base as any)[side] = 8
+  return base
 }

@@ -1,7 +1,7 @@
-// app/claim/ClientClaim.tsx — V2 Ultimate (minute-first, gift-friendly, live preview)
+// app/claim/ClientClaim.tsx — V2 Ultimate (minute-first, gift-friendly, local picker, watermark)
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 type CertStyle =
@@ -29,7 +29,7 @@ function safeDecode(value: string): string {
 function isoMinuteString(d: Date) {
   const copy = new Date(d.getTime())
   copy.setUTCSeconds(0,0)
-  return copy.toISOString().replace(':00.000Z', ':00Z') // cosmetically shorter
+  return copy.toISOString()
 }
 
 function parseToDateOrNull(input: string): Date | null {
@@ -46,19 +46,19 @@ function localReadable(d: Date | null) {
   try {
     return d.toLocaleString(undefined, {
       year:'numeric', month:'2-digit', day:'2-digit',
-      hour:'2-digit', minute:'2-digit',
-      hour12:false
+      hour:'2-digit', minute:'2-digit', hour12:false
     })
   } catch { return '' }
 }
 
-/** Quick presets (UTC-based) */
-function withTimeUTC(base: Date, hh: number, mm: number) {
-  const d = new Date(base.getTime())
-  d.setUTCSeconds(0,0)
-  d.setUTCHours(hh, mm, 0, 0)
-  return d
+function daysInMonth(y:number, m:number) {
+  return new Date(y, m, 0).getDate() // m: 1..12
 }
+
+const MONTHS_FR = ['01 — Jan','02 — Fév','03 — Mar','04 — Avr','05 — Mai','06 — Juin','07 — Juil','08 — Août','09 — Sep','10 — Oct','11 — Nov','12 — Déc']
+
+/** Build range helpers */
+const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
 
 export default function ClientClaim() {
   const params = useSearchParams()
@@ -75,6 +75,31 @@ export default function ClientClaim() {
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
+  /** Sélecteur de date “local” (ergonomique) */
+  // valeurs initiales = maintenant, ou préremplissage
+  const now = new Date()
+  const prefillDate = parseToDateOrNull(prefillTs) || now
+  const [pickMode, setPickMode] = useState<'local'|'iso'>(prefillTs ? 'iso' : 'local')
+  const [Y, setY]   = useState<number>(prefillDate.getFullYear())
+  const [M, setM]   = useState<number>(prefillDate.getMonth()+1) // 1-12
+  const [D, setD]   = useState<number>(prefillDate.getDate())    // 1-31
+  const [h, setH]   = useState<number>(prefillDate.getHours())
+  const [m, setMin] = useState<number>(prefillDate.getMinutes())
+
+  // clamp day when month/year changes
+  useEffect(()=>{
+    const dim = daysInMonth(Y,M)
+    if (D>dim) setD(dim)
+  }, [Y,M]) // eslint-disable-line
+
+  // maj form.ts quand on change le sélecteur local
+  useEffect(()=>{
+    if (pickMode!=='local') return
+    const local = new Date(Y, M-1, D, h, m, 0, 0) // local time
+    setForm(f=>({ ...f, ts: isoMinuteString(local) }))
+  }, [pickMode, Y,M,D,h,m]) // eslint-disable-line
+
+  /** Form principal */
   const [form, setForm] = useState({
     email: '',
     display_name: '',
@@ -82,6 +107,7 @@ export default function ClientClaim() {
     link_url: '',
     ts: prefillTs,
     cert_style: initialStyle as CertStyle,
+    time_display: 'utc' as 'utc'|'utc+local'|'local+utc', // nouvel affichage
   })
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
@@ -91,18 +117,21 @@ export default function ClientClaim() {
   const tsISO = useMemo(() => parsedDate ? isoMinuteString(parsedDate) : '', [parsedDate])
   const utcReadable = useMemo(() => parsedDate ? parsedDate.toISOString().replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC') : '', [parsedDate])
   const localReadableStr = useMemo(() => localReadable(parsedDate), [parsedDate])
+  const tzLabel = useMemo(()=> {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local' } catch { return 'Local' }
+  }, [])
 
-  /** Edition hint (client-side heuristic for UX only) */
+  /** Edition hint (UX only) */
   const edition = useMemo(() => {
     if (!parsedDate) return null
     const y = parsedDate.getUTCFullYear()
-    const m = parsedDate.getUTCMonth()
-    const d = parsedDate.getUTCDate()
-    const h = parsedDate.getUTCHours().toString().padStart(2,'0')
-    const mm = parsedDate.getUTCMinutes().toString().padStart(2,'0')
-    const time = `${h}:${mm}`
-    const isLeap = ((y%4===0 && y%100!==0) || y%400===0) && m===1 && d===29
-    const pretty = (time==='11:11' || time==='12:34' || time==='22:22' || (/^([0-9])\1:([0-9])\2$/).test(time))
+    const mm = parsedDate.getUTCMonth()
+    const dd = parsedDate.getUTCDate()
+    const H = parsedDate.getUTCHours().toString().padStart(2,'0')
+    const Mi = parsedDate.getUTCMinutes().toString().padStart(2,'0')
+    const t = `${H}:${Mi}`
+    const isLeap = ((y%4===0 && y%100!==0) || y%400===0) && mm===1 && dd===29
+    const pretty = (t==='11:11' || t==='12:34' || t==='22:22' || (/^([0-9])\1:([0-9])\2$/).test(t))
     return (isLeap || pretty) ? 'premium' : 'standard'
   }, [parsedDate])
 
@@ -119,13 +148,14 @@ export default function ClientClaim() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ts: d.toISOString(), // côté API on tronque aussi à la minute en cas de doute
+        ts: d.toISOString(),
         email: form.email,
-        display_name: form.display_name || undefined, // destinataire si cadeau
+        display_name: form.display_name || undefined,
         message: form.message || undefined,
         link_url: form.link_url || undefined,
         cert_style: form.cert_style || 'neutral',
-        // NOTE: si tu veux exploiter côté backend : ajouter `gift: isGift ? '1' : '0'` dans metadata (et maj de /api/checkout)
+        time_display: form.time_display,         // pass-through (coté back : stocker en metadata si souhaité)
+        gift: isGift ? '1' : '0',                // idem
       }),
     })
 
@@ -146,35 +176,29 @@ export default function ClientClaim() {
     window.location.href = data.url
   }
 
-  /** Quick actions */
-  const setNowUTC = () => {
-    const now = new Date()
-    now.setUTCSeconds(0,0)
-    setForm(f => ({ ...f, ts: isoMinuteString(now) }))
-  }
-
-  const setPresetUTC = (hh:number, mm:number) => {
-    const base = new Date()
-    const target = withTimeUTC(base, hh, mm)
-    setForm(f => ({ ...f, ts: isoMinuteString(target) }))
-  }
-
-  /** Styles */
+  /** Styles globaux */
   const containerStyle: React.CSSProperties = {
-    // tokens dark premium (identiques à la landing)
     ['--color-bg' as any]: '#0B0E14',
     ['--color-surface' as any]: '#111726',
     ['--color-text' as any]: '#E6EAF2',
     ['--color-muted' as any]: '#A7B0C0',
     ['--color-primary' as any]: '#E4B73D',
     ['--color-on-primary' as any]: '#0B0E14',
-    ['--color-secondary' as any]: '#00D2A8',
-    ['--color-accent' as any]: '#8CD6FF',
     ['--color-border' as any]: '#1E2A3C',
     ['--shadow-elev1' as any]: '0 6px 20px rgba(0,0,0,.35)',
     ['--shadow-elev2' as any]: '0 12px 36px rgba(0,0,0,.45)',
     background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh'
   }
+
+  /** Texte d’aperçu : noir doux pour être lisible sur papier clair même en dark UI */
+  const previewTextColor = 'rgba(26, 31, 42, 0.92)'  // #1A1F2A avec légère transparence
+  const previewSubtle = 'rgba(26, 31, 42, 0.70)'
+
+  // si l’utilisateur tape une ISO manuelle, basculer en mode ISO
+  useEffect(()=>{
+    if (prefillTs) setForm(f=>({...f, ts: prefillTs}))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <main style={containerStyle}>
@@ -206,7 +230,7 @@ export default function ClientClaim() {
             {/* Step 1 — Email + identités */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-                Étape 1 — Informations
+                ÉTAPE 1 — INFORMATIONS
               </div>
 
               <label style={{display:'grid', gap:6, marginBottom:10}}>
@@ -214,7 +238,7 @@ export default function ClientClaim() {
                 <input
                   required type="email" value={form.email}
                   onChange={e=>setForm(f=>({...f, email:e.target.value}))}
-                  placeholder={isGift ? 'vous@exemple.com' : 'vous@exemple.com'}
+                  placeholder="vous@exemple.com"
                   style={{
                     padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
                     background:'transparent', color:'var(--color-text)'
@@ -268,30 +292,92 @@ export default function ClientClaim() {
               </details>
             </div>
 
-            {/* Step 2 — Choix de la minute (UTC + local) */}
+            {/* Step 2 — Choix de la minute (sélecteur local ergonomique) */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-                Étape 2 — Votre minute
+                ÉTAPE 2 — VOTRE MINUTE
               </div>
 
-              <label style={{display:'grid', gap:6}}>
-                <span>Horodatage <strong>UTC</strong> (ISO, ex. <code>2100-01-01T00:00Z</code>)</span>
-                <input
-                  placeholder="2100-01-01T00:00Z"
-                  type="text" value={form.ts}
-                  onChange={e=>setForm(f=>({...f, ts:e.target.value}))}
-                  style={{
-                    padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
-                    background:'transparent', color:'var(--color-text)'
-                  }}
-                />
-              </label>
+              {/* mode de sélection */}
+              <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
+                <button type="button"
+                        onClick={()=>setPickMode('local')}
+                        aria-pressed={pickMode==='local'}
+                        style={{
+                          padding:'8px 10px', borderRadius:10, cursor:'pointer',
+                          border: pickMode==='local' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          background:'transparent', color:'var(--color-text)'
+                        }}>
+                  Sélection locale (recommandé)
+                </button>
+                <button type="button"
+                        onClick={()=>setPickMode('iso')}
+                        aria-pressed={pickMode==='iso'}
+                        style={{
+                          padding:'8px 10px', borderRadius:10, cursor:'pointer',
+                          border: pickMode==='iso' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          background:'transparent', color:'var(--color-text)'
+                        }}>
+                  Saisie ISO UTC avancée
+                </button>
+              </div>
 
-              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:10}}>
+              {/* LOCAL PICKER */}
+              {pickMode==='local' && (
+                <div style={{display:'grid', gap:12}}>
+                  <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8}}>
+                    {/* Année */}
+                    <label style={{display:'grid', gap:6}}>
+                      <span>Année</span>
+                      <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
+                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        {range(1900, 2100).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
+                      </select>
+                    </label>
+                    {/* Mois */}
+                    <label style={{display:'grid', gap:6}}>
+                      <span>Mois</span>
+                      <select value={M} onChange={e=>setM(parseInt(e.target.value))}
+                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        {MONTHS_FR.map((txt,idx)=> <option key={idx} value={idx+1} style={{color:'#000'}}>{txt}</option>)}
+                      </select>
+                    </label>
+                    {/* Jour */}
+                    <label style={{display:'grid', gap:6}}>
+                      <span>Jour</span>
+                      <select value={D} onChange={e=>setD(parseInt(e.target.value))}
+                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        {range(1, daysInMonth(Y,M)).map(d=> <option key={d} value={d} style={{color:'#000'}}>{d.toString().padStart(2,'0')}</option>)}
+                      </select>
+                    </label>
+                    {/* Heure */}
+                    <label style={{display:'grid', gap:6}}>
+                      <span>Heure</span>
+                      <select value={h} onChange={e=>setH(parseInt(e.target.value))}
+                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        {range(0,23).map(H=> <option key={H} value={H} style={{color:'#000'}}>{H.toString().padStart(2,'0')}</option>)}
+                      </select>
+                    </label>
+                    {/* Minute */}
+                    <label style={{display:'grid', gap:6}}>
+                      <span>Minute</span>
+                      <select value={m} onChange={e=>setMin(parseInt(e.target.value))}
+                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        {range(0,59).map(Mi=> <option key={Mi} value={Mi} style={{color:'#000'}}>{Mi.toString().padStart(2,'0')}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <small style={{opacity:.7}}>Fuseau local détecté : <strong>{tzLabel}</strong>. L’horodatage final est enregistré en <strong>UTC</strong>.</small>
+                </div>
+              )}
+
+              {/* ISO INPUT */}
+              {pickMode==='iso' && (
                 <label style={{display:'grid', gap:6}}>
-                  <span>Ou sélectionnez en local (arrondi à la minute)</span>
+                  <span>Horodatage <strong>UTC</strong> (ISO — ex. <code>2100-01-01T00:00Z</code>)</span>
                   <input
-                    type="datetime-local" step={60}
+                    placeholder="2100-01-01T00:00Z"
+                    type="text" value={form.ts}
                     onChange={e=>setForm(f=>({...f, ts:e.target.value}))}
                     style={{
                       padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
@@ -299,23 +385,10 @@ export default function ClientClaim() {
                     }}
                   />
                 </label>
-                <div>
-                  <div style={{fontSize:14, color:'var(--color-muted)', marginBottom:6}}>Raccourcis</div>
-                  <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
-                    <button type="button" onClick={setNowUTC}
-                      style={{border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', padding:'8px 10px', borderRadius:10, cursor:'pointer'}}>Maintenant (UTC)</button>
-                    <button type="button" onClick={()=>setPresetUTC(11,11)}
-                      style={{border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', padding:'8px 10px', borderRadius:10, cursor:'pointer'}}>11:11 (UTC)</button>
-                    <button type="button" onClick={()=>setPresetUTC(12,34)}
-                      style={{border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', padding:'8px 10px', borderRadius:10, cursor:'pointer'}}>12:34 (UTC)</button>
-                    <button type="button" onClick={()=>setPresetUTC(0,0)}
-                      style={{border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', padding:'8px 10px', borderRadius:10, cursor:'pointer'}}>00:00 (Nouvel An UTC)</button>
-                  </div>
-                </div>
-              </div>
+              )}
 
               {/* Readouts */}
-              <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:10, fontSize:14}}>
+              <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
                 <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
                   <strong>UTC&nbsp;:</strong> {utcReadable || '—'}
                 </div>
@@ -326,12 +399,35 @@ export default function ClientClaim() {
                   <strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}
                 </div>
               </div>
+
+              {/* Affichage sur le certificat */}
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:14, color:'var(--color-muted)', marginBottom:8}}>Affichage sur le certificat</div>
+                <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+                  {(['utc','utc+local','local+utc'] as const).map(option => (
+                    <label key={option} style={{
+                      padding:'8px 10px', borderRadius:10, cursor:'pointer',
+                      border: form.time_display===option ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'
+                    }}>
+                      <input type="radio" name="time_display" value={option}
+                             checked={form.time_display===option}
+                             onChange={()=>setForm(f=>({...f, time_display: option}))}
+                             style={{display:'none'}}/>
+                      {{
+                        'utc':'UTC seulement',
+                        'utc+local':'UTC + local discret',
+                        'local+utc':'Local + UTC discret'
+                      }[option]}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Step 3 — Style du certificat */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-                Étape 3 — Style du certificat
+                ÉTAPE 3 — STYLE DU CERTIFICAT
               </div>
 
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
@@ -392,7 +488,7 @@ export default function ClientClaim() {
                   cursor: status==='loading' ? 'progress' : 'pointer'
                 }}
               >
-                {status==='loading' ? (isGift ? 'Redirection…' : 'Redirection…')
+                {status==='loading' ? 'Redirection…'
                   : (isGift ? 'Offrir cette minute' : 'Payer & réserver cette minute')}
               </button>
               {status==='error' && error && <p style={{color:'#ff8a8a', marginTop:8}}>{error}</p>}
@@ -411,7 +507,6 @@ export default function ClientClaim() {
               boxShadow:'var(--shadow-elev1)'
             }}
           >
-            {/* Fond affiché depuis /public/cert_bg */}
             <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
               <img
                 src={`/cert_bg/${form.cert_style}.png`}
@@ -420,24 +515,62 @@ export default function ClientClaim() {
                 style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
               />
 
-              {/* Overlay de lecture — ne remplace pas le vrai PDF, juste pour se projeter */}
+              {/* FILIGRANE anti-capture */}
+              <div aria-hidden
+                   style={{
+                     position:'absolute', inset:0, pointerEvents:'none',
+                     display:'grid', placeItems:'center', transform:'rotate(-22deg)',
+                     opacity:.14, mixBlendMode:'multiply'
+                   }}>
+                <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>
+                  PARCELS OF TIME — PREVIEW
+                </div>
+              </div>
+
+              {/* Overlay de lecture (texte foncé) */}
               <div style={{
                 position:'absolute', inset:0, display:'grid',
                 gridTemplateRows:'auto 1fr auto', padding:'6% 8%'
               }}>
-                {/* En-tête en haut */}
-                <div style={{textAlign:'left'}}>
+                {/* En-tête */}
+                <div style={{textAlign:'left', color:previewTextColor}}>
                   <div style={{fontWeight:900, fontSize:'min(3.8vw, 20px)'}}>Parcels of Time</div>
                   <div style={{opacity:.9, fontSize:'min(3.2vw, 14px)'}}>Certificate of Claim</div>
                 </div>
 
                 {/* Zone centrale */}
-                <div style={{display:'grid', placeItems:'center', textAlign:'center'}}>
+                <div style={{display:'grid', placeItems:'center', textAlign:'center', color:previewTextColor}}>
                   <div style={{maxWidth:520}}>
-                    <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
-                      {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
-                    </div>
-                    <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)'}}>Owned by</div>
+                    {/* Horodatage principal / secondaire selon option */}
+                    {form.time_display === 'utc' && (
+                      <>
+                        <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
+                          {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
+                        </div>
+                      </>
+                    )}
+                    {form.time_display === 'utc+local' && (
+                      <>
+                        <div style={{fontWeight:800, fontSize:'min(9vw, 26px)'}}>
+                          {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
+                        </div>
+                        <div style={{color:previewSubtle, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
+                          {localReadableStr ? `${localReadableStr} (${tzLabel})` : ''}
+                        </div>
+                      </>
+                    )}
+                    {form.time_display === 'local+utc' && (
+                      <>
+                        <div style={{fontWeight:800, fontSize:'min(9vw, 26px)'}}>
+                          {localReadableStr ? `${localReadableStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)'}
+                        </div>
+                        <div style={{color:previewSubtle, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
+                          {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Owned by</div>
                     <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>
                       {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
                     </div>
@@ -451,14 +584,14 @@ export default function ClientClaim() {
                 </div>
 
                 {/* Footer placeholder (QR + meta) */}
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', color:previewTextColor}}>
                   <div style={{fontSize:'min(3.2vw, 12px)', opacity:.8}}>
                     Certificate ID • Integrity hash (aperçu)
                   </div>
                   <div style={{
                     width:'min(16vw, 92px)', height:'min(16vw, 92px)',
-                    border:'1px dashed rgba(255,255,255,.35)', borderRadius:8,
-                    display:'grid', placeItems:'center', fontSize:'min(6vw, 12px)', opacity:.8
+                    border:'1px dashed rgba(26,31,42,.45)', borderRadius:8,
+                    display:'grid', placeItems:'center', fontSize:'min(6vw, 12px)', color:previewTextColor, opacity:.85
                   }}>
                     QR
                   </div>
@@ -468,7 +601,7 @@ export default function ClientClaim() {
 
             <div style={{marginTop:10, fontSize:12, color:'var(--color-muted)'}}>
               Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées.  
-              Cet aperçu est indicatif (mise en page similaire).
+              Cet aperçu est indicatif (filigrane ajouté).
             </div>
           </aside>
         </div>
