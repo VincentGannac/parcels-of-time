@@ -1,2 +1,4 @@
-// optionnel si tu avais un loading dédié :
-export { default as loading } from '../../claim/loading'
+// app/claim/loading.tsx 
+export default function Loading() { 
+    return <main style={{padding:24}}>Loading…</main> 
+}
