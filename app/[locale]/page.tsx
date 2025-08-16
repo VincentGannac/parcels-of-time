@@ -1,3 +1,4 @@
+// app/[locale]/page.tsx
 'use client'
 import Link from 'next/link'
 import { useT } from '../i18n/I18nProvider'
