@@ -7,9 +7,14 @@ import { Buffer } from 'node:buffer';
 
 type Params = { ts: string };
 
-export async function GET(req: Request, ctx: { params: Promise<Params> }) {
-  const { ts } = await ctx.params;
-  const decodedTs = decodeURIComponent(ts);
+export async function GET(req: Request, ctx: { params: Promise<{ ts: string }> }) {
+  const { ts } = await ctx.params
+  const decodedTs = decodeURIComponent(ts)
+
+  const accLang = (req.headers.get('accept-language') || '').toLowerCase()
+  const locale = accLang.startsWith('fr') ? 'fr' : 'en' // simple et efficace
+  const timeModeParam = new URL(req.url).searchParams.get('time') // 'utc' | 'utc_plus_local' | 'local_plus_utc'
+  const timeLabelMode = (timeModeParam === 'utc_plus_local' || timeModeParam === 'local_plus_utc') ? timeModeParam : 'utc'
 
   const { rows } = await pool.query(
     `SELECT
@@ -30,14 +35,16 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   const pdfBytes = await generateCertificatePDF({
     ts: row.ts.toISOString(),
-    display_name: row.display_name || 'Anonymous',
+    display_name: row.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
     message: row.message,
     link_url: row.link_url,
     claim_id: row.claim_id,
     hash: row.cert_hash || 'no-hash',
     public_url: publicUrl,
     style: row.cert_style || 'neutral',
-  });
+    locale,               // ⬅️ localise les libellés
+    timeLabelMode,        // ⬅️ affiche UTC / Local selon préférence
+  })
 
   const buf = Buffer.from(pdfBytes);
   return new Response(buf as unknown as BodyInit, {

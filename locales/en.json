@@ -1,0 +1,37 @@
+{
+    "brand": "Parcels of Time",
+    "nav": { "why": "Why", "how": "How", "pricing": "Pricing", "rare": "Rare minutes", "gift": "Gift", "faq": "FAQ" },
+    "hero": {
+      "h1": "Own the minute that matters.",
+      "subtitle": "Engrave a life moment by claiming it forever. Unique. Digital. Shareable.",
+      "rarity": "Real rarity: 525,600 minutes per year."
+    },
+    "cta": { "claim": "Reserve my minute", "gift": "Gift a minute" },
+    "receive": {
+      "title": "What you receive",
+      "points": ["Public page for your minute", "Signed PDF certificate", "Personal message & optional link", "Instant email delivery"]
+    },
+    "claim": {
+      "title": "Claim your minute",
+      "step1": "STEP 1 — INFORMATION",
+      "email": "Your email (receipt & certificate)",
+      "display_name": "Recipient name (public on certificate)",
+      "message": "Message (optional)",
+      "link": "Link (optional)",
+      "moderation": "Moderated content. Be kind ❤️",
+      "step2": "STEP 2 — YOUR MINUTE",
+      "utc_input": "UTC timestamp (ISO, e.g. 2100-01-01T00:00Z)",
+      "pick_local": "Or select in local time (rounded to the minute)",
+      "style": "Certificate style",
+      "pay": "Pay & claim this minute",
+      "timeLabel": { "utc_only": "UTC only", "utc_plus_local": "UTC + local (small)", "local_plus_utc": "Local + UTC (small)" }
+    },
+    "certificate": {
+      "title": "Certificate of Claim",
+      "owned_by": "Owned by",
+      "message": "Message",
+      "certificate_id": "Certificate ID",
+      "integrity": "Integrity (SHA-256)"
+    }
+  }
+  

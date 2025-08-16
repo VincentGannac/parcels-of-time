@@ -14,7 +14,40 @@ export type CertStyle =
   | 'newyear'
   | 'graduation'
 
-async function loadBgFromPublic(style: CertStyle): Promise<{ bytes: Uint8Array; kind: 'png' | 'jpg' } | null> {
+export type Locale = 'fr' | 'en'
+export type TimeLabelMode = 'utc' | 'utc_plus_local' | 'local_plus_utc'
+
+/** Libellés localisés (auto-contenu pour éviter une dépendance à des JSON externes) */
+const TEXTS = {
+  en: {
+    brand: 'Parcels of Time',
+    title: 'Certificate of Claim',
+    ownedBy: 'Owned by',
+    message: 'Message',
+    link: 'Link',
+    certId: 'Certificate ID',
+    integrity: 'Integrity (SHA-256)',
+    anon: 'Anonymous',
+    local: (s: string) => `(local: ${s})`,
+    utcParen: (s: string) => `(UTC: ${s})`,
+  },
+  fr: {
+    brand: 'Parcels of Time',
+    title: 'Certificat de Claim',
+    ownedBy: 'Au nom de',
+    message: 'Message',
+    link: 'Lien',
+    certId: 'ID du certificat',
+    integrity: 'Intégrité (SHA-256)',
+    anon: 'Anonyme',
+    local: (s: string) => `(local : ${s})`,
+    utcParen: (s: string) => `(UTC : ${s})`,
+  },
+} as const
+
+async function loadBgFromPublic(
+  style: CertStyle
+): Promise<{ bytes: Uint8Array; kind: 'png' | 'jpg' } | null> {
   const base = path.join(process.cwd(), 'public', 'cert_bg')
   const candidates = [
     path.join(base, `${style}.png`),
@@ -31,18 +64,17 @@ async function loadBgFromPublic(style: CertStyle): Promise<{ bytes: Uint8Array; 
   return null
 }
 
-/** Safe area (marges depuis les bords) en points (A4 @72dpi) — calibrée par style */
+/** Safe area (marges internes) calibrée par style — en points (A4 @72dpi) */
 function getSafeArea(style: CertStyle) {
-  // Base confortable
-  const base = { top: 140, right: 96, bottom: 160, left: 96 }
+  const base = { top: 140, right: 96, bottom: 156, left: 96 }
   switch (style) {
-    case 'romantic':   return { top: 160, right: 116, bottom: 160, left: 116 }
-    case 'birthday':   return { top: 140, right: 136, bottom: 160, left: 136 }
-    case 'birth':      return { top: 150, right: 112, bottom: 160, left: 112 }
-    case 'wedding':    return { top: 160, right: 124, bottom: 160, left: 124 }
-    case 'christmas':  return { top: 150, right: 112, bottom: 160, left: 112 }
-    case 'newyear':    return { top: 150, right: 112, bottom: 160, left: 112 }
-    case 'graduation': return { top: 150, right: 112, bottom: 160, left: 112 }
+    case 'romantic':   return { top: 160, right: 116, bottom: 156, left: 116 }
+    case 'birthday':   return { top: 144, right: 132, bottom: 156, left: 132 }
+    case 'birth':      return { top: 150, right: 112, bottom: 156, left: 112 }
+    case 'wedding':    return { top: 160, right: 124, bottom: 156, left: 124 }
+    case 'christmas':  return { top: 150, right: 112, bottom: 156, left: 112 }
+    case 'newyear':    return { top: 150, right: 112, bottom: 156, left: 112 }
+    case 'graduation': return { top: 150, right: 112, bottom: 156, left: 112 }
     default:           return base
   }
 }
@@ -61,6 +93,41 @@ function wrapText(text: string, font: any, size: number, maxWidth: number) {
   return lines
 }
 
+/** Format UTC à la minute → "YYYY-MM-DD HH:MM UTC" */
+function utcMinuteLabel(iso: string) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  d.setUTCSeconds(0, 0)
+  // 2025-08-16T12:34:00.000Z → 2025-08-16 12:34 UTC
+  return d.toISOString().replace('T', ' ').replace(':00.000Z', ' UTC').replace('Z', ' UTC')
+}
+
+/** Format local (IANA optionnel) à la minute selon la locale */
+function localMinuteLabel(iso: string, locale: Locale, timeZone?: string) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  d.setSeconds(0, 0)
+  try {
+    const fmt = new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: timeZone, // si non fourni → timezone de l’environnement
+    })
+    return fmt.format(d)
+  } catch {
+    // Fallback simple
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${y}-${m}-${day} ${hh}:${mm}`
+  }
+}
+
 export async function generateCertificatePDF(opts: {
   ts: string
   display_name: string
@@ -70,12 +137,22 @@ export async function generateCertificatePDF(opts: {
   hash: string
   public_url: string
   style?: CertStyle
+  locale?: Locale
+  timeLabelMode?: TimeLabelMode
+  /** IANA TZ pour le rendu "local" (ex: "Europe/Paris"). Si omis → TZ du serveur. */
+  localTimeZone?: string
 }) {
-  const { ts, display_name, message, link_url, claim_id, hash, public_url } = opts
-  const style: CertStyle = (opts.style || 'neutral')
+  const {
+    ts, display_name, message, link_url, claim_id, hash, public_url,
+    localTimeZone,
+  } = opts
+  const style: CertStyle = opts.style || 'neutral'
+  const locale: Locale = opts.locale || 'en'
+  const timeLabelMode: TimeLabelMode = opts.timeLabelMode || 'utc'
+  const L = TEXTS[locale]
 
   const pdf = await PDFDocument.create()
-  const page = pdf.addPage([595.28, 841.89]) // A4 portrait (pt)
+  const page = pdf.addPage([595.28, 841.89]) // A4 portrait
   const { width, height } = page.getSize()
 
   // --- Background ---
@@ -91,15 +168,12 @@ export async function generateCertificatePDF(opts: {
     page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(1, 1, 1) })
   }
 
-  // Fin cadre discret
-  page.drawRectangle({ x: 24, y: 24, width: width - 48, height: height - 48, borderColor: rgb(0.88,0.86,0.83), borderWidth: 1 })
-
   // --- Fonts/Couleurs ---
   const font = await pdf.embedFont(StandardFonts.Helvetica)
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const cMain = rgb(0.05,0.05,0.05)
-  const cSub  = rgb(0.35,0.35,0.35)
-  const CENTER = (x: number) => x // helper for clarity
+  const cMain = rgb(0.11, 0.13, 0.16) // lisible en dark mode preview
+  const cSub  = rgb(0.36, 0.40, 0.47)
+  const cLink = rgb(0.10, 0.20, 0.55)
 
   // --- Safe area ---
   const SA = getSafeArea(style)
@@ -110,113 +184,124 @@ export async function generateCertificatePDF(opts: {
   const COLW = RIGHT - LEFT
   const CX = (LEFT + RIGHT) / 2
 
-  // --- Header (un peu plus bas) ---
-  let yHeader = TOP_Y - 18
-  const brand = 'Parcels of Time'
+  // --- Header (un peu plus bas qu’au bord) ---
   const brandSize = 18
-  const brandW = fontBold.widthOfTextAtSize(brand, brandSize)
-  page.drawText(brand, { x: CX - brandW/2, y: yHeader, size: brandSize, font: fontBold, color: cMain })
-
-  yHeader -= 22
-  const sub = 'Certificate of Claim'
   const subSize = 12
-  const subW = font.widthOfTextAtSize(sub, subSize)
-  page.drawText(sub, { x: CX - subW/2, y: yHeader, size: subSize, font, color: rgb(0.18,0.18,0.18) })
+  let yHeader = TOP_Y - 40 // ↓ descendu comme demandé
+  const brandW = fontBold.widthOfTextAtSize(L.brand, brandSize)
+  page.drawText(L.brand, { x: CX - brandW / 2, y: yHeader, size: brandSize, font: fontBold, color: cMain })
+
+  yHeader -= 18
+  const subW = font.widthOfTextAtSize(L.title, subSize)
+  page.drawText(L.title, { x: CX - subW / 2, y: yHeader, size: subSize, font, color: cSub })
 
   // --- Mesures typographiques ---
-  const tsSize = 26, labelSize = 10.5, nameSize = 15, msgSize = 12.5, linkSize = 10.5
+  const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5, linkSize = 10.5
   const gapSection = 14, gapSmall = 8
   const lineHMsg = 16, lineHLink = 14
 
-  // Zone dispo entre la fin du header et le bas de la safe area
-  const contentTopMax = yHeader - 40
+  // Zone disponible entre fin du header et le bas de la safe area
+  const contentTopMax = yHeader - 38
   const contentBottomMin = BOT_Y
   const availH = contentTopMax - contentBottomMin
 
-  // Contenu (centré et légèrement remonté)
-  const tsText = ts.replace('T',' ').replace('Z',' UTC')
+  // --- Horodatages ---
+  const utcLabel = utcMinuteLabel(ts)
+  const localLabel = localMinuteLabel(ts, locale, localTimeZone)
+
+  let mainTime = utcLabel
+  let subTime = ''
+  if (timeLabelMode === 'utc_plus_local') {
+    mainTime = utcLabel
+    subTime = L.local(localLabel)
+  } else if (timeLabelMode === 'local_plus_utc') {
+    mainTime = localLabel
+    // on retire " UTC" pour l’annexe
+    const utcPlain = utcLabel.replace(' UTC', '')
+    subTime = L.utcParen(utcPlain)
+  }
+
+  // --- Blocs variables & wraps ---
   const fixedAboveMsg =
-    (tsSize + 6) +                    // timestamp approx height
+    (tsSize + 6) +                    // timestamp
     gapSection +
     (labelSize + 2) + gapSmall +      // "Owned by"
     (nameSize + 4)
 
-  // QR + meta bloc
   const qrSize = 120
   const afterTextToQR = 18
   const afterQRToMeta = 10
-  const metaBlockH = 76 // label + id + label + hash(2l) + marges
+  const metaBlockH = 76
 
-  // Wraps
   const msgLinesAll = message ? wrapText('“' + message + '”', font, msgSize, COLW) : []
   const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
 
-  // Nombre de lignes permis pour tout faire tenir + marge
   const spaceForText = availH - (afterTextToQR + qrSize + afterQRToMeta + metaBlockH)
   const maxMsgLines = Math.max(0, Math.floor((spaceForText - fixedAboveMsg - gapSection /* label msg */) / lineHMsg))
   const msgLines = msgLinesAll.slice(0, maxMsgLines)
 
-  const spaceAfterMsg = spaceForText - fixedAboveMsg - (msgLines.length ? gapSection + msgLines.length*lineHMsg : 0)
+  const spaceAfterMsg = spaceForText - fixedAboveMsg - (msgLines.length ? gapSection + msgLines.length * lineHMsg : 0)
   const maxLinkLines = Math.min(2, Math.max(0, Math.floor((spaceAfterMsg - (link_url ? gapSection : 0)) / lineHLink)))
   const linkLines = linkLinesAll.slice(0, maxLinkLines)
 
-  // Hauteur totale du bloc central (texte + QR + meta)
   const blockH =
     fixedAboveMsg +
-    (msgLines.length ? gapSection + msgLines.length*lineHMsg : 0) +
-    (linkLines.length ? gapSection + linkLines.length*lineHLink : 0) +
+    (msgLines.length ? gapSection + msgLines.length * lineHMsg : 0) +
+    (linkLines.length ? gapSection + linkLines.length * lineHLink : 0) +
     afterTextToQR + qrSize + afterQRToMeta + metaBlockH
 
-  // Point de départ pour centrer verticalement + léger décalage vers le haut
-  const biasUp = 12 // "remonte légèrement"
-  let by = contentBottomMin + (availH - blockH)/2 + biasUp
-
-  // ---------- Rendu centré ----------
+  const biasUp = 10 // léger décalage vers le haut
+  let by = contentBottomMin + (availH - blockH) / 2 + biasUp
   let cursor = by + blockH
 
-  // Timestamp
+  // ---------- Rendu centré ----------
+  // Timestamp principal
   cursor -= (tsSize + 6)
-  const tsW = fontBold.widthOfTextAtSize(tsText, tsSize)
-  page.drawText(tsText, { x: CX - tsW/2, y: cursor, size: tsSize, font: fontBold, color: cMain })
+  const tsW = fontBold.widthOfTextAtSize(mainTime, tsSize)
+  page.drawText(mainTime, { x: CX - tsW / 2, y: cursor, size: tsSize, font: fontBold, color: cMain })
+
+  // Petit sous-libellé de temps si présent
+  if (subTime) {
+    const subTW = font.widthOfTextAtSize(subTime, 11)
+    page.drawText(subTime, { x: CX - subTW / 2, y: cursor - 16, size: 11, font, color: cSub })
+    cursor -= 12
+  }
 
   // Owned by
   cursor -= gapSection
-  const ownedLabel = 'Owned by'
-  const ownedW = font.widthOfTextAtSize(ownedLabel, labelSize)
-  page.drawText(ownedLabel, { x: CX - ownedW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
+  const ownedW = font.widthOfTextAtSize(L.ownedBy, labelSize)
+  page.drawText(L.ownedBy, { x: CX - ownedW / 2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
 
   cursor -= (labelSize + 2 + gapSmall)
-  const name = display_name || 'Anonymous'
+  const name = display_name || L.anon
   const nameW = fontBold.widthOfTextAtSize(name, nameSize)
-  page.drawText(name, { x: CX - nameW/2, y: cursor - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
+  page.drawText(name, { x: CX - nameW / 2, y: cursor - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
 
   // Message
   if (msgLines.length) {
     cursor -= (nameSize + 4)
     cursor -= gapSection
-    const msgLabel = 'Message'
-    const msgLabelW = font.widthOfTextAtSize(msgLabel, labelSize)
-    page.drawText(msgLabel, { x: CX - msgLabelW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
+    const msgLabelW = font.widthOfTextAtSize(L.message, labelSize)
+    page.drawText(L.message, { x: CX - msgLabelW / 2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
     cursor -= (labelSize + 6)
     for (const line of msgLines) {
       const w = font.widthOfTextAtSize(line, msgSize)
-      page.drawText(line, { x: CX - w/2, y: cursor - lineHMsg, size: msgSize, font, color: rgb(0.07,0.07,0.07) })
+      page.drawText(line, { x: CX - w / 2, y: cursor - lineHMsg, size: msgSize, font, color: cMain })
       cursor -= lineHMsg
     }
   } else {
     cursor -= (nameSize + 4)
   }
 
-  // Link
+  // Lien
   if (linkLines.length) {
     cursor -= gapSection
-    const linkLabel = 'Link'
-    const linkLabelW = font.widthOfTextAtSize(linkLabel, labelSize)
-    page.drawText(linkLabel, { x: CX - linkLabelW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
+    const linkLabelW = font.widthOfTextAtSize(L.link, labelSize)
+    page.drawText(L.link, { x: CX - linkLabelW / 2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
     cursor -= (labelSize + 6)
     for (const line of linkLines) {
       const w = font.widthOfTextAtSize(line, linkSize)
-      page.drawText(line, { x: CX - w/2, y: cursor - lineHLink, size: linkSize, font, color: rgb(0.1,0.1,0.35) })
+      page.drawText(line, { x: CX - w / 2, y: cursor - lineHLink, size: linkSize, font, color: cLink })
       cursor -= lineHLink
     }
   }
@@ -226,31 +311,30 @@ export async function generateCertificatePDF(opts: {
   const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
   const pngBytes = Buffer.from(qrDataUrl.split(',')[1], 'base64')
   const png = await pdf.embedPng(pngBytes)
-  page.drawImage(png, { x: CX - qrSize/2, y: cursor - qrSize, width: qrSize, height: qrSize })
-  cursor -= (qrSize + afterQRToMeta)
+  const qrSizePx = 120
+  page.drawImage(png, { x: CX - qrSizePx / 2, y: cursor - qrSizePx, width: qrSizePx, height: qrSizePx })
+  cursor -= (qrSizePx + afterQRToMeta)
 
-  // Métadonnées (centrées, sous le QR)
-  const idLabel = 'Certificate ID'
-  const idLabelW = font.widthOfTextAtSize(idLabel, labelSize)
-  page.drawText(idLabel, { x: CX - idLabelW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
+  // Métadonnées
+  const idLabelW = font.widthOfTextAtSize(L.certId, labelSize)
+  page.drawText(L.certId, { x: CX - idLabelW / 2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
   cursor -= (labelSize + 6)
 
   const idW = fontBold.widthOfTextAtSize(claim_id, 10.5)
-  page.drawText(claim_id, { x: CX - idW/2, y: cursor - 12, size: 10.5, font: fontBold, color: cMain })
+  page.drawText(claim_id, { x: CX - idW / 2, y: cursor - 12, size: 10.5, font: fontBold, color: cMain })
   cursor -= 20
 
-  const integ = 'Integrity (SHA-256)'
-  const integW = font.widthOfTextAtSize(integ, labelSize)
-  page.drawText(integ, { x: CX - integW/2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
+  const integW = font.widthOfTextAtSize(L.integrity, labelSize)
+  page.drawText(L.integrity, { x: CX - integW / 2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
   cursor -= (labelSize + 6)
 
   const h1 = hash.slice(0, 64)
   const h2 = hash.slice(64)
   const h1W = font.widthOfTextAtSize(h1, 9.5)
-  page.drawText(h1, { x: CX - h1W/2, y: cursor - 12, size: 9.5, font, color: cMain })
+  page.drawText(h1, { x: CX - h1W / 2, y: cursor - 12, size: 9.5, font, color: cMain })
   cursor -= 16
   const h2W = font.widthOfTextAtSize(h2, 9.5)
-  page.drawText(h2, { x: CX - h2W/2, y: cursor - 12, size: 9.5, font, color: cMain })
+  page.drawText(h2, { x: CX - h2W / 2, y: cursor - 12, size: 9.5, font, color: cMain })
 
   return await pdf.save()
 }

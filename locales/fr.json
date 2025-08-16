@@ -1,0 +1,37 @@
+{
+    "brand": "Parcels of Time",
+    "nav": { "why": "Pourquoi", "how": "Comment", "pricing": "Prix", "rare": "Minutes rares", "gift": "Offrir", "faq": "FAQ" },
+    "hero": {
+      "h1": "Possédez la minute qui compte.",
+      "subtitle": "Gravez un moment de vie en le revendiquant pour toujours. Unique. Numérique. Partageable.",
+      "rarity": "Rareté réelle : 525 600 minutes par année."
+    },
+    "cta": { "claim": "Réserver ma minute", "gift": "Offrir une minute" },
+    "receive": {
+      "title": "Ce que vous recevez",
+      "points": ["Page publique de votre minute", "Certificat PDF signé", "Message personnel & lien optionnel", "Envoi e-mail instantané"]
+    },
+    "claim": {
+      "title": "Réserver votre minute",
+      "step1": "ÉTAPE 1 — INFORMATIONS",
+      "email": "Votre e-mail (reçu & certificat)",
+      "display_name": "Nom du·de la destinataire (public sur le certificat)",
+      "message": "Message (optionnel)",
+      "link": "Lien (optionnel)",
+      "moderation": "Contenu modéré. Restez bienveillant(e) ❤️",
+      "step2": "ÉTAPE 2 — VOTRE MINUTE",
+      "utc_input": "Horodatage UTC (ISO, ex. 2100-01-01T00:00Z)",
+      "pick_local": "Ou sélectionnez en local (arrondi à la minute)",
+      "style": "Style du certificat",
+      "pay": "Payer & réserver cette minute",
+      "timeLabel": { "utc_only": "UTC seulement", "utc_plus_local": "UTC + local discret", "local_plus_utc": "Local + UTC discret" }
+    },
+    "certificate": {
+      "title": "Certificat de Claim",
+      "owned_by": "Au nom de",
+      "message": "Message",
+      "certificate_id": "ID du certificat",
+      "integrity": "Intégrité (SHA-256)"
+    }
+  }
+  
