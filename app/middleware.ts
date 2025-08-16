@@ -1,27 +1,31 @@
-// middleware.ts
 import { NextResponse, NextRequest } from 'next/server'
 
-const LOCALES = ['fr', 'en'] as const
+const LOCALES = ['fr','en'] as const
 const DEFAULT_LOCALE: (typeof LOCALES)[number] = 'en'
 
-// --- Admin Basic Auth
+// Admin Basic Auth (Edge-safe: atob)
 const USER = process.env.ADMIN_USER || 'admin'
 const PASS = process.env.ADMIN_PASS || 'LaDisciplineMeMeneraLoin123'
 
-// IMPORTANT: inclure '/' et ignorer _next, api, et fichiers
 export const config = {
-  matcher: ['/', '/((?!_next|api|.*\\..*).*)'],
+  matcher: [
+    // Intercepte tout SAUF api/_next/assets/favicons/fichiers statiques
+    '/((?!api|_next/static|_next/image|_next/webpack-hmr|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|xml)).*)',
+  ],
 }
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl
   const path = url.pathname
 
-  // 1) ADMIN / API ADMIN → Basic Auth
+  // 1) Admin: Basic Auth
   if (path.startsWith('/admin') || path.startsWith('/api/admin')) {
-    const auth = req.headers.get('authorization')
-    if (auth?.startsWith('Basic ')) {
-      const [u, p] = Buffer.from(auth.replace('Basic ', ''), 'base64').toString().split(':')
+    const auth = req.headers.get('authorization') || ''
+    if (auth.startsWith('Basic ')) {
+      const decoded = (typeof atob !== 'undefined')
+        ? atob(auth.split(' ')[1])
+        : Buffer.from(auth.split(' ')[1], 'base64').toString() // fallback Node (dev)
+      const [u, p] = decoded.split(':')
       if (u === USER && p === PASS) return NextResponse.next()
     }
     return new NextResponse('Authentication required', {
@@ -30,17 +34,18 @@ export function middleware(req: NextRequest) {
     })
   }
 
-  // 2) i18n — si pas encore préfixé /fr ou /en → rediriger
-  const alreadyLocalized = LOCALES.some(
-    (l) => path === `/${l}` || path.startsWith(`/${l}/`)
-  )
-  if (alreadyLocalized) return NextResponse.next()
+  // 2) Files et chemins déjà localisés → on ne touche pas
+  const isFile = /\.[a-zA-Z0-9]+$/.test(path)
+  const alreadyLocalized = LOCALES.some(l => path === `/${l}` || path.startsWith(`/${l}/`))
+  if (isFile || alreadyLocalized) return NextResponse.next()
 
-  // Détection Accept-Language simple
+  // 3) Redirection / → /{locale}
   const header = req.headers.get('accept-language') || ''
-  const guess = header.split(',')[0]?.split('-')[0]?.toLowerCase() || DEFAULT_LOCALE
-  const locale = (LOCALES as readonly string[]).includes(guess) ? guess : DEFAULT_LOCALE
+  const guess = header.split(',')[0]?.split('-')[0]?.toLowerCase()
+  const locale = (LOCALES as readonly string[]).includes(guess as any)
+    ? (guess as (typeof LOCALES)[number])
+    : DEFAULT_LOCALE
 
-  url.pathname = `/${locale}${path === '/' ? '' : path}`
+  url.pathname = `/${locale}${path}`
   return NextResponse.redirect(url)
 }
