@@ -9,11 +9,9 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // NB: le layout racine doit contenir <html> et <body>.
-  // On laisse `lang="en"` par défaut ; le contenu est localisé via le layout /[locale].
   return (
-    <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body>{children}</body>
     </html>
   )
 }

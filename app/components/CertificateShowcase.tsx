@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useLocaleHref } from './useLocaleHref'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 type CertStyle =
@@ -84,7 +85,6 @@ function formatISOMinute(iso: string) {
   try {
     const d = new Date(iso)
     if (isNaN(d.getTime())) return iso
-    // Affichage à la minute
     return d.toISOString().replace('T', ' ').replace(':00.000Z', ' UTC').replace('Z',' UTC')
   } catch {
     return iso
@@ -92,6 +92,7 @@ function formatISOMinute(iso: string) {
 }
 
 export default function CertificateShowcase() {
+  const href = useLocaleHref() // ⬅️ hook utilisé DANS le composant
   const [idx, setIdx] = useState(0)
   const [paused, setPaused] = useState(false)
   const timeout = useRef<number | null>(null)
@@ -152,7 +153,7 @@ export default function CertificateShowcase() {
             display: 'grid',
           }}
         >
-          {/* Background (thumb then full as fallback) */}
+          {/* Background */}
           <div
             style={{
               position: 'absolute',
@@ -165,7 +166,7 @@ export default function CertificateShowcase() {
             aria-hidden
           />
 
-          {/* Certificate content — overlay (pas de voile blanc) */}
+          {/* Overlay */}
           <div
             style={{
               position: 'relative',
@@ -230,7 +231,7 @@ export default function CertificateShowcase() {
               }}
             >
               <Link
-                href={`/claim?ts=${encodeURIComponent(current.tsISO)}&style=${current.style}`}
+                href={href(`/claim?ts=${encodeURIComponent(current.tsISO)}&style=${current.style}`)}
                 style={{
                   background: 'var(--color-primary, #0B0B0C)',
                   color: 'var(--color-on-primary, #FAF9F7)',

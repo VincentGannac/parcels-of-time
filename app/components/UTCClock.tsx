@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { useLocaleHref } from './useLocaleHref'
 
 function pad2(n: number) { return n.toString().padStart(2, '0') }
 
@@ -19,6 +20,7 @@ function formatUTC(d: Date) {
 }
 
 export default function UTCClock() {
+  const href = useLocaleHref()
   const [now, setNow] = useState(() => formatUTC(new Date()))
   useEffect(() => {
     const id = setInterval(() => setNow(formatUTC(new Date())), 1000)
@@ -41,7 +43,7 @@ export default function UTCClock() {
       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{now.pretty}</span>
       <span aria-hidden="true" style={{ opacity: .4 }}>•</span>
       <Link
-        href={`/claim?ts=${encodeURIComponent(now.iso)}`}
+        href={href(`/claim?ts=${encodeURIComponent(now.iso)}`)}
         style={{
           background: '#0B0B0C',
           color: '#FAF9F7',
