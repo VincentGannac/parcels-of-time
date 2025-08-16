@@ -1,3 +1,5 @@
+// app/[locale]/layout.tsx
+import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 import { I18nProvider } from '../i18n/I18nProvider'
 import fr from '../../locales/fr.json'
@@ -6,10 +8,12 @@ import '../globals.css'
 
 export const dynamic = 'force-static'
 
-export async function generateMetadata({
-  params,
-}: { params: { locale: 'fr'|'en' } }): Promise<Metadata> {
-  const l = params.locale
+// Next 15: params est un Promise
+export async function generateMetadata(
+  { params }: { params: Promise<{ locale: 'fr' | 'en' }> }
+): Promise<Metadata> {
+  const { locale } = await params
+  const l = locale
   return {
     title: l === 'fr'
       ? 'Parcels of Time — Possédez la minute qui compte.'
@@ -26,22 +30,16 @@ export async function generateMetadata({
   }
 }
 
-export default function LocaleLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode
-  params: { locale: 'fr'|'en' }
-}) {
-  const dict = params.locale === 'fr' ? fr : en
+export default async function LocaleLayout(
+  { children, params }: { children: ReactNode; params: Promise<{ locale: 'fr' | 'en' }> }
+) {
+  const { locale } = await params
+  const dict = locale === 'fr' ? fr : en
 
+  // IMPORTANT: pas de <html>/<body> ici (gardé dans app/layout.tsx)
   return (
-    <html lang={params.locale}>
-      <body>
-        <I18nProvider locale={params.locale} dict={dict}>
-          {children}
-        </I18nProvider>
-      </body>
-    </html>
+    <I18nProvider locale={locale} dict={dict}>
+      {children}
+    </I18nProvider>
   )
 }
