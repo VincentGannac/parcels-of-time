@@ -146,17 +146,15 @@ function LiveUTCMinute() {
 type PreviewStyle =
   | 'romantic' | 'birth' | 'wedding' | 'birthday' | 'christmas' | 'newyear' | 'graduation' | 'neutral';
 
-function safePadding(style: PreviewStyle): string {
-  switch (style) {
-    case 'romantic':   return '9% 10% 13% 10%';
-    case 'birth':      return '10% 9% 14% 9%';
-    case 'wedding':    return '9% 11% 13% 11%';
-    case 'birthday':   return '7% 12% 14% 12%';
-    case 'christmas':  return '8% 10% 14% 10%';
-    case 'newyear':    return '8% 10% 14% 10%';
-    case 'graduation': return '9% 9% 14% 9%';
-    default:           return '8% 8% 12% 8%';
-  }
+const SAFE_INSETS_PCT: Record<PreviewStyle, {top:number;right:number;bottom:number;left:number}> = {
+    neutral:    { top:16.6, right:16.1, bottom:18.5, left:16.1 },
+    romantic:   { top:19.0, right:19.5, bottom:18.5, left:19.5 },
+    birthday:   { top:17.1, right:22.2, bottom:18.5, left:22.2 },
+    birth:      { top:17.8, right:18.8, bottom:18.5, left:18.8 },
+    wedding:    { top:19.0, right:20.8, bottom:18.5, left:20.8 },
+    christmas:  { top:17.8, right:18.8, bottom:18.5, left:18.8 },
+    newyear:    { top:17.8, right:18.8, bottom:18.5, left:18.8 },
+    graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
 }
 
 function CertificatePreview({
@@ -169,70 +167,72 @@ function CertificatePreview({
   ts: string
   href: string
 }) {
-  const tsText = ts.includes('UTC') ? ts : ts.replace('T',' ').replace('Z',' UTC')
+  const tsText = ts.includes('UTC') ? ts : ts.replace('T', ' ').replace('Z', ' UTC')
   const previewTextColor = 'rgba(26, 31, 42, 0.92)'
   const previewSubtle = 'rgba(26, 31, 42, 0.70)'
 
+  // ✅ calculé AVANT le JSX
+  const ins = SAFE_INSETS_PCT[styleId]
+
   return (
-    <a href={href} style={{textDecoration:'none', color:'var(--color-text)'}} aria-label={`Choisir le style ${styleId}`}>
+    <a href={href} style={{ textDecoration: 'none', color: 'var(--color-text)' }} aria-label={`Choisir le style ${styleId}`}>
       <figure style={{
-        margin:0, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16,
-        overflow:'hidden', boxShadow:'var(--shadow-elev1)'
+        margin: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16,
+        overflow: 'hidden', boxShadow: 'var(--shadow-elev1)'
       }}>
-        <div style={{ position:'relative', width:'100%', aspectRatio:'595/842', background:'#F4F1EC' }}>
+        <div style={{ position: 'relative', width: '100%', aspectRatio: '595/842', background: '#F4F1EC' }}>
           <img
             src={`/cert_bg/${styleId}.png`}
             alt={`Certificat style ${styleId}`}
             width={595} height={842}
-            style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover'}}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
 
-          {/* Overlay harmonisé (comme ClientClaim) */}
-          <div aria-hidden style={{
-            position:'absolute', inset:0, padding:safePadding(styleId),
-            display:'grid', gridTemplateRows:'auto 1fr auto', color:previewTextColor
-          }}>
-            {/* En-tête */}
-            <div style={{textAlign:'center'}}>
-              <div style={{fontWeight:900, fontSize:16}}>Parcels of Time</div>
-              <div style={{opacity:.9, fontSize:12}}>Certificate of Claim</div>
-            </div>
+          {/* Overlay harmonisé */}
+          <div aria-hidden style={{ position: 'absolute', inset: 0, color: previewTextColor }}>
+            {/* Zone sûre = même géométrie que le PDF */}
+            <div style={{
+              position: 'absolute',
+              top: `${ins.top}%`, right: `${ins.right}%`, bottom: `${ins.bottom}%`, left: `${ins.left}%`,
+              display: 'grid', gridTemplateRows: 'auto 1fr', textAlign: 'center'
+            }}>
+              {/* En-tête */}
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Parcels of Time</div>
+                <div style={{ opacity: .9, fontSize: 12 }}>Certificate of Claim</div>
+              </div>
 
-            {/* Zone centrale */}
-            <div style={{ display:'grid', placeItems:'center', textAlign:'center', gridAutoRows:'min-content', gap:8 }}>
-              <div style={{fontWeight:800, fontSize:24, letterSpacing:.2}}>{tsText}</div>
+              {/* Zone centrale */}
+              <div style={{ display: 'grid', placeItems: 'center', gap: 8 }}>
+                <div style={{ fontWeight: 800, fontSize: 24, letterSpacing: .2 }}>{tsText}</div>
 
-              {/* Titre — NOUVEAU */}
-              {title && (
-                <>
-                  <div style={{opacity:.7, fontSize:12, marginTop:2}}>Title</div>
-                  <div style={{fontWeight:800, fontSize:16}}>{title}</div>
-                </>
-              )}
+                {/* Title AVANT Owned by */}
+                {title && (
+                  <>
+                    <div style={{ opacity: .7, fontSize: 12, marginTop: 2 }}>Title</div>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>{title}</div>
+                  </>
+                )}
 
-              <div style={{opacity:.7, fontSize:12, marginTop:8}}>Owned by</div>
-              <div style={{fontWeight:800, fontSize:16}}>{owner || 'Anonymous'}</div>
+                <div style={{ opacity: .7, fontSize: 12, marginTop: 8 }}>Owned by</div>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>{owner || 'Anonymous'}</div>
 
-              {message && (
-                <>
-                  <div style={{opacity:.7, fontSize:12, marginTop:6}}>Message</div>
-                  <div style={{ maxWidth:'72%', lineHeight:'1.35', fontSize:13 }}>
-                    “{message}”
-                  </div>
-                </>
-              )}
-            </div>
+                {message && (
+                  <>
+                    <div style={{ opacity: .7, fontSize: 12, marginTop: 6 }}>Message</div>
+                    <div style={{ maxWidth: '72%', lineHeight: '1.35', fontSize: 13 }}>“{message}”</div>
+                  </>
+                )}
+              </div>
 
-            {/* Pied : ID à gauche, QR à droite */}
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <div style={{fontSize:12, color:previewSubtle}}>
+              {/* Pied de page collé dans l’angle de la safe area */}
+              <div style={{ position: 'absolute', left: 0, bottom: 0, fontSize: 12, color: previewSubtle, textAlign: 'left' }}>
                 Certificate ID • Integrity hash (aperçu)
               </div>
               <div style={{
-                width:84, height:84,
-                border:'1px dashed rgba(26,31,42,.45)', borderRadius:8,
-                display:'grid', placeItems:'center',
-                fontSize:12, color:previewTextColor, opacity:.85
+                position: 'absolute', right: 0, bottom: 0,
+                width: 84, height: 84, border: '1px dashed rgba(26,31,42,.45)', borderRadius: 8,
+                display: 'grid', placeItems: 'center', fontSize: 12, opacity: .85
               }}>
                 QR
               </div>
@@ -240,13 +240,14 @@ function CertificatePreview({
           </div>
         </div>
 
-        <figcaption style={{padding:'12px 14px', fontSize:12, color:'var(--color-muted)'}}>
+        <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
           Aperçu non contractuel — le PDF final contient un QR code scannable et l’empreinte d’intégrité.
         </figcaption>
       </figure>
     </a>
   )
 }
+
 
 
 

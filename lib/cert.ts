@@ -327,7 +327,7 @@ export async function generateCertificatePDF(opts: {
   }
 
   // ---------- Pied de page harmonisé ----------
-  const footerY = BOT_Y + 12
+  const footerY = BOT_Y 
 
   // QR à droite
   const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
@@ -336,7 +336,7 @@ export async function generateCertificatePDF(opts: {
   page.drawImage(png, { x: RIGHT - qrSizePx, y: footerY, width: qrSizePx, height: qrSizePx })
 
   // Métadonnées à gauche
-  let metaY = footerY + metaBlockH
+  let metaY = BOT_Y + metaBlockH
   page.drawText(L.certId, { x: LEFT, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
   metaY -= (labelSize + 6)
 
