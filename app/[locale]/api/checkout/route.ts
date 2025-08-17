@@ -12,6 +12,7 @@ type Body = {
   ts: string
   email: string
   display_name?: string
+  title?: string
   message?: string
   link_url?: string
   cert_style?: string
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
       ts: tsISO,
       email: body.email,
       display_name: body.display_name ?? '',
+      title: body.title ?? '',
       message: body.message ?? '',
       link_url: body.link_url ?? '',
       cert_style,

@@ -26,6 +26,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
           <div style={{border:'1px solid #D9D7D3', borderRadius:12, padding:20, background:'#fff'}}>
             <p style={{margin:'0 0 6px', opacity:.7}}>Owned by</p>
             <h2 style={{margin:'0 0 16px'}}>{data.display_name || 'Anonymous'}</h2>
+            {data.title && <h3 style={{margin:'0 0 12px', fontSize:20, fontWeight:600}}>{data.title}</h3>}
             {data.message && <blockquote style={{margin:'0 0 12px', fontStyle:'italic'}}>&ldquo;{data.message}&rdquo;</blockquote>}
             {data.link_url && <p><a href={data.link_url} rel="nofollow noopener" target="_blank">{data.link_url}</a></p>}
             {data.claimed_at && <p style={{opacity:.7, fontSize:14}}>Claimed at {formatISOAsNice(data.claimed_at)}</p>}

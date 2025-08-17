@@ -15,6 +15,7 @@ async function writeClaim(session: any) {
   const ts = String(session.metadata?.ts || '')
   const email = String(session.customer_details?.email || session.metadata?.email || '')
   const display_name = (session.metadata?.display_name || '') || null
+  const title = (session.metadata?.title || '') || null
   const message = (session.metadata?.message || '') || null
   const link_url = (session.metadata?.link_url || '') || null
   const amount_total = session.amount_total ?? 0
@@ -34,13 +35,14 @@ async function writeClaim(session: any) {
     const ownerId = ownerRows[0].id
 
     const { rows: claimRows } = await client.query(
-      `INSERT INTO claims (ts, owner_id, price_cents, currency, message, link_url)
+      `INSERT INTO claims (ts, owner_id, price_cents, currency, title, message, link_url)
        VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5)
        ON CONFLICT (ts) DO UPDATE
          SET message = EXCLUDED.message,
+              title = EXCLUDED.title,
              link_url = EXCLUDED.link_url
        RETURNING id, created_at`,
-      [ts, ownerId, amount_total, message, link_url]
+      [ts, ownerId, amount_total, title, message, link_url]
     )
     const claim = claimRows[0]
 

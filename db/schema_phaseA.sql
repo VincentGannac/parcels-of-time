@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS claims (
   owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE RESTRICT,
   price_cents INT NOT NULL DEFAULT 0 CHECK (price_cents >= 0),
   currency TEXT NOT NULL DEFAULT 'EUR',
+  title TEXT,
   message TEXT,
   link_url TEXT,
   cert_style TEXT NOT NULL DEFAULT 'neutral',
@@ -43,5 +44,5 @@ CREATE INDEX IF NOT EXISTS idx_instants_edition ON instants(edition);
 
 -- Vue publique renommée à "minute_public"
 CREATE OR REPLACE VIEW minute_public AS
-SELECT c.ts, o.display_name, c.message, c.link_url, c.cert_url, c.created_at AS claimed_at, c.cert_style
+SELECT c.ts, o.display_name, c.title, c.message, c.link_url, c.cert_url, c.created_at AS claimed_at, c.cert_style
 FROM claims c JOIN owners o ON o.id = c.owner_id;

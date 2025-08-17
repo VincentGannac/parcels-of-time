@@ -18,7 +18,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ ts: string }> }
 
   const { rows } = await pool.query(
     `SELECT
-       c.id AS claim_id, c.ts, c.message, c.link_url, c.cert_hash, c.created_at, c.cert_style,
+       c.id AS claim_id, c.ts, c.title, c.message, c.link_url, c.cert_hash, c.created_at, c.cert_style,
        o.display_name
      FROM claims c
      JOIN owners o ON o.id = c.owner_id
@@ -37,6 +37,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ ts: string }> }
     ts: row.ts.toISOString(),
     display_name: row.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
     message: row.message,
+    title: row.title,
     link_url: row.link_url,
     claim_id: row.claim_id,
     hash: row.cert_hash || 'no-hash',

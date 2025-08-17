@@ -27,6 +27,7 @@ export async function GET(req: Request) {
     const ts = String(s.metadata?.ts || '');
     const email = String(s.customer_details?.email || s.metadata?.email || '');
     const display_name = (s.metadata?.display_name || '') || null;
+    const title = (s.metadata?.title || '') || null;
     const message = (s.metadata?.message || '') || null;
     const link_url = (s.metadata?.link_url || '') || null;
 
@@ -54,14 +55,15 @@ export async function GET(req: Request) {
       const ownerId = ownerRows[0].id;
 
       const { rows: claimRows } = await client.query(
-        `INSERT INTO claims (ts, owner_id, price_cents, currency, message, link_url, cert_style)
+        `INSERT INTO claims (ts, owner_id, price_cents, currency, title, message, link_url, cert_style)
          VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6)
          ON CONFLICT (ts) DO UPDATE
            SET message    = EXCLUDED.message,
+               title      = EXCLUDED.title,
                link_url   = EXCLUDED.link_url,
                cert_style = EXCLUDED.cert_style
          RETURNING id, created_at`,
-        [ts, ownerId, amount_total, message, link_url, cert_style]
+        [ts, ownerId, amount_total, title, message, link_url, cert_style]
       );
       const claim = claimRows[0];
 
