@@ -326,31 +326,37 @@ export async function generateCertificatePDF(opts: {
     }
   }
 
-  // ---------- Pied de page harmonisé ----------
-  const footerY = BOT_Y 
+  /// ---------- Pied de page ancré aux bords de la PAGE ----------
+const EDGE = 16;            // marge page (pt ~ 5.6 mm)
 
-  // QR à droite
-  const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
-  const pngBytes = Buffer.from(qrDataUrl.split(',')[1], 'base64')
-  const png = await pdf.embedPng(pngBytes)
-  page.drawImage(png, { x: RIGHT - qrSizePx, y: footerY, width: qrSizePx, height: qrSizePx })
+// QR en bas à droite de la page
+const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
+const pngBytes = Buffer.from(qrDataUrl.split(',')[1], 'base64')
+const png = await pdf.embedPng(pngBytes)
+page.drawImage(png, {
+  x: width - EDGE - qrSizePx,
+  y: EDGE,
+  width: qrSizePx,
+  height: qrSizePx,
+})
 
-  // Métadonnées à gauche
-  let metaY = BOT_Y + metaBlockH
-  page.drawText(L.certId, { x: LEFT, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
-  metaY -= (labelSize + 6)
+// Métadonnées en bas à gauche de la page
+let metaY = EDGE + metaBlockH // on remonte depuis le bord inférieur
+page.drawText(L.certId, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+metaY -= (labelSize + 6)
 
-  page.drawText(claim_id, { x: LEFT, y: metaY - 12, size: 10.5, font: fontBold, color: cMain })
-  metaY -= 20
+page.drawText(claim_id, { x: EDGE, y: metaY - 12, size: 10.5, font: fontBold, color: cMain })
+metaY -= 20
 
-  page.drawText(L.integrity, { x: LEFT, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
-  metaY -= (labelSize + 6)
+page.drawText(L.integrity, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+metaY -= (labelSize + 6)
 
-  const h1 = hash.slice(0, 64)
-  const h2 = hash.slice(64)
-  page.drawText(h1, { x: LEFT, y: metaY - 12, size: 9.5, font, color: cMain })
-  metaY -= 16
-  page.drawText(h2, { x: LEFT, y: metaY - 12, size: 9.5, font, color: cMain })
+const h1 = hash.slice(0, 64)
+const h2 = hash.slice(64)
+page.drawText(h1, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
+metaY -= 16
+page.drawText(h2, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
+
 
   return await pdf.save()
 }
