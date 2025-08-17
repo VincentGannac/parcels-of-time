@@ -1,4 +1,4 @@
-// api/checkout/confirm/route.ts
+// app/[locale]/api/checkout/confirm/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
