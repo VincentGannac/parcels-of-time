@@ -1,38 +1,35 @@
-// app/[locale]/layout.tsx
-import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
-import { I18nProvider } from '../i18n/I18nProvider'
-import fr from '../../locales/fr.json'
-import en from '../../locales/en.json'
-import '../globals.css'
-
 export const dynamic = 'force-static'
 
-export async function generateMetadata(
-  { params }: { params: Promise<{ locale: 'fr' | 'en' }> }
-): Promise<Metadata> {
+const BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.parcelsoftime.com'
+
+export async function generateMetadata({ params }: { params: Promise<{ locale:'fr'|'en' }> }): Promise<Metadata> {
   const { locale } = await params
+  const t = locale === 'fr'
+
+  const basePath = locale === 'fr' ? '/fr' : '/en'
   return {
-    title:
-      locale === 'fr'
-        ? 'Parcels of Time — Possédez la minute qui compte.'
-        : 'Parcels of Time — Own the minute that matters.',
-    description:
-      locale === 'fr'
+    metadataBase: new URL(BASE),
+    title: t ? 'Parcels of Time — Possédez la minute qui compte.' : 'Parcels of Time — Own the minute that matters.',
+    description: t
+      ? 'Réservez une minute unique en UTC, certificat signé & page souvenir.'
+      : 'Claim a unique minute in UTC, signed certificate & shareable page.',
+    alternates: {
+      canonical: `${BASE}${basePath}`, // page racine locale
+      languages: {
+        en: '/en',
+        fr: '/fr',
+      },
+    },
+    openGraph: {
+      locale,
+      siteName: 'Parcels of Time',
+      type: 'website',
+      url: `${BASE}${basePath}`,
+      title: t ? 'Possédez la minute qui compte.' : 'Own the minute that matters.',
+      description: t
         ? 'Réservez une minute unique en UTC, certificat signé & page souvenir.'
         : 'Claim a unique minute in UTC, signed certificate & shareable page.',
-    alternates: { languages: { en: '/en', fr: '/fr' } },
+    },
   }
-}
-
-export default async function LocaleLayout({
-  children,
-  params,
-}: {
-  children: ReactNode
-  params: Promise<{ locale: 'fr' | 'en' }>
-}) {
-  const { locale } = await params
-  const dict = locale === 'fr' ? fr : en
-  return <I18nProvider locale={locale} dict={dict}>{children}</I18nProvider>
 }
