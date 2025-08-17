@@ -527,124 +527,131 @@ export default function ClientClaim() {
             </div>
           </form>
 
-            {/* ---------- PREVIEW COLUMN ---------- */}
-          <aside aria-label="Aperçu du certificat"
-            style={{
-              position:'sticky', top:24,
-              background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12,
-              boxShadow:'var(--shadow-elev1)'
-            }}
-          >
-            <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
-              <img
-                src={`/cert_bg/${form.cert_style}.png`}
-                alt={`Aperçu fond certificat — ${form.cert_style}`}
-                width={840} height={1188}
-                style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
-              />
+        {/* ---------- PREVIEW COLUMN ---------- */}
+        <aside aria-label="Aperçu du certificat"
+          style={{
+            position:'sticky', top:24,
+            background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12,
+            boxShadow:'var(--shadow-elev1)'
+          }}
+        >
+          <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
+            <img
+              src={`/cert_bg/${form.cert_style}.png`}
+              alt={`Aperçu fond certificat — ${form.cert_style}`}
+              width={840} height={1188}
+              style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
+            />
 
-              {/* FILIGRANE anti-capture */}
-              <div aria-hidden
-                  style={{
-                    position:'absolute', inset:0, pointerEvents:'none',
-                    display:'grid', placeItems:'center', transform:'rotate(-22deg)',
-                    opacity:.14, mixBlendMode:'multiply'
-                  }}>
-                <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>
-                  PARCELS OF TIME — PREVIEW
-                </div>
+            {/* Filigrane */}
+            <div aria-hidden
+              style={{
+                position:'absolute', inset:0, pointerEvents:'none',
+                display:'grid', placeItems:'center', transform:'rotate(-22deg)',
+                opacity:.14, mixBlendMode:'multiply'
+              }}>
+              <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>
+                PARCELS OF TIME — PREVIEW
               </div>
+            </div>
 
-              {/* Overlay calé sur la même safe area que le PDF */}
-              {(() => {
-                const ins = SAFE_INSETS_PCT[form.cert_style]
-                return (
-                  <div style={{ position:'absolute', inset:0 }}>
-                    <div style={{
-                      position:'absolute',
-                      top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`,
-                      display:'grid', gridTemplateRows:'auto 1fr', color:previewTextColor, textAlign:'center'
-                    }}>
-                      {/* En-tête */}
-                      <div style={{textAlign:'left'}}>
-                        <div style={{fontWeight:900, fontSize:'min(3.8vw, 20px)'}}>Parcels of Time</div>
-                        <div style={{opacity:.9, fontSize:'min(3.2vw, 14px)'}}>Certificate of Claim</div>
-                      </div>
+            {/* Overlay : contenu dans la safe-area */}
+            {(() => {
+              const ins = SAFE_INSETS_PCT[form.cert_style]
+              return (
+                <>
+                  <div style={{
+                    position:'absolute',
+                    top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`,
+                    display:'grid', gridTemplateRows:'auto 1fr', color:previewTextColor, textAlign:'center'
+                  }}>
+                    {/* En-tête */}
+                    <div style={{textAlign:'left'}}>
+                      <div style={{fontWeight:900, fontSize:'min(3.8vw, 20px)'}}>Parcels of Time</div>
+                      <div style={{opacity:.9, fontSize:'min(3.2vw, 14px)'}}>Certificate of Claim</div>
+                    </div>
 
-                      {/* Zone centrale */}
-                      <div style={{display:'grid', placeItems:'center'}}>
-                        <div style={{maxWidth:520}}>
-                          {/* Horodatage principal / secondaire selon option */}
-                          {form.time_display === 'utc' && (
-                            <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
+                    {/* Zone centrale */}
+                    <div style={{display:'grid', placeItems:'center'}}>
+                      <div style={{maxWidth:520}}>
+                        {/* Horodatage */}
+                        {form.time_display === 'utc' && (
+                          <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
+                            {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
+                          </div>
+                        )}
+                        {form.time_display === 'utc+local' && (
+                          <>
+                            <div style={{fontWeight:800, fontSize:'min(9vw, 26px)'}}>
                               {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
                             </div>
-                          )}
-                          {form.time_display === 'utc+local' && (
-                            <>
-                              <div style={{fontWeight:800, fontSize:'min(9vw, 26px)'}}>
-                                {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
-                              </div>
-                              <div style={{color:previewSubtle, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
-                                {localReadableStr ? `${localReadableStr} (${tzLabel})` : ''}
-                              </div>
-                            </>
-                          )}
-                          {form.time_display === 'local+utc' && (
-                            <>
-                              <div style={{fontWeight:800, fontSize:'min(9vw, 26px)'}}>
-                                {localReadableStr ? `${localReadableStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)'}
-                              </div>
-                              <div style={{color:previewSubtle, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
-                                {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
-                              </div>
-                            </>
-                          )}
-
-                          {/* --- Title AVANT Owned by (harmonisé) --- */}
-                          {form.title && (
-                            <>
-                              <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)', marginTop:8}}>Title</div>
-                              <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>{form.title}</div>
-                            </>
-                          )}
-
-                          <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Owned by</div>
-                          <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>
-                            {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
-                          </div>
-
-                          {form.message && (
-                            <div style={{marginTop:10, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)'}}>
-                              “{form.message}”
+                            <div style={{color:previewSubtle, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
+                              {localReadableStr ? `${localReadableStr} (${tzLabel})` : ''}
                             </div>
-                          )}
-                        </div>
-                      </div>
+                          </>
+                        )}
+                        {form.time_display === 'local+utc' && (
+                          <>
+                            <div style={{fontWeight:800, fontSize:'min(9vw, 26px)'}}>
+                              {localReadableStr ? `${localReadableStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)'}
+                            </div>
+                            <div style={{color:previewSubtle, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
+                              {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
+                            </div>
+                          </>
+                        )}
 
-                      {/* Pied de page collé aux angles de la safe area */}
-                      <div style={{position:'absolute', left:0, bottom:0, fontSize:'min(3.2vw,12px)', color:previewSubtle, textAlign:'left'}}>
-                        Certificate ID • Integrity hash (aperçu)
-                      </div>
-                      <div style={{
-                        position:'absolute', right:0, bottom:0,
-                        width:'min(16vw, 92px)', height:'min(16vw, 92px)',
-                        border:'1px dashed rgba(26,31,42,.45)', borderRadius:8,
-                        display:'grid', placeItems:'center', fontSize:'min(6vw, 12px)', opacity:.85
-                      }}>
-                        QR
+                        {/* Title avant Owned by (harmonisé) */}
+                        {form.title && (
+                          <>
+                            <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)', marginTop:8}}>Title</div>
+                            <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>{form.title}</div>
+                          </>
+                        )}
+
+                        <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Owned by</div>
+                        <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>
+                          {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
+                        </div>
+
+                        {form.message && (
+                          <div style={{marginTop:10, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)'}}>
+                            “{form.message}”
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                )
-              })()}
-            </div>
 
-            <div style={{marginTop:10, fontSize:12, color:'var(--color-muted)'}}>
-              Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées.
-              Cet aperçu est indicatif (filigrane ajouté).
-            </div>
-          </aside>
+                  {/* ⬇️ Pied de page ANCRÉ À LA PAGE (mêmes marges) */}
+                  <div style={{
+                    position:'absolute',
+                    left:`${ins.left}%`,
+                    bottom:`${ins.bottom}%`,
+                    fontSize:'min(3.2vw,12px)', color:previewSubtle, textAlign:'left'
+                  }}>
+                    Certificate ID • Integrity hash (aperçu)
+                  </div>
+                  <div style={{
+                    position:'absolute',
+                    right:`${ins.right}%`,
+                    bottom:`${ins.bottom}%`,
+                    width:'min(16vw, 92px)', height:'min(16vw, 92px)',
+                    border:'1px dashed rgba(26,31,42,.45)', borderRadius:8,
+                    display:'grid', placeItems:'center', fontSize:'min(6vw, 12px)', opacity:.85
+                  }}>
+                    QR
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+
+          <div style={{marginTop:10, fontSize:12, color:'var(--color-muted)'}}>
+            Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées.
+            Cet aperçu est indicatif (filigrane ajouté).
+          </div>
+        </aside>
         </div>
       </section>
     </main>

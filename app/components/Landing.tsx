@@ -172,7 +172,7 @@ function CertificatePreview({
   const previewSubtle = 'rgba(26, 31, 42, 0.70)'
 
   // ✅ calculé AVANT le JSX
-  const ins = SAFE_INSETS_PCT[styleId]
+  const ins = SAFE_INSETS_PCT[styleId];
 
   return (
     <a href={href} style={{ textDecoration: 'none', color: 'var(--color-text)' }} aria-label={`Choisir le style ${styleId}`}>
@@ -189,56 +189,65 @@ function CertificatePreview({
           />
 
           {/* Overlay harmonisé */}
-          <div aria-hidden style={{ position: 'absolute', inset: 0, color: previewTextColor }}>
-            {/* Zone sûre = même géométrie que le PDF */}
-            <div style={{
-              position: 'absolute',
-              top: `${ins.top}%`, right: `${ins.right}%`, bottom: `${ins.bottom}%`, left: `${ins.left}%`,
-              display: 'grid', gridTemplateRows: 'auto 1fr', textAlign: 'center'
-            }}>
-              {/* En-tête */}
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Parcels of Time</div>
-                <div style={{ opacity: .9, fontSize: 12 }}>Certificate of Claim</div>
-              </div>
+          <div aria-hidden style={{ position:'absolute', inset:0, color:previewTextColor }}>
+          {/* Contenu dans la safe-area (en-tête + zone centrale) */}
+          <div style={{
+            position:'absolute',
+            top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`,
+            display:'grid', gridTemplateRows:'auto 1fr', textAlign:'center'
+          }}>
+            {/* En-tête */}
+            <div>
+              <div style={{fontWeight:900, fontSize:16}}>Parcels of Time</div>
+              <div style={{opacity:.9, fontSize:12}}>Certificate of Claim</div>
+            </div>
 
-              {/* Zone centrale */}
-              <div style={{ display: 'grid', placeItems: 'center', gap: 8 }}>
-                <div style={{ fontWeight: 800, fontSize: 24, letterSpacing: .2 }}>{tsText}</div>
+            {/* Zone centrale */}
+            <div style={{display:'grid', placeItems:'center', gap:8}}>
+              <div style={{fontWeight:800, fontSize:24, letterSpacing:.2}}>{tsText}</div>
 
-                {/* Title AVANT Owned by */}
-                {title && (
-                  <>
-                    <div style={{ opacity: .7, fontSize: 12, marginTop: 2 }}>Title</div>
-                    <div style={{ fontWeight: 800, fontSize: 16 }}>{title}</div>
-                  </>
-                )}
+              {title && (
+                <>
+                  <div style={{opacity:.7, fontSize:12, marginTop:2}}>Title</div>
+                  <div style={{fontWeight:800, fontSize:16}}>{title}</div>
+                </>
+              )}
 
-                <div style={{ opacity: .7, fontSize: 12, marginTop: 8 }}>Owned by</div>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>{owner || 'Anonymous'}</div>
+              <div style={{opacity:.7, fontSize:12, marginTop:8}}>Owned by</div>
+              <div style={{fontWeight:800, fontSize:16}}>{owner || 'Anonymous'}</div>
 
-                {message && (
-                  <>
-                    <div style={{ opacity: .7, fontSize: 12, marginTop: 6 }}>Message</div>
-                    <div style={{ maxWidth: '72%', lineHeight: '1.35', fontSize: 13 }}>“{message}”</div>
-                  </>
-                )}
-              </div>
-
-              {/* Pied de page collé dans l’angle de la safe area */}
-              <div style={{ position: 'absolute', left: 0, bottom: 0, fontSize: 12, color: previewSubtle, textAlign: 'left' }}>
-                Certificate ID • Integrity hash (aperçu)
-              </div>
-              <div style={{
-                position: 'absolute', right: 0, bottom: 0,
-                width: 84, height: 84, border: '1px dashed rgba(26,31,42,.45)', borderRadius: 8,
-                display: 'grid', placeItems: 'center', fontSize: 12, opacity: .85
-              }}>
-                QR
-              </div>
+              {message && (
+                <>
+                  <div style={{opacity:.7, fontSize:12, marginTop:6}}>Message</div>
+                  <div style={{ maxWidth:'72%', lineHeight:'1.35', fontSize:13 }}>“{message}”</div>
+                </>
+              )}
             </div>
           </div>
+
+          {/* ⬇️ Pied de page ANCRÉ À LA PAGE (et non plus à la safe-area) */}
+          <div style={{
+            position:'absolute',
+            left:`${ins.left}%`,
+            bottom:`${ins.bottom}%`,
+            fontSize:12, color:previewSubtle, textAlign:'left'
+          }}>
+            Certificate ID • Integrity hash (aperçu)
+          </div>
+          <div style={{
+            position:'absolute',
+            right:`${ins.right}%`,
+            bottom:`${ins.bottom}%`,
+            width:84, height:84,
+            border:'1px dashed rgba(26,31,42,.45)', borderRadius:8,
+            display:'grid', placeItems:'center', fontSize:12, opacity:.85
+          }}>
+            QR
+          </div>
         </div>
+          </div>
+        
+        
 
         <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
           Aperçu non contractuel — le PDF final contient un QR code scannable et l’empreinte d’intégrité.
