@@ -160,15 +160,19 @@ function safePadding(style: PreviewStyle): string {
 }
 
 function CertificatePreview({
-  styleId, owner, message, ts, href,
+  styleId, owner, title, message, ts, href,
 }: {
   styleId: PreviewStyle
   owner: string
+  title?: string
   message?: string
   ts: string
   href: string
 }) {
   const tsText = ts.includes('UTC') ? ts : ts.replace('T',' ').replace('Z',' UTC')
+  const previewTextColor = 'rgba(26, 31, 42, 0.92)'
+  const previewSubtle = 'rgba(26, 31, 42, 0.70)'
+
   return (
     <a href={href} style={{textDecoration:'none', color:'var(--color-text)'}} aria-label={`Choisir le style ${styleId}`}>
       <figure style={{
@@ -182,34 +186,60 @@ function CertificatePreview({
             width={595} height={842}
             style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover'}}
           />
-          <div aria-hidden style={{ position:'absolute', inset:0, padding:safePadding(styleId), display:'grid', gridTemplateRows:'auto 1fr auto', color:'#0B0B0C' }}>
+
+          {/* Overlay harmonisé (comme ClientClaim) */}
+          <div aria-hidden style={{
+            position:'absolute', inset:0, padding:safePadding(styleId),
+            display:'grid', gridTemplateRows:'auto 1fr auto', color:previewTextColor
+          }}>
+            {/* En-tête */}
             <div style={{textAlign:'center'}}>
-              <div style={{fontWeight:800, fontSize:16, fontFamily:'Fraunces, serif'}}>Parcels of Time</div>
-              <div style={{opacity:.8, fontSize:12, marginTop:2}}>Certificate of Claim</div>
+              <div style={{fontWeight:900, fontSize:16}}>Parcels of Time</div>
+              <div style={{opacity:.9, fontSize:12}}>Certificate of Claim</div>
             </div>
-            <div style={{ display:'grid', placeItems:'center', textAlign:'center', gridAutoRows:'min-content', gap:10 }}>
-              <div style={{fontWeight:700, fontSize:24, letterSpacing:.2}}>{tsText}</div>
-              <div style={{opacity:.7, fontSize:12}}>Owned by</div>
-              <div style={{fontWeight:700, fontSize:16}}>{owner || 'Anonymous'}</div>
+
+            {/* Zone centrale */}
+            <div style={{ display:'grid', placeItems:'center', textAlign:'center', gridAutoRows:'min-content', gap:8 }}>
+              <div style={{fontWeight:800, fontSize:24, letterSpacing:.2}}>{tsText}</div>
+
+              {/* Titre — NOUVEAU */}
+              {title && (
+                <>
+                  <div style={{opacity:.7, fontSize:12, marginTop:2}}>Title</div>
+                  <div style={{fontWeight:800, fontSize:16}}>{title}</div>
+                </>
+              )}
+
+              <div style={{opacity:.7, fontSize:12, marginTop:8}}>Owned by</div>
+              <div style={{fontWeight:800, fontSize:16}}>{owner || 'Anonymous'}</div>
+
               {message && (
                 <>
                   <div style={{opacity:.7, fontSize:12, marginTop:6}}>Message</div>
-                  <div style={{ maxWidth:'72%', lineHeight:'1.35', fontSize:13, textWrap:'balance' }}>
+                  <div style={{ maxWidth:'72%', lineHeight:'1.35', fontSize:13 }}>
                     “{message}”
                   </div>
                 </>
               )}
             </div>
-            <div style={{display:'grid', placeItems:'center', gap:8}}>
+
+            {/* Pied : ID à gauche, QR à droite */}
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div style={{fontSize:12, color:previewSubtle}}>
+                Certificate ID • Integrity hash (aperçu)
+              </div>
               <div style={{
-                width:84, height:84, border:'1px solid rgba(0,0,0,.18)', borderRadius:6,
-                background:'conic-gradient(from 45deg at 50% 50%, #000 0 90deg, #fff 0 180deg, #000 0 270deg, #fff 0 360deg)',
-                backgroundSize:'10px 10px', imageRendering:'pixelated'
-              }} />
-              <div style={{opacity:.7, fontSize:10}}>Certificate preview</div>
+                width:84, height:84,
+                border:'1px dashed rgba(26,31,42,.45)', borderRadius:8,
+                display:'grid', placeItems:'center',
+                fontSize:12, color:previewTextColor, opacity:.85
+              }}>
+                QR
+              </div>
             </div>
           </div>
         </div>
+
         <figcaption style={{padding:'12px 14px', fontSize:12, color:'var(--color-muted)'}}>
           Aperçu non contractuel — le PDF final contient un QR code scannable et l’empreinte d’intégrité.
         </figcaption>
@@ -217,6 +247,8 @@ function CertificatePreview({
     </a>
   )
 }
+
+
 
 /* -------------------- Usages Carousel (identique) -------------------- */
 function UsagesCarousel() {
@@ -436,16 +468,12 @@ export default function Landing() {
             <CertificatePreview
               styleId="romantic"
               owner="Clara & Sam"
-              ts="2018-07-14T21:34:00Z"
-              message="Sous l’averse, boulevard Voltaire. On riait comme des idiots, trempés jusqu’aux os. Tu m’as pris la main, j’ai oublié le monde."
+              title="Notre premier baiser"
+              ts="2018-07-19T21:30:00Z"
+              message="Te souviens-tu ? Ce 19 juillet 2028, on s’était abrités de l’averse. On riait comme des idiots, trempés jusqu’aux os. Puis, là, tu m’as embrassé."
+
               href={href('/claim?style=romantic')}
             />
-            <div style={{marginTop:10}}>
-              <strong>Notre premier baiser</strong>
-              <p style={{margin:'6px 0 0', opacity:.9}}>
-                Cette minute-là, on ne l’a jamais re-vécue. On l’a gardée. Gravée. C’est notre balise pour les jours de doute.
-              </p>
-            </div>
           </div>
 
           {/* Birth */}
@@ -453,34 +481,23 @@ export default function Landing() {
             <CertificatePreview
               styleId="birth"
               owner="Nora & Mehdi"
+              title="Bienvenue, Aïcha"
               ts="2023-03-02T06:12:00Z"
-              message="Un cri minuscule. Tes doigts comme des pétales. Le silence après, rempli d’une nouvelle lumière : tu étais là."
+              message="À 06:12, le 2 mars 2023, tu as crié. Puis le silence d’après s’est rempli d’une nouvelle lumière : tu étais née. Le temps s’est figé. On a acheté cette minute pour ne jamais oublier ce moment."
               href={href('/claim?style=birth')}
             />
-            <div style={{marginTop:10}}>
-              <strong>Bienvenue Aïcha</strong>
-              <p style={{margin:'6px 0 0', opacity:.9}}>
-                On avait préparé la chambre, les vêtements, les playlists. Mais personne ne prépare le cœur à cette minute-là.
-              </p>
-            </div>
           </div>
 
-          {/* Wedding */}
           <div style={{gridColumn:'span 4'}}>
-            <CertificatePreview
-              styleId="wedding"
-              owner="Lou & Adrien"
-              ts="2021-09-18T15:00:00Z"
-              message="Tes mains qui tremblent un peu. La bague qui accroche. Les rires derrière nous. Nos “oui” qui sonnent comme un départ."
-              href={href('/claim?style=wedding')}
-            />
-            <div style={{marginTop:10}}>
-              <strong>Oui pour la vie</strong>
-              <p style={{margin:'6px 0 0', opacity:.9}}>
-                Les photos sont belles. Mais cette minute, elle porte le poids du souffle, du regard et du vertige. On voulait la garder entière.
-              </p>
-            </div>
-          </div>
+          <CertificatePreview
+            styleId="wedding"
+            owner="Inès & Hugo"
+            title="À 17:31, plus que nous deux"
+            ts="2024-07-20T17:31:00Z"
+            message="Les amis criaient. Les confettis volaient. Mais je ne voyais que toi. À 17:31, nos deux « oui » ont effacé le reste. On garde cette minute pour entendre encore nos deux « oui » quand les mots manqueront."
+            href={href('/claim?style=wedding')}
+          />
+        </div>
         </div>
 
         {/* Points de valeur + CTAs */}

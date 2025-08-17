@@ -23,6 +23,7 @@ const TEXTS = {
     brand: 'Parcels of Time',
     title: 'Certificate of Claim',
     ownedBy: 'Owned by',
+    titleLabel: 'Title', 
     message: 'Message',
     link: 'Link',
     certId: 'Certificate ID',
@@ -35,6 +36,7 @@ const TEXTS = {
     brand: 'Parcels of Time',
     title: 'Certificat de Claim',
     ownedBy: 'Au nom de',
+    titleLabel: 'Titre',      
     message: 'Message',
     link: 'Lien',
     certId: 'ID du certificat',
@@ -131,6 +133,7 @@ function localMinuteLabel(iso: string, locale: Locale, timeZone?: string) {
 export async function generateCertificatePDF(opts: {
   ts: string
   display_name: string
+  title?: string | null 
   message?: string | null
   link_url?: string | null
   claim_id: string
@@ -139,7 +142,6 @@ export async function generateCertificatePDF(opts: {
   style?: CertStyle
   locale?: Locale
   timeLabelMode?: TimeLabelMode
-  /** IANA TZ pour le rendu "local" (ex: "Europe/Paris"). Si omis → TZ du serveur. */
   localTimeZone?: string
 }) {
   const {
@@ -171,7 +173,7 @@ export async function generateCertificatePDF(opts: {
   // --- Fonts/Couleurs ---
   const font = await pdf.embedFont(StandardFonts.Helvetica)
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const cMain = rgb(0.11, 0.13, 0.16) // lisible en dark mode preview
+  const cMain = rgb(0.11, 0.13, 0.16)
   const cSub  = rgb(0.36, 0.40, 0.47)
   const cLink = rgb(0.10, 0.20, 0.55)
 
@@ -184,10 +186,10 @@ export async function generateCertificatePDF(opts: {
   const COLW = RIGHT - LEFT
   const CX = (LEFT + RIGHT) / 2
 
-  // --- Header (un peu plus bas qu’au bord) ---
+  // --- Header ---
   const brandSize = 18
   const subSize = 12
-  let yHeader = TOP_Y - 40 // ↓ descendu comme demandé
+  let yHeader = TOP_Y - 40
   const brandW = fontBold.widthOfTextAtSize(L.brand, brandSize)
   page.drawText(L.brand, { x: CX - brandW / 2, y: yHeader, size: brandSize, font: fontBold, color: cMain })
 
@@ -200,11 +202,6 @@ export async function generateCertificatePDF(opts: {
   const gapSection = 14, gapSmall = 8
   const lineHMsg = 16, lineHLink = 14
 
-  // Zone disponible entre fin du header et le bas de la safe area
-  const contentTopMax = yHeader - 38
-  const contentBottomMin = BOT_Y
-  const availH = contentTopMax - contentBottomMin
-
   // --- Horodatages ---
   const utcLabel = utcMinuteLabel(ts)
   const localLabel = localMinuteLabel(ts, locale, localTimeZone)
@@ -216,51 +213,56 @@ export async function generateCertificatePDF(opts: {
     subTime = L.local(localLabel)
   } else if (timeLabelMode === 'local_plus_utc') {
     mainTime = localLabel
-    // on retire " UTC" pour l’annexe
     const utcPlain = utcLabel.replace(' UTC', '')
     subTime = L.utcParen(utcPlain)
   }
 
+  // --- Réservation d'un PIED DE PAGE : meta à gauche, QR à droite ---
+  const qrSizePx = 120
+  const metaBlockH = 76
+  const footerH = Math.max(qrSizePx, metaBlockH)
+  const footerMarginTop = 18
+
+  // Zone de contenu (entre header et pied de page réservé)
+  const contentTopMax = yHeader - 38
+  const contentBottomMin = BOT_Y + footerH + footerMarginTop
+  const availH = contentTopMax - contentBottomMin
+
   // --- Blocs variables & wraps ---
   const fixedAboveMsg =
     (tsSize + 6) +                    // timestamp
+    (subTime ? 12 : 0) +
     gapSection +
     (labelSize + 2) + gapSmall +      // "Owned by"
     (nameSize + 4)
 
-  const qrSize = 120
-  const afterTextToQR = 18
-  const afterQRToMeta = 10
-  const metaBlockH = 76
-
   const msgLinesAll = message ? wrapText('“' + message + '”', font, msgSize, COLW) : []
   const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
 
-  const spaceForText = availH - (afterTextToQR + qrSize + afterQRToMeta + metaBlockH)
-  const maxMsgLines = Math.max(0, Math.floor((spaceForText - fixedAboveMsg - gapSection /* label msg */) / lineHMsg))
+  const spaceForText = availH
+  const maxMsgLines = Math.max(0, Math.floor((spaceForText - fixedAboveMsg - (link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
   const msgLines = msgLinesAll.slice(0, maxMsgLines)
 
   const spaceAfterMsg = spaceForText - fixedAboveMsg - (msgLines.length ? gapSection + msgLines.length * lineHMsg : 0)
-  const maxLinkLines = Math.min(2, Math.max(0, Math.floor((spaceAfterMsg - (link_url ? gapSection : 0)) / lineHLink)))
+  const maxLinkLines = Math.min(2, Math.max(0, Math.floor(spaceAfterMsg / lineHLink)))
   const linkLines = linkLinesAll.slice(0, maxLinkLines)
 
   const blockH =
     fixedAboveMsg +
     (msgLines.length ? gapSection + msgLines.length * lineHMsg : 0) +
-    (linkLines.length ? gapSection + linkLines.length * lineHLink : 0) +
-    afterTextToQR + qrSize + afterQRToMeta + metaBlockH
+    (linkLines.length ? gapSection + linkLines.length * lineHLink : 0)
 
-  const biasUp = 10 // léger décalage vers le haut
+  const biasUp = 10
   let by = contentBottomMin + (availH - blockH) / 2 + biasUp
   let cursor = by + blockH
 
-  // ---------- Rendu centré ----------
+  // ---------- Rendu centré (comme avant) ----------
   // Timestamp principal
   cursor -= (tsSize + 6)
   const tsW = fontBold.widthOfTextAtSize(mainTime, tsSize)
   page.drawText(mainTime, { x: CX - tsW / 2, y: cursor, size: tsSize, font: fontBold, color: cMain })
 
-  // Petit sous-libellé de temps si présent
+  // Sous-libellé éventuel
   if (subTime) {
     const subTW = font.widthOfTextAtSize(subTime, 11)
     page.drawText(subTime, { x: CX - subTW / 2, y: cursor - 16, size: 11, font, color: cSub })
@@ -276,6 +278,24 @@ export async function generateCertificatePDF(opts: {
   const name = display_name || L.anon
   const nameW = fontBold.widthOfTextAtSize(name, nameSize)
   page.drawText(name, { x: CX - nameW / 2, y: cursor - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
+
+  // --- Titre (optionnel) — entre la date et "Owned by"
+  const titleText = (opts.title || '').trim()
+  if (titleText) {
+    const titleLabelW = font.widthOfTextAtSize(L.titleLabel, labelSize)
+    page.drawText(L.titleLabel, { x: CX - titleLabelW / 2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
+    cursor -= (labelSize + 6)
+
+    // Titre sur une ou deux lignes max (wrap)
+    const titleLines = wrapText(titleText, fontBold, nameSize, COLW)
+    for (const line of titleLines.slice(0, 2)) {
+      const w = fontBold.widthOfTextAtSize(line, nameSize)
+      page.drawText(line, { x: CX - w / 2, y: cursor - (nameSize + 2), size: nameSize, font: fontBold, color: cMain })
+      cursor -= (nameSize + 6)
+    }
+
+    cursor -= 2 // petit espace avant "Owned by"
+  }
 
   // Message
   if (msgLines.length) {
@@ -306,35 +326,32 @@ export async function generateCertificatePDF(opts: {
     }
   }
 
-  // QR (centré sous le texte)
-  cursor -= afterTextToQR
+  // ---------- Pied de page harmonisé ----------
+  const footerY = BOT_Y + 12
+
+  // QR à droite
   const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
   const pngBytes = Buffer.from(qrDataUrl.split(',')[1], 'base64')
   const png = await pdf.embedPng(pngBytes)
-  const qrSizePx = 120
-  page.drawImage(png, { x: CX - qrSizePx / 2, y: cursor - qrSizePx, width: qrSizePx, height: qrSizePx })
-  cursor -= (qrSizePx + afterQRToMeta)
+  page.drawImage(png, { x: RIGHT - qrSizePx, y: footerY, width: qrSizePx, height: qrSizePx })
 
-  // Métadonnées
-  const idLabelW = font.widthOfTextAtSize(L.certId, labelSize)
-  page.drawText(L.certId, { x: CX - idLabelW / 2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
-  cursor -= (labelSize + 6)
+  // Métadonnées à gauche
+  let metaY = footerY + metaBlockH
+  page.drawText(L.certId, { x: LEFT, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+  metaY -= (labelSize + 6)
 
-  const idW = fontBold.widthOfTextAtSize(claim_id, 10.5)
-  page.drawText(claim_id, { x: CX - idW / 2, y: cursor - 12, size: 10.5, font: fontBold, color: cMain })
-  cursor -= 20
+  page.drawText(claim_id, { x: LEFT, y: metaY - 12, size: 10.5, font: fontBold, color: cMain })
+  metaY -= 20
 
-  const integW = font.widthOfTextAtSize(L.integrity, labelSize)
-  page.drawText(L.integrity, { x: CX - integW / 2, y: cursor - (labelSize + 2), size: labelSize, font, color: cSub })
-  cursor -= (labelSize + 6)
+  page.drawText(L.integrity, { x: LEFT, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+  metaY -= (labelSize + 6)
 
   const h1 = hash.slice(0, 64)
   const h2 = hash.slice(64)
-  const h1W = font.widthOfTextAtSize(h1, 9.5)
-  page.drawText(h1, { x: CX - h1W / 2, y: cursor - 12, size: 9.5, font, color: cMain })
-  cursor -= 16
-  const h2W = font.widthOfTextAtSize(h2, 9.5)
-  page.drawText(h2, { x: CX - h2W / 2, y: cursor - 12, size: 9.5, font, color: cMain })
+  page.drawText(h1, { x: LEFT, y: metaY - 12, size: 9.5, font, color: cMain })
+  metaY -= 16
+  page.drawText(h2, { x: LEFT, y: metaY - 12, size: 9.5, font, color: cMain })
 
   return await pdf.save()
 }
+

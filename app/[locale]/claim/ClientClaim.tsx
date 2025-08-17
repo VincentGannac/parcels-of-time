@@ -103,6 +103,7 @@ export default function ClientClaim() {
   const [form, setForm] = useState({
     email: '',
     display_name: '',
+    title: '',            
     message: '',
     link_url: '',
     ts: prefillTs,
@@ -151,6 +152,7 @@ export default function ClientClaim() {
         ts: d.toISOString(),
         email: form.email,
         display_name: form.display_name || undefined,
+        title: form.title || undefined,    
         message: form.message || undefined,
         link_url: form.link_url || undefined,
         cert_style: form.cert_style || 'neutral',
@@ -258,6 +260,21 @@ export default function ClientClaim() {
                   }}
                 />
               </label>
+
+              <label style={{display:'grid', gap:6, marginTop:10}}>
+                <span>Titre (optionnel) — affiché sur le certificat</span>
+                <input
+                  type="text"
+                  value={form.title}
+                  onChange={e=>setForm(f=>({...f, title:e.target.value}))}
+                  placeholder="Ex. “Premier baiser sous la pluie”"
+                  style={{
+                    padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
+                    background:'transparent', color:'var(--color-text)'
+                  }}
+                />
+              </label>
+
 
               <label style={{display:'grid', gap:6, marginTop:10}}>
                 <span>Message (optionnel)</span>
@@ -574,6 +591,15 @@ export default function ClientClaim() {
                     <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>
                       {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
                     </div>
+
+                    {form.title && (
+                      <>
+                        <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)', marginTop:4}}>Title</div>
+                        <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>
+                          {form.title}
+                        </div>
+                      </>
+                    )}
 
                     {form.message && (
                       <div style={{marginTop:10, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)'}}>
