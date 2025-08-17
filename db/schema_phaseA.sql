@@ -1,3 +1,5 @@
+-- db/schema_phaseA.sql
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS owners (

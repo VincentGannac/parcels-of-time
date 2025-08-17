@@ -1,3 +1,4 @@
+// app/m/[ts]/page.tsx
 import { formatISOAsNice } from '@/lib/date'
 import { absoluteUrl } from '@/lib/url'
 

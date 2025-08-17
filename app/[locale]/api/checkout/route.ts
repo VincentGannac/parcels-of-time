@@ -1,3 +1,4 @@
+// api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -28,54 +29,70 @@ function rateLimit(ip: string, limit = 8, windowMs = 60_000) {
   return rec.count <= limit
 }
 
+// api/checkout/route.ts
 export async function POST(req: Request) {
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0] || 'unknown'
   if (!rateLimit(ip)) return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
-  const body = (await req.json()) as Body
-  if (!body.ts || !body.email) {
-    return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-  }
+  try {
+    const body = (await req.json()) as Body
+    if (!body.ts || !body.email) {
+      return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
+    }
 
-  const d = new Date(body.ts)
-  if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
-  d.setUTCSeconds(0,0) // ⬅️ minute
-  const tsISO = d.toISOString()
+    const d = new Date(body.ts)
+    if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
+    d.setUTCSeconds(0,0)
+    const tsISO = d.toISOString()
 
-  const styleCandidate = String(body.cert_style || 'neutral').toLowerCase()
-  const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral'
+    const styleCandidate = String(body.cert_style || 'neutral').toLowerCase()
+    const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral'
 
-  const origin = new URL(req.url).origin
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
+    const origin = new URL(req.url).origin
 
-  const { price_cents, currency } = priceFor(tsISO)
+    // ✅ vérif clé Stripe + currency lowercase
+    const key = process.env.STRIPE_SECRET_KEY
+    if (!key) return NextResponse.json({ error: 'stripe_key_missing' }, { status: 500 })
+    const stripe = new Stripe(key)
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    line_items: [{
-      quantity: 1,
-      price_data: {
-        currency,
-        unit_amount: price_cents,
-        product_data: {
-          name: `Parcels of Time — ${tsISO}`,
-          description: 'Exclusive symbolic claim to a unique minute (UTC).',
+    const { price_cents, currency } = priceFor(tsISO)
+    if (!price_cents || price_cents < 1) {
+      return NextResponse.json({ error: 'bad_price' }, { status: 400 })
+    }
+    const stripeCurrency = (currency || 'eur').toLowerCase()
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: stripeCurrency,                 // 👈 minuscule
+          unit_amount: price_cents,
+          product_data: {
+            name: `Parcels of Time — ${tsISO}`,
+            description: 'Exclusive symbolic claim to a unique minute (UTC).',
+          },
         },
+      }],
+      customer_email: body.email,
+      metadata: {
+        ts: tsISO,
+        email: body.email,
+        display_name: body.display_name ?? '',
+        title: body.title ?? '',
+        message: body.message ?? '',
+        link_url: body.link_url ?? '',
+        cert_style,
       },
-    }],
-    customer_email: body.email,
-    metadata: {
-      ts: tsISO,
-      email: body.email,
-      display_name: body.display_name ?? '',
-      title: body.title ?? '',
-      message: body.message ?? '',
-      link_url: body.link_url ?? '',
-      cert_style,
-    },
-    success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&cancelled=1`,
-  })
+      success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&cancelled=1`,
+    })
 
-  return NextResponse.json({ url: session.url })
+    if (!session.url) return NextResponse.json({ error: 'no_checkout_url' }, { status: 500 })
+    return NextResponse.json({ url: session.url })
+  } catch (e:any) {
+    // ✅ renvoyer un JSON clair (plus de “Unknown error”)
+    console.error('checkout_error:', e?.message || e)
+    return NextResponse.json({ error: 'stripe_error', detail: String(e?.message || e) }, { status: 500 })
+  }
 }

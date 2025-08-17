@@ -1,8 +1,9 @@
+// api/minutes/[ts]/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
-import { title } from 'node:process';
+
 
 type Params = { ts: string };
 

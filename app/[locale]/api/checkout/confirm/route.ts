@@ -1,3 +1,4 @@
+// api/checkout/confirm/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -56,15 +57,16 @@ export async function GET(req: Request) {
 
       const { rows: claimRows } = await client.query(
         `INSERT INTO claims (ts, owner_id, price_cents, currency, title, message, link_url, cert_style)
-         VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6)
+         VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6, $7)        -- 👈 ajout $7
          ON CONFLICT (ts) DO UPDATE
            SET message    = EXCLUDED.message,
                title      = EXCLUDED.title,
                link_url   = EXCLUDED.link_url,
                cert_style = EXCLUDED.cert_style
          RETURNING id, created_at`,
-        [ts, ownerId, amount_total, title, message, link_url, cert_style]
-      );
+        [ts, ownerId, amount_total, title, message, link_url, cert_style] // 👈 aligné
+      )
+      
       const claim = claimRows[0];
 
       const createdAtISO = claim.created_at instanceof Date ? claim.created_at.toISOString() : new Date(claim.created_at).toISOString();

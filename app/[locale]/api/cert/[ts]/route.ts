@@ -1,3 +1,4 @@
+// api/cert/[ts]/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -36,8 +37,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ ts: string }> }
   const pdfBytes = await generateCertificatePDF({
     ts: row.ts.toISOString(),
     display_name: row.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
-    message: row.message,
     title: row.title,
+    message: row.message,
     link_url: row.link_url,
     claim_id: row.claim_id,
     hash: row.cert_hash || 'no-hash',
