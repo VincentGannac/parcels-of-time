@@ -527,7 +527,7 @@ export default function ClientClaim() {
             </div>
           </form>
 
-          /* ---------- PREVIEW COLUMN ---------- */
+          {/* ---------- PREVIEW COLUMN ---------- */}
           <aside aria-label="Aperçu du certificat"
             style={{
               position:'sticky', top:24,
@@ -625,22 +625,33 @@ export default function ClientClaim() {
                     </div>
 
                     {/* ⬇️ Pied de page ANCRÉ AUX BORDS DE LA PAGE (et non à la safe-area) */}
-                    <div style={{
+                    <div
+                    style={{
                       position:'absolute',
-                      left:EDGE_PX,
-                      bottom:EDGE_PX,
-                      fontSize:'min(3.2vw,12px)', color:previewSubtle, textAlign:'left', pointerEvents:'none'
-                    }}>
-                      Certificate ID • Integrity hash (aperçu)
-                    </div>
+                      left: EDGE_PX,
+                      bottom: EDGE_PX,
+                      fontSize:'min(3.2vw,12px)',
+                      color: previewSubtle,
+                      textAlign:'left',
+                      pointerEvents:'none'
+                    }}
+                  >
+                    Certificate ID • Integrity hash (aperçu)
+                  </div>
                     <div style={{
-                      position:'absolute',
-                      right:EDGE_PX,
-                      bottom:EDGE_PX,
-                      width:'min(18vw, 110px)', height:'min(18vw, 110px)',
-                      border:'1px dashed rgba(26,31,42,.45)', borderRadius:8,
-                      display:'grid', placeItems:'center', fontSize:'min(6vw, 12px)', opacity:.85, pointerEvents:'none'
-                    }}>
+                    position:'absolute',
+                    right: EDGE_PX,
+                    bottom: EDGE_PX,
+                    width:'min(18vw,110px)',
+                    height:'min(18vw,110px)',
+                    border:'1px dashed rgba(26,31,42,.45)',
+                    borderRadius:8,
+                    display:'grid',
+                    placeItems:'center',
+                    fontSize:'min(6vw,12px)',
+                    opacity:.85,
+                    pointerEvents:'none'
+                  }}>
                       QR
                     </div>
                   </>

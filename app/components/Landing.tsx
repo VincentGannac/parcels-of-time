@@ -156,6 +156,7 @@ const SAFE_INSETS_PCT: Record<PreviewStyle, {top:number;right:number;bottom:numb
     newyear:    { top:17.8, right:18.8, bottom:18.5, left:18.8 },
     graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
 }
+const EDGE_PX = 12; 
 
 function CertificatePreview({
   styleId, owner, title, message, ts, href,
@@ -225,25 +226,39 @@ function CertificatePreview({
             </div>
           </div>
 
-          {/* ⬇️ Pied de page ANCRÉ À LA PAGE (et non plus à la safe-area) */}
-          <div style={{
-            position:'absolute',
-            left:`${ins.left}%`,
-            bottom:`${ins.bottom}%`,
-            fontSize:12, color:previewSubtle, textAlign:'left'
-          }}>
+          <div
+            style={{
+              position: 'absolute',
+              left: EDGE_PX,
+              bottom: EDGE_PX,
+              fontSize: 12,
+              color: previewSubtle,
+              textAlign: 'left',
+              pointerEvents: 'none',
+            }}
+          >
             Certificate ID • Integrity hash (aperçu)
           </div>
-          <div style={{
-            position:'absolute',
-            right:`${ins.right}%`,
-            bottom:`${ins.bottom}%`,
-            width:84, height:84,
-            border:'1px dashed rgba(26,31,42,.45)', borderRadius:8,
-            display:'grid', placeItems:'center', fontSize:12, opacity:.85
-          }}>
+
+          <div
+            style={{
+              position: 'absolute',
+              right: EDGE_PX,
+              bottom: EDGE_PX,
+              width: 84,
+              height: 84,
+              border: '1px dashed rgba(26,31,42,.45)',
+              borderRadius: 8,
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 12,
+              opacity: .85,
+              pointerEvents: 'none',
+            }}
+          >
             QR
           </div>
+
         </div>
           </div>
         
