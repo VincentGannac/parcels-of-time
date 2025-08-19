@@ -85,7 +85,7 @@ function getSafeArea(style: CertStyle) {
 
 function parseDataImage(dataUrl?: string): { bytes: Uint8Array; kind: 'png'|'jpg' } | null {
   if (!dataUrl) return null
-  const m = /^data:image\/(png|jpeg);base64,(.+)$/i.exec(dataUrl)
+  const m = /^data:image\/(png|jpe?g);base64,(.+)$/i.exec(dataUrl)
   if (!m) return null
   const kind = m[1].toLowerCase() === 'png' ? 'png' : 'jpg'
   const bytes = Uint8Array.from(Buffer.from(m[2], 'base64'))

@@ -183,18 +183,7 @@ export default function ClientClaim() {
     const res = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ts: d.toISOString(),
-        email: form.email,
-        display_name: form.display_name || undefined,
-        title: form.title || undefined,    
-        message: form.message || undefined,
-        link_url: form.link_url || undefined,
-        cert_style: form.cert_style || 'neutral',
-        time_display: form.time_display,         // pass-through (coté back : stocker en metadata si souhaité)
-        gift: isGift ? '1' : '0',                // idem
-        body: JSON.stringify(payload),
-      }),
+      body: JSON.stringify(payload),
     })
 
     if (!res.ok) {

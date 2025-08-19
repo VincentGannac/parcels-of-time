@@ -33,10 +33,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ ts: string }> }
   const row = rows[0];
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
   const publicUrl = `${base}/m/${encodeURIComponent(decodedTs)}`;
-  const g = globalThis as any
-  const customBgByTs: Map<string, string> = g.__customBgByTs || new Map<string,string>()
-  const customBgDataUrl = customBgByTs.get(ts) || undefined
 
+  // ✅ on lit la table persistée
+  const { rows: bgRows } = await pool.query(
+  'select data_url from claim_custom_bg where ts=$1::timestamptz',
+  [decodedTs]
+ )
+  const customBgDataUrl = bgRows[0]?.data_url
 
   const pdfBytes = await generateCertificatePDF({
     ts: row.ts.toISOString(),

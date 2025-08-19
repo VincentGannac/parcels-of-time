@@ -1,9 +1,11 @@
+//api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { priceFor } from '@/lib/pricing'
 import crypto from 'node:crypto'
+import { pool } from '@/lib/db'
 
 // --- Cache global pour fonds custom (clé courte -> dataURL) ---
 const g = globalThis as any
@@ -64,7 +66,13 @@ export async function POST(req: Request) {
       const m = /^data:image\/(png|jpeg);base64,/.exec(body.custom_bg_data_url)
       if (!m) return NextResponse.json({ error: 'custom_bg_invalid' }, { status: 400 })
       custom_bg_key = `cbg_${crypto.randomUUID()}`
-      customBgStore.set(custom_bg_key, body.custom_bg_data_url)
+      // ✅ Persistance en DB plutôt qu'en mémoire
+      await pool.query(
+      `insert into custom_bg_temp(key, data_url)
+       values ($1,$2)
+       on conflict (key) do update set data_url = excluded.data_url, created_at = now()`,
+      [custom_bg_key, body.custom_bg_data_url]
+    )
     }
 
     const origin = new URL(req.url).origin
@@ -101,8 +109,7 @@ export async function POST(req: Request) {
         message: body.message ?? '',
         link_url: body.link_url ?? '',
         cert_style,
-        // petite clé qui nous permettra de retrouver le dataURL côté serveur
-        custom_bg_key: custom_bg_key || '',
+        custom_bg_key: custom_bg_key || '',  // ✅ la clé courte voyage jusqu’au confirm
       },
       success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,

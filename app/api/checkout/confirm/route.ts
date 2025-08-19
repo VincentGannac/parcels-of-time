@@ -1,3 +1,4 @@
+// app/api/checkout/confirm/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -5,19 +6,14 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 import { pool } from '@/lib/db';
 
-// --- Caches globaux partagés entre routes ---
-const g = globalThis as any
-if (!g.__customBgStore) g.__customBgStore = new Map<string, string>() // key -> dataURL
-if (!g.__customBgByTs) g.__customBgByTs = new Map<string, string>()   // ts  -> dataURL
-const customBgStore: Map<string, string> = g.__customBgStore
-const customBgByTs: Map<string, string> = g.__customBgByTs
-
 type CertStyle =
-  | 'neutral'|'romantic'|'birthday'|'wedding'
-  | 'birth'|'christmas'|'newyear'|'graduation'
+  | 'neutral' | 'romantic' | 'birthday' | 'wedding'
+  | 'birth'   | 'christmas'| 'newyear'  | 'graduation'
   | 'custom';
-const ALLOWED_STYLES: readonly CertStyle[] =
-  ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom' ] as const;
+
+const ALLOWED_STYLES: readonly CertStyle[] = [
+  'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'
+] as const;
 
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
@@ -32,9 +28,13 @@ export async function GET(req: Request) {
 
     if (s.payment_status !== 'paid') {
       const backTs = String(s.metadata?.ts || '');
-      return NextResponse.redirect(`${base}/claim?ts=${encodeURIComponent(backTs)}&status=unpaid`, { status: 302 });
+      return NextResponse.redirect(
+        `${base}/claim?ts=${encodeURIComponent(backTs)}&status=unpaid`,
+        { status: 302 }
+      );
     }
 
+    // --------- Métadonnées Stripe ---------
     const ts = String(s.metadata?.ts || '');
     const email = String(s.customer_details?.email || s.metadata?.email || '');
     const display_name = (s.metadata?.display_name || '') || null;
@@ -44,16 +44,12 @@ export async function GET(req: Request) {
 
     const styleCandidate = String(s.metadata?.cert_style || 'neutral').toLowerCase();
     const cert_style: CertStyle =
-      (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral';
+      (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
+        ? (styleCandidate as CertStyle)
+        : 'neutral';
 
-    // 🔑 Récupère éventuellement le fond 'custom'
+    // ✅ Clé courte de l'image custom (enregistrée préalablement dans custom_bg_temp)
     const custom_bg_key = String(s.metadata?.custom_bg_key || '');
-    let customBgDataUrl: string | null = null;
-    if (cert_style === 'custom' && custom_bg_key) {
-      customBgDataUrl = customBgStore.get(custom_bg_key) || null;
-      // On peut nettoyer la clé courte (optionnel)
-      customBgStore.delete(custom_bg_key);
-    }
 
     const amount_total =
       s.amount_total ??
@@ -61,10 +57,12 @@ export async function GET(req: Request) {
         ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
         : 0);
 
+    // --------- Transaction DB ---------
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
+      // Owner
       const { rows: ownerRows } = await client.query(
         `INSERT INTO owners(email, display_name)
          VALUES($1,$2)
@@ -75,6 +73,7 @@ export async function GET(req: Request) {
       );
       const ownerId = ownerRows[0].id;
 
+      // Claim
       const { rows: claimRows } = await client.query(
         `INSERT INTO claims (ts, owner_id, price_cents, currency, title, message, link_url, cert_style)
          VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6, $7)
@@ -85,25 +84,47 @@ export async function GET(req: Request) {
                cert_style = EXCLUDED.cert_style
          RETURNING id, created_at`,
         [ts, ownerId, amount_total, title, message, link_url, cert_style]
-      )
-      
+      );
       const claim = claimRows[0];
 
-      const createdAtISO = claim.created_at instanceof Date ? claim.created_at.toISOString() : new Date(claim.created_at).toISOString();
+      // Si style custom: récupérer l'image depuis la table temporaire et lier au ts
+      if (cert_style === 'custom' && custom_bg_key) {
+        const { rows: tmp } = await client.query(
+          'SELECT data_url FROM custom_bg_temp WHERE key = $1',
+          [custom_bg_key]
+        );
+        if (tmp.length) {
+          await client.query(
+            `INSERT INTO claim_custom_bg (ts, data_url)
+             VALUES ($1::timestamptz, $2)
+             ON CONFLICT (ts) DO UPDATE
+               SET data_url = EXCLUDED.data_url,
+                   created_at = now()`,
+            [ts, tmp[0].data_url]
+          );
+          await client.query('DELETE FROM custom_bg_temp WHERE key = $1', [custom_bg_key]);
+        }
+      }
+
+      // Hash & URL certificat
+      const createdAtISO =
+        claim.created_at instanceof Date
+          ? claim.created_at.toISOString()
+          : new Date(claim.created_at).toISOString();
 
       const salt = process.env.SECRET_SALT || 'dev_salt';
       const data = `${ts}|${ownerId}|${amount_total}|${createdAtISO}|${salt}`;
       const hash = crypto.createHash('sha256').update(data).digest('hex');
       const cert_url = `/api/cert/${encodeURIComponent(ts)}`;
 
-      await client.query('UPDATE claims SET cert_hash=$1, cert_url=$2 WHERE id=$3', [hash, cert_url, claim.id]);
+      await client.query(
+        'UPDATE claims SET cert_hash=$1, cert_url=$2 WHERE id=$3',
+        [hash, cert_url, claim.id]
+      );
+
       await client.query('COMMIT');
 
-      // 📌 Met à disposition le fond custom pour la génération PDF (route /api/cert/[ts])
-      if (cert_style === 'custom' && customBgDataUrl) {
-        customBgByTs.set(ts, customBgDataUrl);
-      }
-
+      // Email
       try {
         const publicUrl = `${base}/m/${encodeURIComponent(ts)}`;
         const certUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
@@ -114,8 +135,10 @@ export async function GET(req: Request) {
           displayName: display_name,
           publicUrl,
           certUrl,
-        })
-      } catch {}
+        });
+      } catch (e) {
+        console.warn('send_email_warning:', (e as any)?.message || e);
+      }
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -124,7 +147,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.redirect(`${base}/m/${encodeURIComponent(ts)}`, { status: 303 });
-  } catch (e:any) {
+  } catch (e: any) {
     console.error('confirm_error:', e?.message, e?.stack);
     return new Response(
       'Payment captured, but we hit a server error finalizing your certificate (minute).',
