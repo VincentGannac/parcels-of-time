@@ -17,7 +17,7 @@ const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
   { id: 'christmas',  label: 'Christmas',   hint: 'pine & snow' },
   { id: 'newyear',    label: 'New Year',    hint: 'fireworks trails' },
   { id: 'graduation', label: 'Graduation',  hint: 'laurel & caps' },
-  { id: 'custom',     label: 'Custom',      hint: 'Importer image A4 2480×3508 px' },
+  { id: 'custom',     label: 'Custom',      hint: 'Importer image 2480×3508 (A4) ou 1024×1536' },
 ] as const
 
 const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;left:number}> = {
@@ -31,6 +31,13 @@ const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;
   graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
   custom:{ top:16.6, right:16.1, bottom:18.5, left:16.1 }
 }
+const A4_RATIO = 2480 / 3508;        // ≈ 0.707
+const RATIO_2x3 = 1024 / 1536;       // ≈ 0.666 (a.k.a. 3:2 portrait / 2:3)
+const RATIO_TOL = 0.01;              // 1% de tolérance
+const ALLOWED_EXACT_SIZES = [
+  { w: 2480, h: 3508, label: 'A4' },
+  { w: 1024, h: 1536, label: '1024×1536' },
+];
 
 /** ------- Utils ------- **/
 function safeDecode(value: string): string {
@@ -186,6 +193,7 @@ export default function ClientClaim() {
         cert_style: form.cert_style || 'neutral',
         time_display: form.time_display,         // pass-through (coté back : stocker en metadata si souhaité)
         gift: isGift ? '1' : '0',                // idem
+        body: JSON.stringify(payload),
       }),
     })
 
@@ -257,12 +265,13 @@ export default function ClientClaim() {
     img.onload = () => {
       const w = img.naturalWidth, h = img.naturalHeight
       const ratio = w / h
-      const A4 = 2480/3508 // ≈0.7073
-      const okExact = (w===2480 && h===3508)
-      const okRatio = Math.abs(ratio - A4) < 0.003 // tolérance ~0.3%
-      if (!okExact && !okRatio) {
-        setCustomErr('Dimensions non A4 portrait. Attendu 2480×3508 px ou ratio A4 (~0.707).')
-      }
+      const okExact = ALLOWED_EXACT_SIZES.some(s => s.w === w && s.h === h)
+      const okRatio =
+      Math.abs(ratio - A4_RATIO)   < RATIO_TOL ||
+      Math.abs(ratio - RATIO_2x3)  < RATIO_TOL
+    if (!okExact && !okRatio) {
+      setCustomErr('Dimensions non supportées. Utilisez 2480×3508 (A4), 1024×1536, ou un ratio proche.')
+    }
       const url = URL.createObjectURL(file)
       setCustomBg({ url, dataUrl, w, h })
     }
