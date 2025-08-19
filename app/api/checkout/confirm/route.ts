@@ -124,7 +124,8 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.redirect(`${base}/m/${encodeURIComponent(ts)}`, { status: 303 });
-  } catch {
+  } catch (e:any) {
+    console.error('confirm_error:', e?.message, e?.stack);
     return new Response(
       'Payment captured, but we hit a server error finalizing your certificate (minute).',
       { status: 500 }
