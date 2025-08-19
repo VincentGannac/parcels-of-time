@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation'
 
 type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
-  | 'birth'   | 'christmas'| 'newyear'  | 'graduation'
+  | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
 
 const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
   { id: 'neutral',    label: 'Neutral',     hint: 'sobre & élégant' },
@@ -17,6 +17,7 @@ const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
   { id: 'christmas',  label: 'Christmas',   hint: 'pine & snow' },
   { id: 'newyear',    label: 'New Year',    hint: 'fireworks trails' },
   { id: 'graduation', label: 'Graduation',  hint: 'laurel & caps' },
+  { id: 'custom',     label: 'Custom',      hint: 'Importer image A4 2480×3508 px' },
 ] as const
 
 const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;left:number}> = {
@@ -28,6 +29,7 @@ const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;
   christmas:  { top:17.8, right:18.8, bottom:18.5, left:18.8 },
   newyear:    { top:17.8, right:18.8, bottom:18.5, left:18.8 },
   graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
+  custom:{ top:16.6, right:16.1, bottom:18.5, left:16.1 }
 }
 
 /** ------- Utils ------- **/
@@ -156,6 +158,21 @@ export default function ClientClaim() {
       setStatus('error'); setError('Merci de saisir une minute valide (ISO ex. 2100-01-01T00:00Z).'); return
     }
 
+    const payload:any = {
+      ts: d.toISOString(),
+      email: form.email,
+      display_name: form.display_name || undefined,
+      title: form.title || undefined,
+      message: form.message || undefined,
+      link_url: form.link_url || undefined,
+      cert_style: form.cert_style || 'neutral',
+      time_display: form.time_display,
+      gift: isGift ? '1' : '0',
+    }
+    if (form.cert_style === 'custom' && customBg?.dataUrl) {
+      payload.custom_bg_data_url = customBg.dataUrl
+    }
+
     const res = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -213,6 +230,47 @@ export default function ClientClaim() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const [customBg, setCustomBg] = useState<{
+    url: string;        // object URL pour l’aperçu
+    dataUrl: string;    // data:URL base64 pour le backend
+    w: number; h: number;
+  } | null>(null)
+  const [customErr, setCustomErr] = useState<string>('')
+
+  async function fileToDataUrl(f: File): Promise<string> {
+    return new Promise((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(String(r.result))
+      r.onerror = rej
+      r.readAsDataURL(f)
+    })
+  }
+  
+  async function onPickCustomBg(file?: File | null) {
+    setCustomErr('')
+    if (!file) { setCustomBg(null); return }
+    if (!/^image\/(png|jpeg)$/.test(file.type)) {
+      setCustomErr('Format invalide. Utilisez PNG ou JPG.'); return
+    }
+    const dataUrl = await fileToDataUrl(file)
+    const img = new Image()
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight
+      const ratio = w / h
+      const A4 = 2480/3508 // ≈0.7073
+      const okExact = (w===2480 && h===3508)
+      const okRatio = Math.abs(ratio - A4) < 0.003 // tolérance ~0.3%
+      if (!okExact && !okRatio) {
+        setCustomErr('Dimensions non A4 portrait. Attendu 2480×3508 px ou ratio A4 (~0.707).')
+      }
+      const url = URL.createObjectURL(file)
+      setCustomBg({ url, dataUrl, w, h })
+    }
+    img.onerror = () => setCustomErr('Impossible de lire l’image.')
+    img.src = dataUrl
+  }
+
+  
   return (
     <main style={containerStyle}>
       <section style={{maxWidth:1200, margin:'0 auto', padding:'48px 24px'}}>
@@ -499,6 +557,26 @@ export default function ClientClaim() {
                   )
                 })}
               </div>
+
+              {form.cert_style === 'custom' && (
+                <div style={{marginTop:12, padding:12, border:'1px dashed var(--color-border)', borderRadius:12}}>
+                  <label style={{display:'grid', gap:8}}>
+                    <span><strong>Importer votre fond (A4 portrait)</strong> — PNG/JPG 2480×3508 px recommandé</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
+                    />
+                  </label>
+                  {!!customErr && <p style={{color:'#ff8a8a', marginTop:8}}>{customErr}</p>}
+                  {customBg && (
+                    <p style={{opacity:.7, fontSize:12, marginTop:8}}>
+                      Image chargée : {customBg.w}×{customBg.h}px
+                    </p>
+                  )}
+                </div>
+              )}
+
               <p style={{margin:'10px 2px 0', fontSize:12, opacity:.7}}>
                 Les vignettes utilisent <code>/public/cert_bg/&lt;style&gt;_thumb.jpg</code> (fallback sur <code>&lt;style&gt;.png</code>).
               </p>
@@ -536,12 +614,13 @@ export default function ClientClaim() {
             }}
           >
             <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
-              <img
-                src={`/cert_bg/${form.cert_style}.png`}
-                alt={`Aperçu fond certificat — ${form.cert_style}`}
-                width={840} height={1188}
-                style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
-              />
+            <img
+              src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png')
+                                              : `/cert_bg/${form.cert_style}.png`}
+              alt={`Aperçu fond certificat — ${form.cert_style}`}
+              width={840} height={1188}
+              style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
+            />
 
               {/* Filigrane */}
               <div aria-hidden

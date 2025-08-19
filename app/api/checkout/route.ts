@@ -1,12 +1,21 @@
-// api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { priceFor } from '@/lib/pricing'
+import crypto from 'node:crypto'
 
-type CertStyle = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'newyear'|'graduation'
-const ALLOWED_STYLES: readonly CertStyle[] = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'] as const
+// --- Cache global pour fonds custom (clé courte -> dataURL) ---
+const g = globalThis as any
+if (!g.__customBgStore) g.__customBgStore = new Map<string, string>()
+const customBgStore: Map<string, string> = g.__customBgStore
+
+type CertStyle =
+  | 'neutral' | 'romantic' | 'birthday' | 'wedding'
+  | 'birth'   | 'christmas'| 'newyear'  | 'graduation'
+  | 'custom'  // ✅ NEW
+const ALLOWED_STYLES: readonly CertStyle[] =
+  ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
 
 type Body = {
   ts: string
@@ -16,6 +25,7 @@ type Body = {
   message?: string
   link_url?: string
   cert_style?: string
+  custom_bg_data_url?: string // ✅ NEW (data:image/png|jpeg;base64,...)
 }
 
 const ipBucket = new Map<string, { count:number; ts:number }>()
@@ -48,6 +58,15 @@ export async function POST(req: Request) {
       ? (styleCandidate as CertStyle)
       : 'neutral'
 
+    // Si style 'custom', on valide le dataURL et on le met en cache; on ne l'envoie PAS à Stripe
+    let custom_bg_key = ''
+    if (cert_style === 'custom' && body.custom_bg_data_url) {
+      const m = /^data:image\/(png|jpeg);base64,/.exec(body.custom_bg_data_url)
+      if (!m) return NextResponse.json({ error: 'custom_bg_invalid' }, { status: 400 })
+      custom_bg_key = `cbg_${crypto.randomUUID()}`
+      customBgStore.set(custom_bg_key, body.custom_bg_data_url)
+    }
+
     const origin = new URL(req.url).origin
 
     const key = process.env.STRIPE_SECRET_KEY
@@ -58,7 +77,7 @@ export async function POST(req: Request) {
     if (!price_cents || price_cents < 1) {
       return NextResponse.json({ error: 'bad_price' }, { status: 400 })
     }
-    const stripeCurrency = (currency || 'eur').toLowerCase() // ✅ Stripe veut lowercase
+    const stripeCurrency = (currency || 'eur').toLowerCase()
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -82,9 +101,11 @@ export async function POST(req: Request) {
         message: body.message ?? '',
         link_url: body.link_url ?? '',
         cert_style,
+        // petite clé qui nous permettra de retrouver le dataURL côté serveur
+        custom_bg_key: custom_bg_key || '',
       },
       success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&cancelled=1`,
+      cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,
     })
 
     if (!session.url) return NextResponse.json({ error: 'no_checkout_url' }, { status: 500 })

@@ -13,6 +13,7 @@ export type CertStyle =
   | 'christmas'
   | 'newyear'
   | 'graduation'
+  | 'custom'
 
 export type Locale = 'fr' | 'en'
 export type TimeLabelMode = 'utc' | 'utc_plus_local' | 'local_plus_utc'
@@ -77,9 +78,20 @@ function getSafeArea(style: CertStyle) {
     case 'christmas':  return { top: 150, right: 112, bottom: 156, left: 112 }
     case 'newyear':    return { top: 150, right: 112, bottom: 156, left: 112 }
     case 'graduation': return { top: 150, right: 112, bottom: 156, left: 112 }
+    case 'custom':     return { top: 150, right: 112, bottom: 156, left: 112 }
     default:           return base
   }
 }
+
+function parseDataImage(dataUrl?: string): { bytes: Uint8Array; kind: 'png'|'jpg' } | null {
+  if (!dataUrl) return null
+  const m = /^data:image\/(png|jpeg);base64,(.+)$/i.exec(dataUrl)
+  if (!m) return null
+  const kind = m[1].toLowerCase() === 'png' ? 'png' : 'jpg'
+  const bytes = Uint8Array.from(Buffer.from(m[2], 'base64'))
+  return { bytes, kind }
+}
+
 
 function wrapText(text: string, font: any, size: number, maxWidth: number) {
   const words = (text || '').trim().split(/\s+/).filter(Boolean)
@@ -143,6 +155,7 @@ export async function generateCertificatePDF(opts: {
   locale?: Locale
   timeLabelMode?: TimeLabelMode
   localTimeZone?: string
+  customBgDataUrl?: string // ⬅️ NEW
 }) {
   const {
     ts, display_name, message, link_url, claim_id, hash, public_url,
@@ -159,16 +172,32 @@ export async function generateCertificatePDF(opts: {
 
   // --- Background ---
   try {
-    const bg = await loadBgFromPublic(style)
-    if (bg) {
-      const img = bg.kind === 'png' ? await pdf.embedPng(bg.bytes) : await pdf.embedJpg(bg.bytes)
-      page.drawImage(img, { x: 0, y: 0, width, height })
-    } else {
-      page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.99, 0.98, 0.96) })
+    let embedded = false
+
+    // 1) Fond custom fourni par le client
+    if (style === 'custom') {
+      const parsed = parseDataImage(opts.customBgDataUrl)
+      if (parsed) {
+        const img = parsed.kind === 'png' ? await pdf.embedPng(parsed.bytes) : await pdf.embedJpg(parsed.bytes)
+        page.drawImage(img, { x: 0, y: 0, width, height })
+        embedded = true
+      }
+    }
+
+    // 2) Sinon, fond public habituel
+    if (!embedded) {
+      const bg = await loadBgFromPublic(style)
+      if (bg) {
+        const img = bg.kind === 'png' ? await pdf.embedPng(bg.bytes) : await pdf.embedJpg(bg.bytes)
+        page.drawImage(img, { x: 0, y: 0, width, height })
+      } else {
+        page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.99, 0.98, 0.96) })
+      }
     }
   } catch {
     page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(1, 1, 1) })
   }
+
 
   // --- Fonts/Couleurs ---
   const font = await pdf.embedFont(StandardFonts.Helvetica)

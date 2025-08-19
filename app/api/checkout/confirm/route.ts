@@ -1,4 +1,3 @@
-// app/[locale]/api/checkout/confirm/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -6,8 +5,19 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 import { pool } from '@/lib/db';
 
-type CertStyle = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'newyear'|'graduation'
-const ALLOWED_STYLES: readonly CertStyle[] = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'] as const;
+// --- Caches globaux partagés entre routes ---
+const g = globalThis as any
+if (!g.__customBgStore) g.__customBgStore = new Map<string, string>() // key -> dataURL
+if (!g.__customBgByTs) g.__customBgByTs = new Map<string, string>()   // ts  -> dataURL
+const customBgStore: Map<string, string> = g.__customBgStore
+const customBgByTs: Map<string, string> = g.__customBgByTs
+
+type CertStyle =
+  | 'neutral'|'romantic'|'birthday'|'wedding'
+  | 'birth'|'christmas'|'newyear'|'graduation'
+  | 'custom';
+const ALLOWED_STYLES: readonly CertStyle[] =
+  ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom' ] as const;
 
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
@@ -33,7 +43,17 @@ export async function GET(req: Request) {
     const link_url = (s.metadata?.link_url || '') || null;
 
     const styleCandidate = String(s.metadata?.cert_style || 'neutral').toLowerCase();
-    const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral';
+    const cert_style: CertStyle =
+      (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral';
+
+    // 🔑 Récupère éventuellement le fond 'custom'
+    const custom_bg_key = String(s.metadata?.custom_bg_key || '');
+    let customBgDataUrl: string | null = null;
+    if (cert_style === 'custom' && custom_bg_key) {
+      customBgDataUrl = customBgStore.get(custom_bg_key) || null;
+      // On peut nettoyer la clé courte (optionnel)
+      customBgStore.delete(custom_bg_key);
+    }
 
     const amount_total =
       s.amount_total ??
@@ -78,6 +98,11 @@ export async function GET(req: Request) {
 
       await client.query('UPDATE claims SET cert_hash=$1, cert_url=$2 WHERE id=$3', [hash, cert_url, claim.id]);
       await client.query('COMMIT');
+
+      // 📌 Met à disposition le fond custom pour la génération PDF (route /api/cert/[ts])
+      if (cert_style === 'custom' && customBgDataUrl) {
+        customBgByTs.set(ts, customBgDataUrl);
+      }
 
       try {
         const publicUrl = `${base}/m/${encodeURIComponent(ts)}`;

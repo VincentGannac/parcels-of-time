@@ -33,6 +33,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ ts: string }> }
   const row = rows[0];
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
   const publicUrl = `${base}/m/${encodeURIComponent(decodedTs)}`;
+  const g = globalThis as any
+  const customBgByTs: Map<string, string> = g.__customBgByTs || new Map<string,string>()
+  const customBgDataUrl = customBgByTs.get(ts) || undefined
+
 
   const pdfBytes = await generateCertificatePDF({
     ts: row.ts.toISOString(),
@@ -44,6 +48,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ ts: string }> }
     hash: row.cert_hash || 'no-hash',
     public_url: publicUrl,
     style: row.cert_style || 'neutral',
+    customBgDataUrl, // ⬅️ passe l’image au générateur (si présente)
     locale,               // ⬅️ localise les libellés
     timeLabelMode,        // ⬅️ affiche UTC / Local selon préférence
   })

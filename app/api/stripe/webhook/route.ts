@@ -35,7 +35,7 @@ async function writeClaim(session: any) {
     const ownerId = ownerRows[0].id
 
     const styleCandidate = String(session.metadata?.cert_style || 'neutral').toLowerCase()
-    const cert_style: any = (['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation'] as const)
+    const cert_style: any = (['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation', 'custom'] as const)
   .includes(styleCandidate as any) ? styleCandidate : 'neutral'
 
     const { rows: claimRows } = await client.query(
