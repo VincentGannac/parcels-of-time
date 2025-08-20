@@ -1,4 +1,4 @@
-//api/checkout/route.ts
+// api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -7,17 +7,8 @@ import { priceFor } from '@/lib/pricing'
 import crypto from 'node:crypto'
 import { pool } from '@/lib/db'
 
-// --- Cache global pour fonds custom (clé courte -> dataURL) ---
-const g = globalThis as any
-if (!g.__customBgStore) g.__customBgStore = new Map<string, string>()
-const customBgStore: Map<string, string> = g.__customBgStore
-
-type CertStyle =
-  | 'neutral' | 'romantic' | 'birthday' | 'wedding'
-  | 'birth'   | 'christmas'| 'newyear'  | 'graduation'
-  | 'custom'  // ✅ NEW
-const ALLOWED_STYLES: readonly CertStyle[] =
-  ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
+type CertStyle = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'newyear'|'graduation'|'custom'
+const ALLOWED_STYLES: readonly CertStyle[] = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
 
 type Body = {
   ts: string
@@ -27,7 +18,10 @@ type Body = {
   message?: string
   link_url?: string
   cert_style?: string
-  custom_bg_data_url?: string // ✅ NEW (data:image/png|jpeg;base64,...)
+  custom_bg_data_url?: string
+  time_display?: 'utc'|'utc+local'|'local+utc'
+  local_date_only?: string | boolean // '1'/'0' ou bool
+  text_color?: string // #rrggbb
 }
 
 const ipBucket = new Map<string, { count:number; ts:number }>()
@@ -46,9 +40,7 @@ export async function POST(req: Request) {
 
   try {
     const body = (await req.json()) as Body
-    if (!body.ts || !body.email) {
-      return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-    }
+    if (!body.ts || !body.email) return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
 
     const d = new Date(body.ts)
     if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
@@ -56,35 +48,35 @@ export async function POST(req: Request) {
     const tsISO = d.toISOString()
 
     const styleCandidate = String(body.cert_style || 'neutral').toLowerCase()
-    const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
-      ? (styleCandidate as CertStyle)
-      : 'neutral'
+    const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral'
 
-    // Si style 'custom', on valide le dataURL et on le met en cache; on ne l'envoie PAS à Stripe
+    // prefs
+    const time_display = (body.time_display === 'utc' || body.time_display === 'utc+local' || body.time_display === 'local+utc')
+      ? body.time_display : 'local+utc'
+    const local_date_only = (String(body.local_date_only) === '1' || body.local_date_only === true) ? '1' : '0'
+    const text_color = /^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'
+
+    // custom BG → table temp
     let custom_bg_key = ''
     if (cert_style === 'custom' && body.custom_bg_data_url) {
-      const m = /^data:image\/(png|jpeg);base64,/.exec(body.custom_bg_data_url)
+      const m = /^data:image\/(png|jpe?g);base64,/.exec(body.custom_bg_data_url)
       if (!m) return NextResponse.json({ error: 'custom_bg_invalid' }, { status: 400 })
       custom_bg_key = `cbg_${crypto.randomUUID()}`
-      // ✅ Persistance en DB plutôt qu'en mémoire
       await pool.query(
-      `insert into custom_bg_temp(key, data_url)
-       values ($1,$2)
-       on conflict (key) do update set data_url = excluded.data_url, created_at = now()`,
-      [custom_bg_key, body.custom_bg_data_url]
-    )
+        `insert into custom_bg_temp(key, data_url)
+         values ($1,$2)
+         on conflict (key) do update set data_url = excluded.data_url, created_at = now()`,
+        [custom_bg_key, body.custom_bg_data_url]
+      )
     }
 
     const origin = new URL(req.url).origin
-
     const key = process.env.STRIPE_SECRET_KEY
     if (!key) return NextResponse.json({ error: 'stripe_key_missing' }, { status: 500 })
     const stripe = new Stripe(key)
 
     const { price_cents, currency } = priceFor(tsISO)
-    if (!price_cents || price_cents < 1) {
-      return NextResponse.json({ error: 'bad_price' }, { status: 400 })
-    }
+    if (!price_cents || price_cents < 1) return NextResponse.json({ error: 'bad_price' }, { status: 400 })
     const stripeCurrency = (currency || 'eur').toLowerCase()
 
     const session = await stripe.checkout.sessions.create({
@@ -109,7 +101,10 @@ export async function POST(req: Request) {
         message: body.message ?? '',
         link_url: body.link_url ?? '',
         cert_style,
-        custom_bg_key: custom_bg_key || '',  // ✅ la clé courte voyage jusqu’au confirm
+        custom_bg_key,
+        time_display,
+        local_date_only,
+        text_color,
       },
       success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,

@@ -6,14 +6,8 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 import { pool } from '@/lib/db';
 
-type CertStyle =
-  | 'neutral' | 'romantic' | 'birthday' | 'wedding'
-  | 'birth'   | 'christmas'| 'newyear'  | 'graduation'
-  | 'custom';
-
-const ALLOWED_STYLES: readonly CertStyle[] = [
-  'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'
-] as const;
+type CertStyle = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'newyear'|'graduation'|'custom'
+const ALLOWED_STYLES: readonly CertStyle[] = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
 
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
@@ -28,13 +22,9 @@ export async function GET(req: Request) {
 
     if (s.payment_status !== 'paid') {
       const backTs = String(s.metadata?.ts || '');
-      return NextResponse.redirect(
-        `${base}/claim?ts=${encodeURIComponent(backTs)}&status=unpaid`,
-        { status: 302 }
-      );
+      return NextResponse.redirect(`${base}/claim?ts=${encodeURIComponent(backTs)}&status=unpaid`, { status: 302 });
     }
 
-    // --------- Métadonnées Stripe ---------
     const ts = String(s.metadata?.ts || '');
     const email = String(s.customer_details?.email || s.metadata?.email || '');
     const display_name = (s.metadata?.display_name || '') || null;
@@ -43,13 +33,14 @@ export async function GET(req: Request) {
     const link_url = (s.metadata?.link_url || '') || null;
 
     const styleCandidate = String(s.metadata?.cert_style || 'neutral').toLowerCase();
-    const cert_style: CertStyle =
-      (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
-        ? (styleCandidate as CertStyle)
-        : 'neutral';
+    const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral';
 
-    // ✅ Clé courte de l'image custom (enregistrée préalablement dans custom_bg_temp)
     const custom_bg_key = String(s.metadata?.custom_bg_key || '');
+
+    const time_display = (s.metadata?.time_display === 'utc' || s.metadata?.time_display === 'utc+local' || s.metadata?.time_display === 'local+utc')
+      ? s.metadata?.time_display : 'local+utc'
+    const local_date_only = String(s.metadata?.local_date_only) === '1'
+    const text_color = /^#[0-9a-fA-F]{6}$/.test(String(s.metadata?.text_color || '')) ? String(s.metadata?.text_color).toLowerCase() : '#1a1f2a'
 
     const amount_total =
       s.amount_total ??
@@ -57,12 +48,10 @@ export async function GET(req: Request) {
         ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
         : 0);
 
-    // --------- Transaction DB ---------
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Owner
       const { rows: ownerRows } = await client.query(
         `INSERT INTO owners(email, display_name)
          VALUES($1,$2)
@@ -73,85 +62,63 @@ export async function GET(req: Request) {
       );
       const ownerId = ownerRows[0].id;
 
-      // Claim
       const { rows: claimRows } = await client.query(
-        `INSERT INTO claims (ts, owner_id, price_cents, currency, title, message, link_url, cert_style)
-         VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6, $7)
+        `INSERT INTO claims (ts, owner_id, price_cents, currency, title, message, link_url, cert_style, time_display, local_date_only, text_color)
+         VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (ts) DO UPDATE
-           SET message    = EXCLUDED.message,
-               title      = EXCLUDED.title,
-               link_url   = EXCLUDED.link_url,
-               cert_style = EXCLUDED.cert_style
+           SET message         = EXCLUDED.message,
+               title           = EXCLUDED.title,
+               link_url        = EXCLUDED.link_url,
+               cert_style      = EXCLUDED.cert_style,
+               time_display    = EXCLUDED.time_display,
+               local_date_only = EXCLUDED.local_date_only,
+               text_color      = EXCLUDED.text_color
          RETURNING id, created_at`,
-        [ts, ownerId, amount_total, title, message, link_url, cert_style]
+        [ts, ownerId, amount_total, title, message, link_url, cert_style, time_display, local_date_only, text_color]
       );
       const claim = claimRows[0];
 
-      // Si style custom: récupérer l'image depuis la table temporaire et lier au ts
+      // custom bg persistance
       if (cert_style === 'custom' && custom_bg_key) {
-        const { rows: tmp } = await client.query(
-          'SELECT data_url FROM custom_bg_temp WHERE key = $1',
-          [custom_bg_key]
-        );
+        const { rows: tmp } = await client.query('SELECT data_url FROM custom_bg_temp WHERE key = $1', [custom_bg_key]);
         if (tmp.length) {
           await client.query(
             `INSERT INTO claim_custom_bg (ts, data_url)
              VALUES ($1::timestamptz, $2)
              ON CONFLICT (ts) DO UPDATE
-               SET data_url = EXCLUDED.data_url,
-                   created_at = now()`,
+               SET data_url = EXCLUDED.data_url, created_at = now()`,
             [ts, tmp[0].data_url]
           );
           await client.query('DELETE FROM custom_bg_temp WHERE key = $1', [custom_bg_key]);
         }
       }
 
-      // Hash & URL certificat
-      const createdAtISO =
-        claim.created_at instanceof Date
-          ? claim.created_at.toISOString()
-          : new Date(claim.created_at).toISOString();
-
+      const createdAtISO = claim.created_at instanceof Date ? claim.created_at.toISOString() : new Date(claim.created_at).toISOString();
       const salt = process.env.SECRET_SALT || 'dev_salt';
       const data = `${ts}|${ownerId}|${amount_total}|${createdAtISO}|${salt}`;
       const hash = crypto.createHash('sha256').update(data).digest('hex');
       const cert_url = `/api/cert/${encodeURIComponent(ts)}`;
 
-      await client.query(
-        'UPDATE claims SET cert_hash=$1, cert_url=$2 WHERE id=$3',
-        [hash, cert_url, claim.id]
-      );
-
+      await client.query('UPDATE claims SET cert_hash=$1, cert_url=$2 WHERE id=$3', [hash, cert_url, claim.id]);
       await client.query('COMMIT');
 
-      // Email
+      // email
       try {
         const publicUrl = `${base}/m/${encodeURIComponent(ts)}`;
         const certUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
         const { sendClaimReceiptEmail } = await import('@/lib/email');
-        await sendClaimReceiptEmail({
-          to: email,
-          ts,
-          displayName: display_name,
-          publicUrl,
-          certUrl,
-        });
+        await sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl })
       } catch (e) {
         console.warn('send_email_warning:', (e as any)?.message || e);
       }
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
-    } finally {
-      client.release();
-    }
+    } finally { client.release(); }
 
     return NextResponse.redirect(`${base}/m/${encodeURIComponent(ts)}`, { status: 303 });
-  } catch (e: any) {
+  } catch (e:any) {
     console.error('confirm_error:', e?.message, e?.stack);
-    return new Response(
-      'Payment captured, but we hit a server error finalizing your certificate (minute).',
-      { status: 500 }
-    );
+    return new Response('Payment captured, but we hit a server error finalizing your certificate (minute).', { status: 500 });
   }
 }

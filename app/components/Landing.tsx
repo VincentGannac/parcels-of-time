@@ -1,4 +1,4 @@
-// app/components/Landing.tsx
+// app/components/Landing.tsx — MAJ : ordre d’affichage “Owned by → Title → Message” dans CertificatePreview
 'use client'
 
 import Link from 'next/link'
@@ -142,21 +142,21 @@ function LiveUTCMinute() {
   )
 }
 
-/* ---------- CertificatePreview (identique à avant) ---------- */
+/* ---------- CertificatePreview (MAJ ordre) ---------- */
 type PreviewStyle =
   | 'romantic' | 'birth' | 'wedding' | 'birthday' | 'christmas' | 'newyear' | 'graduation' | 'neutral';
 
 const SAFE_INSETS_PCT: Record<PreviewStyle, {top:number;right:number;bottom:number;left:number}> = {
-    neutral:    { top:16.6, right:16.1, bottom:18.5, left:16.1 },
-    romantic:   { top:19.0, right:19.5, bottom:18.5, left:19.5 },
-    birthday:   { top:17.1, right:22.2, bottom:18.5, left:22.2 },
-    birth:      { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-    wedding:    { top:19.0, right:20.8, bottom:18.5, left:20.8 },
-    christmas:  { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-    newyear:    { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-    graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
+  neutral:    { top:16.6, right:16.1, bottom:18.5, left:16.1 },
+  romantic:   { top:19.0, right:19.5, bottom:18.5, left:19.5 },
+  birthday:   { top:17.1, right:22.2, bottom:18.5, left:22.2 },
+  birth:      { top:17.8, right:18.8, bottom:18.5, left:18.8 },
+  wedding:    { top:19.0, right:20.8, bottom:18.5, left:20.8 },
+  christmas:  { top:17.8, right:18.8, bottom:18.5, left:18.8 },
+  newyear:    { top:17.8, right:18.8, bottom:18.5, left:18.8 },
+  graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
 }
-const EDGE_PX = 12; 
+const EDGE_PX = 12;
 
 function CertificatePreview({
   styleId, owner, title, message, ts, href,
@@ -172,7 +172,6 @@ function CertificatePreview({
   const previewTextColor = 'rgba(26, 31, 42, 0.92)'
   const previewSubtle = 'rgba(26, 31, 42, 0.70)'
 
-  // ✅ calculé AVANT le JSX
   const ins = SAFE_INSETS_PCT[styleId];
 
   return (
@@ -189,80 +188,80 @@ function CertificatePreview({
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
 
-          {/* Overlay harmonisé */}
+          {/* Overlay */}
           <div aria-hidden style={{ position:'absolute', inset:0, color:previewTextColor }}>
-          {/* Contenu dans la safe-area (en-tête + zone centrale) */}
-          <div style={{
-            position:'absolute',
-            top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`,
-            display:'grid', gridTemplateRows:'auto 1fr', textAlign:'center'
-          }}>
-            {/* En-tête */}
-            <div>
-              <div style={{fontWeight:900, fontSize:16}}>Parcels of Time</div>
-              <div style={{opacity:.9, fontSize:12}}>Certificate of Claim</div>
+            {/* Contenu dans la safe-area */}
+            <div style={{
+              position:'absolute',
+              top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`,
+              display:'grid', gridTemplateRows:'auto 1fr', textAlign:'center'
+            }}>
+              {/* En-tête */}
+              <div>
+                <div style={{fontWeight:900, fontSize:16}}>Parcels of Time</div>
+                <div style={{opacity:.9, fontSize:12}}>Certificate of Claim</div>
+              </div>
+
+              {/* Zone centrale */}
+              <div style={{display:'grid', placeItems:'center', gap:8}}>
+                {/* Timestamp */}
+                <div style={{fontWeight:800, fontSize:24, letterSpacing:.2}}>{tsText}</div>
+
+                {/* ✅ Owned by AVANT Title */}
+                <div style={{opacity:.7, fontSize:12, marginTop:8}}>Owned by</div>
+                <div style={{fontWeight:800, fontSize:16}}>{owner || 'Anonymous'}</div>
+
+                {title && (
+                  <>
+                    <div style={{opacity:.7, fontSize:12, marginTop:8}}>Title</div>
+                    <div style={{fontWeight:800, fontSize:16}}>{title}</div>
+                  </>
+                )}
+
+                {message && (
+                  <>
+                    <div style={{opacity:.7, fontSize:12, marginTop:6}}>Message</div>
+                    <div style={{ maxWidth:'72%', lineHeight:'1.35', fontSize:13 }}>“{message}”</div>
+                  </>
+                )}
+              </div>
             </div>
 
-            {/* Zone centrale */}
-            <div style={{display:'grid', placeItems:'center', gap:8}}>
-              <div style={{fontWeight:800, fontSize:24, letterSpacing:.2}}>{tsText}</div>
+            {/* Footer mock */}
+            <div
+              style={{
+                position: 'absolute',
+                left: EDGE_PX,
+                bottom: EDGE_PX,
+                fontSize: 12,
+                color: previewSubtle,
+                textAlign: 'left',
+                pointerEvents: 'none',
+              }}
+            >
+              Certificate ID • Integrity hash (aperçu)
+            </div>
 
-              {title && (
-                <>
-                  <div style={{opacity:.7, fontSize:12, marginTop:2}}>Title</div>
-                  <div style={{fontWeight:800, fontSize:16}}>{title}</div>
-                </>
-              )}
-
-              <div style={{opacity:.7, fontSize:12, marginTop:8}}>Owned by</div>
-              <div style={{fontWeight:800, fontSize:16}}>{owner || 'Anonymous'}</div>
-
-              {message && (
-                <>
-                  <div style={{opacity:.7, fontSize:12, marginTop:6}}>Message</div>
-                  <div style={{ maxWidth:'72%', lineHeight:'1.35', fontSize:13 }}>“{message}”</div>
-                </>
-              )}
+            <div
+              style={{
+                position: 'absolute',
+                right: EDGE_PX,
+                bottom: EDGE_PX,
+                width: 84,
+                height: 84,
+                border: '1px dashed rgba(26,31,42,.45)',
+                borderRadius: 8,
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 12,
+                opacity: .85,
+                pointerEvents: 'none',
+              }}
+            >
+              QR
             </div>
           </div>
-
-          <div
-            style={{
-              position: 'absolute',
-              left: EDGE_PX,
-              bottom: EDGE_PX,
-              fontSize: 12,
-              color: previewSubtle,
-              textAlign: 'left',
-              pointerEvents: 'none',
-            }}
-          >
-            Certificate ID • Integrity hash (aperçu)
-          </div>
-
-          <div
-            style={{
-              position: 'absolute',
-              right: EDGE_PX,
-              bottom: EDGE_PX,
-              width: 84,
-              height: 84,
-              border: '1px dashed rgba(26,31,42,.45)',
-              borderRadius: 8,
-              display: 'grid',
-              placeItems: 'center',
-              fontSize: 12,
-              opacity: .85,
-              pointerEvents: 'none',
-            }}
-          >
-            QR
-          </div>
-
         </div>
-          </div>
-        
-        
 
         <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
           Aperçu non contractuel — le PDF final contient un QR code scannable et l’empreinte d’intégrité.
@@ -271,9 +270,6 @@ function CertificatePreview({
     </a>
   )
 }
-
-
-
 
 /* -------------------- Usages Carousel (identique) -------------------- */
 function UsagesCarousel() {
@@ -318,13 +314,13 @@ function FeatureCard({title, text}:{title:string; text:string}) {
   )
 }
 
-/* -------------------- Pricing (identique, liens localisés) -------------------- */
+/* -------------------- Pricing (identique) -------------------- */
 function Pricing() {
   const href = useLocaleHref()
   return (
     <section id="prix" style={{maxWidth:1280, margin:'0 auto', padding:'40px 24px 72px'}}>
       <SectionLabel>Prix & offres</SectionLabel>
-      <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 18px'}}>Des minutes pour chaque histoire</h3>
+      <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:48, margin:'0 0 18px'}}>Des minutes pour chaque histoire</h3>
       <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
         <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
           <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Standard</div>
@@ -393,7 +389,7 @@ function FAQ() {
   )
 }
 
-/* -------------------- Hero (photos uniquement, i18n) -------------------- */
+/* -------------------- Hero (photos) -------------------- */
 function HeroPhotos({href}:{href:(p:string)=>string}) {
   const { t } = useT()
   return (
@@ -442,11 +438,10 @@ function HeroPhotos({href}:{href:(p:string)=>string}) {
   )
 }
 
-/* -------------------- Page (tout identique, liens localisés) -------------------- */
+/* -------------------- Page -------------------- */
 export default function Landing() {
   const href = useLocaleHref()
   const [theme, setTheme] = useState<'dark'|'light'>('dark')
-  const { /* t not needed below, we keep original FR copy */ } = useT()
 
   useEffect(()=>{ applyTheme(theme === 'dark' ? TOKENS_DARK : TOKENS_LIGHT) },[theme])
 
@@ -458,10 +453,8 @@ export default function Landing() {
     <main style={{background:'var(--color-bg)', color:'var(--color-text)'}}>
       <Header onToggleTheme={()=>setTheme(t=>t==='dark'?'light':'dark')} href={href} />
 
-      {/* HERO (photos uniquement) */}
       <HeroPhotos href={href} />
 
-      {/* POURQUOI (identique) */}
       <section id="pourquoi" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
         <SectionLabel>Pourquoi maintenant&nbsp;?</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16, alignItems:'start'}}>
@@ -472,7 +465,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* CE QUE VOUS POSSEDEZ (identique) */}
       <section aria-labelledby="possedez" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
         <SectionLabel id="possedez">Ce que vous possédez</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
@@ -483,12 +475,10 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* CE QUE VOUS RECEVEZ (identique) */}
       <section id="receive" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
         <SectionLabel>Ce que vous recevez</SectionLabel>
 
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
-          {/* Romantic */}
           <div style={{gridColumn:'span 4'}}>
             <CertificatePreview
               styleId="romantic"
@@ -496,12 +486,10 @@ export default function Landing() {
               title="Notre premier baiser"
               ts="2018-07-19T21:30:00Z"
               message="Te souviens-tu ? Ce 19 juillet 2028, on s’était abrités de l’averse. On riait comme des idiots, trempés jusqu’aux os. Puis, là, tu m’as embrassé."
-
               href={href('/claim?style=romantic')}
             />
           </div>
 
-          {/* Birth */}
           <div style={{gridColumn:'span 4'}}>
             <CertificatePreview
               styleId="birth"
@@ -514,18 +502,17 @@ export default function Landing() {
           </div>
 
           <div style={{gridColumn:'span 4'}}>
-          <CertificatePreview
-            styleId="wedding"
-            owner="Inès & Hugo"
-            title="À 17:31, plus que nous deux"
-            ts="2024-07-20T17:31:00Z"
-            message="Les amis criaient. Les confettis volaient. Mais je ne voyais que toi. À 17:31, nos deux « oui » ont effacé le reste. On garde cette minute pour entendre encore nos deux « oui » quand les mots manqueront."
-            href={href('/claim?style=wedding')}
-          />
-        </div>
+            <CertificatePreview
+              styleId="wedding"
+              owner="Inès & Hugo"
+              title="À 17:31, plus que nous deux"
+              ts="2024-07-20T17:31:00Z"
+              message="Les amis criaient. Les confettis volaient. Mais je ne voyais que toi. À 17:31, nos deux « oui » ont effacé le reste. On garde cette minute pour entendre encore nos deux « oui » quand les mots manqueront."
+              href={href('/claim?style=wedding')}
+            />
+          </div>
         </div>
 
-        {/* Points de valeur + CTAs */}
         <div style={{display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:16, marginTop:18}}>
           <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
             <ul style={{margin:0, paddingLeft:18, lineHeight:'28px'}}>
@@ -542,7 +529,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* COMMENT (identique) */}
       <section id="comment" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
         <SectionLabel>Comment ça marche</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
@@ -564,7 +550,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Editions limitées (identique, liens localisés) */}
       <section id="iconiques" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
         <SectionLabel>Éditions limitées & minutes iconiques</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
@@ -587,7 +572,6 @@ export default function Landing() {
       <Testimonials />
       <FAQ />
 
-      {/* CTA final (identique, liens localisés) */}
       <section aria-labelledby="cta-final" style={{
         borderTop:'1px solid var(--color-border)', background:'linear-gradient(0deg, color-mix(in srgb, var(--color-surface) 85%, transparent), transparent)',
         marginTop:16
@@ -605,7 +589,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Footer (identique, liens localisés) */}
       <footer style={{borderTop:'1px solid var(--color-border)', color:'var(--color-muted)'}}>
         <div style={{maxWidth:1280, margin:'0 auto', padding:'20px 24px', display:'flex', flexWrap:'wrap', gap:12, justifyContent:'space-between'}}>
           <span>© {new Date().getFullYear()} Parcels of Time</span>

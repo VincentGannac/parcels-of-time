@@ -1,4 +1,4 @@
-// app/claim/ClientClaim.tsx — V2 Ultimate (minute-first, gift-friendly, local picker, watermark)
+// app/claim/ClientClaim.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -20,7 +20,7 @@ const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
   { id: 'custom',     label: 'Custom',      hint: 'Importer image 2480×3508 (A4) ou 1024×1536' },
 ] as const
 
-const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;left:number}> = {
+const SAFE_INSETS_PCT = {
   neutral:    { top:16.6, right:16.1, bottom:18.5, left:16.1 },
   romantic:   { top:19.0, right:19.5, bottom:18.5, left:19.5 },
   birthday:   { top:17.1, right:22.2, bottom:18.5, left:22.2 },
@@ -29,15 +29,16 @@ const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;
   christmas:  { top:17.8, right:18.8, bottom:18.5, left:18.8 },
   newyear:    { top:17.8, right:18.8, bottom:18.5, left:18.8 },
   graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-  custom:{ top:16.6, right:16.1, bottom:18.5, left:16.1 }
-}
-const A4_RATIO = 2480 / 3508;        // ≈ 0.707
-const RATIO_2x3 = 1024 / 1536;       // ≈ 0.666 (a.k.a. 3:2 portrait / 2:3)
-const RATIO_TOL = 0.01;              // 1% de tolérance
+  custom:     { top:16.6, right:16.1, bottom:18.5, left:16.1 }
+} as const
+
+const A4_RATIO = 2480 / 3508
+const RATIO_2x3 = 1024 / 1536
+const RATIO_TOL = 0.01
 const ALLOWED_EXACT_SIZES = [
   { w: 2480, h: 3508, label: 'A4' },
   { w: 1024, h: 1536, label: '1024×1536' },
-];
+]
 
 /** ------- Utils ------- **/
 function safeDecode(value: string): string {
@@ -70,15 +71,25 @@ function localReadable(d: Date | null) {
     })
   } catch { return '' }
 }
-
-function daysInMonth(y:number, m:number) {
-  return new Date(y, m, 0).getDate() // m: 1..12
+function localDayOnly(d: Date | null) {
+  if (!d) return ''
+  try {
+    return d.toLocaleDateString(undefined, { year:'numeric', month:'2-digit', day:'2-digit' })
+  } catch { return '' }
 }
 
+function daysInMonth(y:number, m:number) {
+  return new Date(y, m, 0).getDate()
+}
 const MONTHS_FR = ['01 — Jan','02 — Fév','03 — Mar','04 — Avr','05 — Mai','06 — Juin','07 — Juil','08 — Août','09 — Sep','10 — Oct','11 — Nov','12 — Déc']
-
-/** Build range helpers */
 const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
+
+// couleurs utils
+function clamp01(x:number){ return Math.max(0, Math.min(1, x)) }
+function hexToRgb(hex:string){ const m = /^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return {r:26,g:31,b:42}
+  const n = parseInt(m[1],16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 } }
+function mix(a:number,b:number,t:number){ return Math.round(a*(1-t)+b*t)}
+function lighten(hex:string, t=0.45){ const {r,g,b} = hexToRgb(hex); return `rgba(${mix(r,255,t)}, ${mix(g,255,t)}, ${mix(b,255,t)}, 0.9)` }
 
 export default function ClientClaim() {
   const params = useSearchParams()
@@ -90,32 +101,24 @@ export default function ClientClaim() {
 
   const allowed = STYLES.map(s => s.id)
   const initialStyle: CertStyle = (allowed as readonly string[]).includes(styleParam as CertStyle)
-    ? (styleParam as CertStyle)
-    : 'neutral'
+    ? (styleParam as CertStyle) : 'neutral'
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
-  /** Sélecteur de date “local” (ergonomique) */
-  // valeurs initiales = maintenant, ou préremplissage
+  // Sélecteur local
   const now = new Date()
   const prefillDate = parseToDateOrNull(prefillTs) || now
   const [pickMode, setPickMode] = useState<'local'|'iso'>(prefillTs ? 'iso' : 'local')
   const [Y, setY]   = useState<number>(prefillDate.getFullYear())
-  const [M, setM]   = useState<number>(prefillDate.getMonth()+1) // 1-12
-  const [D, setD]   = useState<number>(prefillDate.getDate())    // 1-31
+  const [M, setM]   = useState<number>(prefillDate.getMonth()+1)
+  const [D, setD]   = useState<number>(prefillDate.getDate())
   const [h, setH]   = useState<number>(prefillDate.getHours())
   const [m, setMin] = useState<number>(prefillDate.getMinutes())
 
-  // clamp day when month/year changes
-  useEffect(()=>{
-    const dim = daysInMonth(Y,M)
-    if (D>dim) setD(dim)
-  }, [Y,M]) // eslint-disable-line
-
-  // maj form.ts quand on change le sélecteur local
+  useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M]) // eslint-disable-line
   useEffect(()=>{
     if (pickMode!=='local') return
-    const local = new Date(Y, M-1, D, h, m, 0, 0) // local time
+    const local = new Date(Y, M-1, D, h, m, 0, 0)
     setForm(f=>({ ...f, ts: isoMinuteString(local) }))
   }, [pickMode, Y,M,D,h,m]) // eslint-disable-line
 
@@ -123,26 +126,33 @@ export default function ClientClaim() {
   const [form, setForm] = useState({
     email: '',
     display_name: '',
-    title: '',            
+    title: '',
     message: '',
     link_url: '',
     ts: prefillTs,
     cert_style: initialStyle as CertStyle,
-    time_display: 'utc' as 'utc'|'utc+local'|'local+utc', // nouvel affichage
+    time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',     // ✅ par défaut
+    local_date_only: false,                                         // ✅ NEW
+    text_color: '#1A1F2A',                                          // ✅ NEW (hex)
   })
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
-  /** Derived date & strings */
+  // Derived date
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
-  const tsISO = useMemo(() => parsedDate ? isoMinuteString(parsedDate) : '', [parsedDate])
-  const utcReadable = useMemo(() => parsedDate ? parsedDate.toISOString().replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC') : '', [parsedDate])
-  const localReadableStr = useMemo(() => localReadable(parsedDate), [parsedDate])
+  const utcReadable = useMemo(
+    () => parsedDate ? parsedDate.toISOString().replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC') : '',
+    [parsedDate]
+  )
+  const localReadableStr = useMemo(
+    () => parsedDate ? (form.local_date_only ? localDayOnly(parsedDate) : localReadable(parsedDate)) : '',
+    [parsedDate, form.local_date_only]
+  )
   const tzLabel = useMemo(()=> {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local' } catch { return 'Local' }
   }, [])
 
-  /** Edition hint (UX only) */
+  // UX edition hint
   const edition = useMemo(() => {
     if (!parsedDate) return null
     const y = parsedDate.getUTCFullYear()
@@ -156,14 +166,46 @@ export default function ClientClaim() {
     return (isLeap || pretty) ? 'premium' : 'standard'
   }, [parsedDate])
 
+  useEffect(()=>{ if (prefillTs) setForm(f=>({...f, ts: prefillTs})) }, []) // eslint-disable-line
+
+  // Custom BG
+  const [customBg, setCustomBg] = useState<{ url:string; dataUrl:string; w:number; h:number } | null>(null)
+  const [customErr, setCustomErr] = useState('')
+
+  async function fileToDataUrl(f: File): Promise<string> {
+    return new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f)
+    })
+  }
+  async function onPickCustomBg(file?: File | null) {
+    setCustomErr('')
+    if (!file) { setCustomBg(null); return }
+    if (!/^image\/(png|jpeg)$/.test(file.type)) { setCustomErr('Format invalide. Utilisez PNG ou JPG.'); return }
+    const dataUrl = await fileToDataUrl(file)
+    const img = new Image()
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight
+      const ratio = w/h
+      const okExact = ALLOWED_EXACT_SIZES.some(s => s.w===w && s.h===h)
+      const okRatio = Math.abs(ratio-A4_RATIO) < RATIO_TOL || Math.abs(ratio-RATIO_2x3) < RATIO_TOL
+      if (!okExact && !okRatio) setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
+      const url = URL.createObjectURL(file)
+      setCustomBg({ url, dataUrl, w, h })
+    }
+    img.onerror = () => setCustomErr('Impossible de lire l’image.')
+    img.src = dataUrl
+  }
+
+  // Couleurs pour l’aperçu (dérivées de text_color)
+  const mainColor = form.text_color || '#1A1F2A'
+  const subtleColor = lighten(mainColor, 0.55)
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
 
     const d = parseToDateOrNull(form.ts)
-    if (!d) {
-      setStatus('error'); setError('Merci de saisir une minute valide (ISO ex. 2100-01-01T00:00Z).'); return
-    }
+    if (!d) { setStatus('error'); setError('Merci de saisir une minute valide (ISO ex. 2100-01-01T00:00Z).'); return }
 
     const payload:any = {
       ts: d.toISOString(),
@@ -174,7 +216,8 @@ export default function ClientClaim() {
       link_url: form.link_url || undefined,
       cert_style: form.cert_style || 'neutral',
       time_display: form.time_display,
-      gift: isGift ? '1' : '0',
+      local_date_only: form.local_date_only ? '1' : '0',
+      text_color: mainColor,
     }
     if (form.cert_style === 'custom' && customBg?.dataUrl) {
       payload.custom_bg_data_url = customBg.dataUrl
@@ -188,15 +231,11 @@ export default function ClientClaim() {
 
     if (!res.ok) {
       setStatus('error')
-      let msg = 'Unknown error'
       try {
         const j = await res.json()
-        if (j.error === 'rate_limited') msg = 'Trop de tentatives. Réessaye dans ~1 minute.'
-        else if (j.error === 'invalid_ts') msg = 'Horodatage invalide. Utilise un ISO comme 2100-01-01T00:00Z.'
-        else if (j.error === 'missing_fields') msg = 'Renseigne au minimum l’email et l’horodatage à la minute.'
-        else msg = j.error || msg
-      } catch {}
-      setError(msg); return
+        setError(j.error || 'Unknown error')
+      } catch { setError('Unknown error') }
+      return
     }
 
     const data = await res.json()
@@ -217,61 +256,10 @@ export default function ClientClaim() {
     background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh'
   }
 
-  /** Texte d’aperçu : noir doux pour être lisible sur papier clair même en dark UI */
-  const previewTextColor = 'rgba(26, 31, 42, 0.92)'  // #1A1F2A avec légère transparence
-  const previewSubtle = 'rgba(26, 31, 42, 0.70)'
-
-  // si l’utilisateur tape une ISO manuelle, basculer en mode ISO
-  useEffect(()=>{
-    if (prefillTs) setForm(f=>({...f, ts: prefillTs}))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const [customBg, setCustomBg] = useState<{
-    url: string;        // object URL pour l’aperçu
-    dataUrl: string;    // data:URL base64 pour le backend
-    w: number; h: number;
-  } | null>(null)
-  const [customErr, setCustomErr] = useState<string>('')
-
-  async function fileToDataUrl(f: File): Promise<string> {
-    return new Promise((res, rej) => {
-      const r = new FileReader()
-      r.onload = () => res(String(r.result))
-      r.onerror = rej
-      r.readAsDataURL(f)
-    })
-  }
-  
-  async function onPickCustomBg(file?: File | null) {
-    setCustomErr('')
-    if (!file) { setCustomBg(null); return }
-    if (!/^image\/(png|jpeg)$/.test(file.type)) {
-      setCustomErr('Format invalide. Utilisez PNG ou JPG.'); return
-    }
-    const dataUrl = await fileToDataUrl(file)
-    const img = new Image()
-    img.onload = () => {
-      const w = img.naturalWidth, h = img.naturalHeight
-      const ratio = w / h
-      const okExact = ALLOWED_EXACT_SIZES.some(s => s.w === w && s.h === h)
-      const okRatio =
-      Math.abs(ratio - A4_RATIO)   < RATIO_TOL ||
-      Math.abs(ratio - RATIO_2x3)  < RATIO_TOL
-    if (!okExact && !okRatio) {
-      setCustomErr('Dimensions non supportées. Utilisez 2480×3508 (A4), 1024×1536, ou un ratio proche.')
-    }
-      const url = URL.createObjectURL(file)
-      setCustomBg({ url, dataUrl, w, h })
-    }
-    img.onerror = () => setCustomErr('Impossible de lire l’image.')
-    img.src = dataUrl
-  }
-
-  
   return (
     <main style={containerStyle}>
       <section style={{maxWidth:1200, margin:'0 auto', padding:'48px 24px'}}>
+        {/* header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
           <a href="/" style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
           <div style={{fontSize:12, color:'var(--color-muted)'}}>Paiement sécurisé <strong>Stripe</strong></div>
@@ -281,14 +269,7 @@ export default function ClientClaim() {
           <h1 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:0}}>
             {isGift ? 'Offrir une minute' : 'Réserver votre minute'}
           </h1>
-          <button
-            onClick={()=>setIsGift(v=>!v)}
-            style={{
-              background:'var(--color-surface)', color:'var(--color-text)', border:'1px solid var(--color-border)',
-              padding:'8px 12px', borderRadius:10, cursor:'pointer'
-            }}
-            aria-pressed={isGift}
-          >
+          <button onClick={()=>setIsGift(v=>!v)} style={{background:'var(--color-surface)', color:'var(--color-text)', border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:10, cursor:'pointer'}} aria-pressed={isGift}>
             {isGift ? '🎁 Mode cadeau activé' : '🎁 Activer le mode cadeau'}
           </button>
         </header>
@@ -296,64 +277,42 @@ export default function ClientClaim() {
         <div style={{display:'grid', gridTemplateColumns:'1.1fr 0.9fr', gap:18, alignItems:'start'}}>
           {/* ---------- FORM COLUMN ---------- */}
           <form onSubmit={onSubmit} style={{display:'grid', gap:14}}>
-            {/* Step 1 — Email + identités */}
+            {/* Step 1 — Infos */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-                ÉTAPE 1 — INFORMATIONS
-              </div>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 1 — INFORMATIONS</div>
 
               <label style={{display:'grid', gap:6, marginBottom:10}}>
                 <span>{isGift ? 'Votre e-mail (reçu & certificat)' : 'E-mail (reçu & certificat)'}</span>
-                <input
-                  required type="email" value={form.email}
+                <input required type="email" value={form.email}
                   onChange={e=>setForm(f=>({...f, email:e.target.value}))}
                   placeholder="vous@exemple.com"
-                  style={{
-                    padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
-                    background:'transparent', color:'var(--color-text)'
-                  }}
+                  style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                 />
               </label>
 
               <label style={{display:'grid', gap:6}}>
                 <span>{isGift ? 'Nom du·de la destinataire (public sur le certificat)' : 'Nom affiché (public sur le certificat)'}</span>
-                <input
-                  type="text" value={form.display_name}
+                <input type="text" value={form.display_name}
                   onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
                   placeholder={isGift ? 'Ex. “Camille & Jonas”' : 'Ex. “Camille D.”'}
-                  style={{
-                    padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
-                    background:'transparent', color:'var(--color-text)'
-                  }}
+                  style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                 />
               </label>
 
               <label style={{display:'grid', gap:6, marginTop:10}}>
                 <span>Titre (optionnel) — affiché sur le certificat</span>
-                <input
-                  type="text"
-                  value={form.title}
+                <input type="text" value={form.title}
                   onChange={e=>setForm(f=>({...f, title:e.target.value}))}
                   placeholder="Ex. “Premier baiser sous la pluie”"
-                  style={{
-                    padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
-                    background:'transparent', color:'var(--color-text)'
-                  }}
+                  style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                 />
               </label>
 
-
               <label style={{display:'grid', gap:6, marginTop:10}}>
                 <span>Message (optionnel)</span>
-                <textarea
-                  value={form.message}
-                  onChange={e=>setForm(f=>({...f, message:e.target.value}))}
-                  rows={3}
+                <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} rows={3}
                   placeholder={isGift ? '“Pour la minute de notre rencontre…”' : '“La minute où tout a commencé.”'}
-                  style={{
-                    padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
-                    background:'transparent', color:'var(--color-text)'
-                  }}
+                  style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                 />
                 <small style={{opacity:.6}}>Contenu modéré. Restez bienveillant(e) ❤️</small>
               </label>
@@ -361,92 +320,68 @@ export default function ClientClaim() {
               <details style={{marginTop:10}}>
                 <summary style={{cursor:'pointer'}}>Lien (optionnel)</summary>
                 <div style={{marginTop:8}}>
-                  <input
-                    type="url"
-                    value={form.link_url}
-                    onChange={e=>setForm(f=>({...f, link_url:e.target.value}))}
+                  <input type="url" value={form.link_url} onChange={e=>setForm(f=>({...f, link_url:e.target.value}))}
                     placeholder="https://votre-lien.exemple"
-                    style={{
-                      width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
-                      background:'transparent', color:'var(--color-text)'
-                    }}
+                    style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                   <small style={{opacity:.6}}>Le lien peut pointer vers une vidéo, une galerie, un site…</small>
                 </div>
               </details>
             </div>
 
-            {/* Step 2 — Choix de la minute (sélecteur local ergonomique) */}
+            {/* Step 2 — Minute */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-                ÉTAPE 2 — VOTRE MINUTE
-              </div>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE MINUTE</div>
 
               {/* mode de sélection */}
               <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
-                <button type="button"
-                        onClick={()=>setPickMode('local')}
-                        aria-pressed={pickMode==='local'}
-                        style={{
-                          padding:'8px 10px', borderRadius:10, cursor:'pointer',
-                          border: pickMode==='local' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                          background:'transparent', color:'var(--color-text)'
-                        }}>
-                  Sélection locale (recommandé)
-                </button>
-                <button type="button"
-                        onClick={()=>setPickMode('iso')}
-                        aria-pressed={pickMode==='iso'}
-                        style={{
-                          padding:'8px 10px', borderRadius:10, cursor:'pointer',
-                          border: pickMode==='iso' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                          background:'transparent', color:'var(--color-text)'
-                        }}>
-                  Saisie ISO UTC avancée
-                </button>
+                <button type="button" onClick={()=>setPickMode('local')} aria-pressed={pickMode==='local'}
+                  style={{padding:'8px 10px', borderRadius:10, cursor:'pointer',
+                    border: pickMode==='local' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    background:'transparent', color:'var(--color-text)'}}>Sélection locale (recommandé)</button>
+
+                <button type="button" onClick={()=>setPickMode('iso')} aria-pressed={pickMode==='iso'}
+                  style={{padding:'8px 10px', borderRadius:10, cursor:'pointer',
+                    border: pickMode==='iso' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    background:'transparent', color:'var(--color-text)'}}>Saisie ISO UTC avancée</button>
               </div>
 
               {/* LOCAL PICKER */}
               {pickMode==='local' && (
                 <div style={{display:'grid', gap:12}}>
                   <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8}}>
-                    {/* Année */}
                     <label style={{display:'grid', gap:6}}>
                       <span>Année</span>
                       <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
-                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
                         {range(1900, 2100).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
                       </select>
                     </label>
-                    {/* Mois */}
                     <label style={{display:'grid', gap:6}}>
                       <span>Mois</span>
                       <select value={M} onChange={e=>setM(parseInt(e.target.value))}
-                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
                         {MONTHS_FR.map((txt,idx)=> <option key={idx} value={idx+1} style={{color:'#000'}}>{txt}</option>)}
                       </select>
                     </label>
-                    {/* Jour */}
                     <label style={{display:'grid', gap:6}}>
                       <span>Jour</span>
                       <select value={D} onChange={e=>setD(parseInt(e.target.value))}
-                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
                         {range(1, daysInMonth(Y,M)).map(d=> <option key={d} value={d} style={{color:'#000'}}>{d.toString().padStart(2,'0')}</option>)}
                       </select>
                     </label>
-                    {/* Heure */}
                     <label style={{display:'grid', gap:6}}>
                       <span>Heure</span>
                       <select value={h} onChange={e=>setH(parseInt(e.target.value))}
-                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
                         {range(0,23).map(H=> <option key={H} value={H} style={{color:'#000'}}>{H.toString().padStart(2,'0')}</option>)}
                       </select>
                     </label>
-                    {/* Minute */}
                     <label style={{display:'grid', gap:6}}>
                       <span>Minute</span>
                       <select value={m} onChange={e=>setMin(parseInt(e.target.value))}
-                              style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
                         {range(0,59).map(Mi=> <option key={Mi} value={Mi} style={{color:'#000'}}>{Mi.toString().padStart(2,'0')}</option>)}
                       </select>
                     </label>
@@ -459,144 +394,139 @@ export default function ClientClaim() {
               {pickMode==='iso' && (
                 <label style={{display:'grid', gap:6}}>
                   <span>Horodatage <strong>UTC</strong> (ISO — ex. <code>2100-01-01T00:00Z</code>)</span>
-                  <input
-                    placeholder="2100-01-01T00:00Z"
-                    type="text" value={form.ts}
+                  <input placeholder="2100-01-01T00:00Z" type="text" value={form.ts}
                     onChange={e=>setForm(f=>({...f, ts:e.target.value}))}
-                    style={{
-                      padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10,
-                      background:'transparent', color:'var(--color-text)'
-                    }}
+                    style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                 </label>
               )}
 
               {/* Readouts */}
               <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
-                  <strong>UTC&nbsp;:</strong> {utcReadable || '—'}
-                </div>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
-                  <strong>Heure locale&nbsp;:</strong> {localReadableStr || '—'}
-                </div>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
-                  <strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}
-                </div>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>UTC&nbsp;:</strong> {utcReadable || '—'}</div>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Heure locale&nbsp;:</strong> {localReadableStr || '—'}</div>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}</div>
               </div>
 
               {/* Affichage sur le certificat */}
               <div style={{marginTop:12}}>
                 <div style={{fontSize:14, color:'var(--color-muted)', marginBottom:8}}>Affichage sur le certificat</div>
-                <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+                <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
                   {(['utc','utc+local','local+utc'] as const).map(option => (
                     <label key={option} style={{
                       padding:'8px 10px', borderRadius:10, cursor:'pointer',
                       border: form.time_display===option ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'
                     }}>
                       <input type="radio" name="time_display" value={option}
-                             checked={form.time_display===option}
-                             onChange={()=>setForm(f=>({...f, time_display: option}))}
-                             style={{display:'none'}}/>
-                      {{
-                        'utc':'UTC seulement',
-                        'utc+local':'UTC + local discret',
-                        'local+utc':'Local + UTC discret'
-                      }[option]}
+                        checked={form.time_display===option}
+                        onChange={()=>setForm(f=>({...f, time_display: option}))}
+                        style={{display:'none'}}/>
+                      {{ 'utc':'UTC seulement', 'utc+local':'UTC + local discret', 'local+utc':'Local + UTC discret' }[option]}
                     </label>
                   ))}
+
+                  {/* ⟵ date locale seulement */}
+                  {(form.time_display==='local+utc' || form.time_display==='utc+local') && (
+                    <label style={{marginLeft:6, display:'inline-flex', alignItems:'center', gap:8, fontSize:14}}>
+                      <input type="checkbox" checked={form.local_date_only}
+                        onChange={e=>setForm(f=>({...f, local_date_only: e.target.checked}))}/>
+                      Afficher <em>la date locale seulement</em> (JJ/MM/AAAA)
+                    </label>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Step 3 — Style du certificat */}
+            {/* Step 3 — Style + Couleur */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-                ÉTAPE 3 — STYLE DU CERTIFICAT
-              </div>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE & COULEUR</div>
 
+              {/* Styles */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
                 {STYLES.map(s => {
                   const selected = form.cert_style === s.id
                   const thumb = `/cert_bg/${s.id}_thumb.jpg`
                   const full = `/cert_bg/${s.id}.png`
                   return (
-                    <label key={s.id}
-                      style={{
-                        cursor:'pointer',
-                        border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                        borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
-                        boxShadow: selected ? 'var(--shadow-elev1)' : undefined
-                      }}>
-                      <input
-                        type="radio" name="cert_style" value={s.id}
-                        checked={selected}
-                        onChange={()=>setForm(f=>({...f, cert_style:s.id}))}
-                        style={{display:'none'}}
-                      />
-                      <div
-                        style={{
-                          height:110, borderRadius:12, border:'1px solid var(--color-border)',
-                          backgroundImage:`url(${thumb}), url(${full})`,
-                          backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
-                        }}
-                        aria-hidden
-                      />
+                    <label key={s.id} style={{
+                      cursor:'pointer',
+                      border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
+                      boxShadow: selected ? 'var(--shadow-elev1)' : undefined
+                    }}>
+                      <input type="radio" name="cert_style" value={s.id} checked={selected}
+                        onChange={()=>setForm(f=>({...f, cert_style:s.id}))} style={{display:'none'}}/>
+                      <div style={{
+                        height:110, borderRadius:12, border:'1px solid var(--color-border)',
+                        backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
+                      }} aria-hidden />
                       <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                         <div>
                           <div style={{fontWeight:700}}>{s.label}</div>
                           {s.hint && <div style={{opacity:.6, fontSize:12}}>{s.hint}</div>}
                         </div>
-                        <span aria-hidden="true" style={{
-                          width:10, height:10, borderRadius:99,
-                          background:selected ? 'var(--color-primary)' : 'var(--color-border)'
-                        }} />
+                        <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
                       </div>
                     </label>
                   )
                 })}
               </div>
 
+              {/* Couleur du texte */}
+              <div style={{marginTop:14, paddingTop:12, borderTop:'1px dashed var(--color-border)'}}>
+                <div style={{fontSize:14, color:'var(--color-muted)', marginBottom:8}}>Couleur de la police</div>
+                <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+                  {/* palette rapide */}
+                  {['#1A1F2A','#0E0E0E','#222831','#5E452A','#37474F','#1B5E20','#1A237E','#880E4F','#000000','#FFFFFF'].map(c=>(
+                    <button key={c} type="button" onClick={()=>setForm(f=>({...f, text_color: c}))}
+                      aria-label={`Couleur ${c}`}
+                      style={{
+                        width:26, height:26, borderRadius:999, border: '1px solid var(--color-border)',
+                        background: c, outline: form.text_color===c ? '3px solid rgba(228,183,61,.5)' : 'none', cursor:'pointer'
+                      }}/>
+                  ))}
+                  {/* picker/hex */}
+                  <label style={{display:'flex', alignItems:'center', gap:8, marginLeft:6}}>
+                    <input type="color" value={form.text_color}
+                      onChange={e=>setForm(f=>({...f, text_color: e.target.value}))}/>
+                    <input type="text" value={form.text_color}
+                      onChange={e=>{
+                        const v = e.target.value.trim()
+                        if (/^#[0-9a-fA-F]{6}$/.test(v)) setForm(f=>({...f, text_color: v}))
+                      }}
+                      style={{width:120, padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                      placeholder="#1A1F2A"/>
+                  </label>
+                  <small style={{opacity:.7}}>
+                    Astuce : privilégiez une couleur suffisamment sombre pour imprimer lisiblement sur fond clair.
+                  </small>
+                </div>
+              </div>
+
+              {/* Custom BG importer */}
               {form.cert_style === 'custom' && (
                 <div style={{marginTop:12, padding:12, border:'1px dashed var(--color-border)', borderRadius:12}}>
                   <label style={{display:'grid', gap:8}}>
-                    <span><strong>Importer votre fond (A4 portrait)</strong> — PNG/JPG 2480×3508 px recommandé</span>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
-                    />
+                    <span><strong>Importer votre fond (A4 portrait)</strong> — PNG/JPG 2480×3508 ou 1024×1536</span>
+                    <input type="file" accept="image/png,image/jpeg" onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)} />
                   </label>
                   {!!customErr && <p style={{color:'#ff8a8a', marginTop:8}}>{customErr}</p>}
-                  {customBg && (
-                    <p style={{opacity:.7, fontSize:12, marginTop:8}}>
-                      Image chargée : {customBg.w}×{customBg.h}px
-                    </p>
-                  )}
+                  {customBg && (<p style={{opacity:.7, fontSize:12, marginTop:8}}>Image chargée : {customBg.w}×{customBg.h}px</p>)}
                 </div>
               )}
 
               <p style={{margin:'10px 2px 0', fontSize:12, opacity:.7}}>
-                Les vignettes utilisent <code>/public/cert_bg/&lt;style&gt;_thumb.jpg</code> (fallback sur <code>&lt;style&gt;.png</code>).
+                Les vignettes utilisent <code>/public/cert_bg/&lt;style&gt;_thumb.jpg</code> (fallback <code>&lt;style&gt;.png</code>).
               </p>
             </div>
 
             {/* Submit */}
             <div>
-              <button
-                disabled={status==='loading'}
-                type="submit"
-                style={{
-                  background:'var(--color-primary)', color:'var(--color-on-primary)',
-                  padding:'14px 18px', borderRadius:12, fontWeight:800, border:'none',
-                  boxShadow: status==='loading' ? '0 0 0 6px rgba(228,183,61,.12)' : 'none',
-                  cursor: status==='loading' ? 'progress' : 'pointer'
-                }}
-              >
-                {status==='loading' ? 'Redirection…'
-                  : (isGift ? 'Offrir cette minute' : 'Payer & réserver cette minute')}
+              <button disabled={status==='loading'} type="submit"
+                style={{background:'var(--color-primary)', color:'var(--color-on-primary)', padding:'14px 18px', borderRadius:12, fontWeight:800, border:'none', boxShadow: status==='loading' ? '0 0 0 6px rgba(228,183,61,.12)' : 'none', cursor: status==='loading' ? 'progress' : 'pointer'}}>
+                {status==='loading' ? 'Redirection…' : (isGift ? 'Offrir cette minute' : 'Payer & réserver cette minute')}
               </button>
               {status==='error' && error && <p style={{color:'#ff8a8a', marginTop:8}}>{error}</p>}
-
               <p style={{marginTop:8, fontSize:12, color:'var(--color-muted)'}}>
                 Contenu numérique livré immédiatement : vous demandez l’exécution immédiate et <strong>renoncez</strong> au droit de rétractation (UE).
               </p>
@@ -605,143 +535,95 @@ export default function ClientClaim() {
 
           {/* ---------- PREVIEW COLUMN ---------- */}
           <aside aria-label="Aperçu du certificat"
-            style={{
-              position:'sticky', top:24,
-              background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12,
-              boxShadow:'var(--shadow-elev1)'
-            }}
-          >
+            style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
             <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
-            <img
-              src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png')
-                                              : `/cert_bg/${form.cert_style}.png`}
-              alt={`Aperçu fond certificat — ${form.cert_style}`}
-              width={840} height={1188}
-              style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
-            />
+              <img
+                src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png') : `/cert_bg/${form.cert_style}.png`}
+                alt={`Aperçu fond certificat — ${form.cert_style}`}
+                width={840} height={1188}
+                style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
+              />
 
               {/* Filigrane */}
-              <div aria-hidden
-                style={{
-                  position:'absolute', inset:0, pointerEvents:'none',
-                  display:'grid', placeItems:'center', transform:'rotate(-22deg)',
-                  opacity:.14, mixBlendMode:'multiply'
-                }}>
-                <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>
-                  PARCELS OF TIME — PREVIEW
-                </div>
+              <div aria-hidden style={{position:'absolute', inset:0, pointerEvents:'none', display:'grid', placeItems:'center', transform:'rotate(-22deg)', opacity:.14, mixBlendMode:'multiply'}}>
+                <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>PARCELS OF TIME — PREVIEW</div>
               </div>
 
-              {/* Overlay : contenu dans la safe-area */}
+              {/* Overlay : safe-area */}
               {(() => {
                 const ins = SAFE_INSETS_PCT[form.cert_style]
-                const EDGE_PX = 12 // marge visuelle contre le bord de la page (preview)
+                const EDGE_PX = 12
+                const localStr = localReadableStr
+                const showLocalFirst = form.time_display === 'local+utc'
                 return (
                   <>
                     <div style={{
                       position:'absolute',
                       top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`,
-                      display:'grid', gridTemplateRows:'auto 1fr', color:previewTextColor, textAlign:'center'
+                      display:'grid', gridTemplateRows:'auto 1fr', color:mainColor, textAlign:'center'
                     }}>
                       {/* En-tête */}
-                      <div style={{textAlign:'left'}}>
+                      <div style={{textAlign:'left', color:subtleColor}}>
                         <div style={{fontWeight:900, fontSize:'min(3.8vw, 20px)'}}>Parcels of Time</div>
                         <div style={{opacity:.9, fontSize:'min(3.2vw, 14px)'}}>Certificate of Claim</div>
                       </div>
 
-                      {/* Zone centrale */}
+                      {/* Zone centrale — horodatages */}
                       <div style={{display:'grid', placeItems:'center'}}>
                         <div style={{maxWidth:520}}>
-                          {/* Horodatage */}
-                          {form.time_display === 'utc' && (
-                            <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
-                              {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
+                          {/* main + sub times */}
+                          <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
+                            {showLocalFirst ? (localStr ? `${localStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)')
+                                            : (utcReadable || 'YYYY-MM-DD HH:MM UTC')}
+                          </div>
+                          {form.time_display !== 'utc' && (
+                            <div style={{color:subtleColor, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
+                              {showLocalFirst
+                                ? (utcReadable || 'YYYY-MM-DD HH:MM UTC')
+                                : (localStr ? `${localStr} (${tzLabel})` : '')
+                              }
                             </div>
                           )}
-                          {form.time_display === 'utc+local' && (
-                            <>
-                              <div style={{fontWeight:800, fontSize:'min(9vw, 26px)'}}>
-                                {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
-                              </div>
-                              <div style={{color:previewSubtle, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
-                                {localReadableStr ? `${localReadableStr} (${tzLabel})` : ''}
-                              </div>
-                            </>
-                          )}
-                          {form.time_display === 'local+utc' && (
-                            <>
-                              <div style={{fontWeight:800, fontSize:'min(9vw, 26px)'}}>
-                                {localReadableStr ? `${localReadableStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)'}
-                              </div>
-                              <div style={{color:previewSubtle, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
-                                {utcReadable || 'YYYY-MM-DD HH:MM UTC'}
-                              </div>
-                            </>
-                          )}
 
-                          {/* Title */}
-                          {form.title && (
-                            <>
-                              <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)', marginTop:8}}>Title</div>
-                              <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>{form.title}</div>
-                            </>
-                          )}
-
-                          <div style={{opacity:.7, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Owned by</div>
+                          {/* Owned by → Title → Message */}
+                          <div style={{opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Owned by</div>
                           <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>
                             {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
                           </div>
 
+                          {form.title && (
+                            <>
+                              <div style={{opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Title</div>
+                              <div style={{fontWeight:800, fontSize:'min(6.0vw, 17px)'}}>{form.title}</div>
+                            </>
+                          )}
+
                           {form.message && (
-                            <div style={{marginTop:10, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)'}}>
-                              “{form.message}”
-                            </div>
+                            <>
+                              <div style={{opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Message</div>
+                              <div style={{marginTop:6, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)'}}>
+                                “{form.message}”
+                              </div>
+                            </>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* ⬇️ Pied de page ANCRÉ AUX BORDS DE LA PAGE (et non à la safe-area) */}
-                    <div
-                    style={{
-                      position:'absolute',
-                      left: EDGE_PX,
-                      bottom: EDGE_PX,
-                      fontSize:'min(3.2vw,12px)',
-                      color: previewSubtle,
-                      textAlign:'left',
-                      pointerEvents:'none'
-                    }}
-                  >
-                    Certificate ID • Integrity hash (aperçu)
-                  </div>
-                    <div style={{
-                    position:'absolute',
-                    right: EDGE_PX,
-                    bottom: EDGE_PX,
-                    width:'min(18vw,110px)',
-                    height:'min(18vw,110px)',
-                    border:'1px dashed rgba(26,31,42,.45)',
-                    borderRadius:8,
-                    display:'grid',
-                    placeItems:'center',
-                    fontSize:'min(6vw,12px)',
-                    opacity:.85,
-                    pointerEvents:'none'
-                  }}>
-                      QR
+                    {/* Pied de page ancré */}
+                    <div style={{position:'absolute', left: EDGE_PX, bottom: EDGE_PX, fontSize:'min(3.2vw,12px)', color: subtleColor, textAlign:'left', pointerEvents:'none'}}>
+                      Certificate ID • Integrity hash (aperçu)
                     </div>
+                    <div style={{position:'absolute', right: EDGE_PX, bottom: EDGE_PX, width:'min(18vw,110px)', height:'min(18vw,110px)', border:'1px dashed rgba(26,31,42,.45)', borderRadius:8, display:'grid', placeItems:'center', fontSize:'min(6vw,12px)', opacity:.85, pointerEvents:'none'}}>QR</div>
                   </>
                 )
               })()}
             </div>
 
             <div style={{marginTop:10, fontSize:12, color:'var(--color-muted)'}}>
-              Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées.
-              Cet aperçu est indicatif (filigrane ajouté).
+              Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées. Cet aperçu est indicatif (filigrane ajouté).
             </div>
           </aside>
-
         </div>
       </section>
     </main>
