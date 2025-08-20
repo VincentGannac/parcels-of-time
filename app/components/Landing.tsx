@@ -320,7 +320,7 @@ function Pricing() {
   return (
     <section id="prix" style={{maxWidth:1280, margin:'0 auto', padding:'40px 24px 72px'}}>
       <SectionLabel>Prix & offres</SectionLabel>
-      <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:48, margin:'0 0 18px'}}>Des minutes pour chaque histoire</h3>
+      <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 18px'}}>Des minutes pour chaque histoire</h3>
       <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
         <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
           <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Standard</div>

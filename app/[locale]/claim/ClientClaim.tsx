@@ -9,6 +9,8 @@ type CertStyle =
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
 
 const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
+  // ✅ Custom en premier
+  { id: 'custom',     label: 'Custom',      hint: 'Importer image 2480×3508 (A4) ou 1024×1536' },
   { id: 'neutral',    label: 'Neutral',     hint: 'sobre & élégant' },
   { id: 'romantic',   label: 'Romantic',    hint: 'hearts & lace' },
   { id: 'birthday',   label: 'Birthday',    hint: 'balloons & confetti' },
@@ -17,7 +19,6 @@ const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
   { id: 'christmas',  label: 'Christmas',   hint: 'pine & snow' },
   { id: 'newyear',    label: 'New Year',    hint: 'fireworks trails' },
   { id: 'graduation', label: 'Graduation',  hint: 'laurel & caps' },
-  { id: 'custom',     label: 'Custom',      hint: 'Importer image 2480×3508 (A4) ou 1024×1536' },
 ] as const
 
 const SAFE_INSETS_PCT = {
@@ -86,10 +87,30 @@ const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
 
 // couleurs utils
 function clamp01(x:number){ return Math.max(0, Math.min(1, x)) }
-function hexToRgb(hex:string){ const m = /^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return {r:26,g:31,b:42}
-  const n = parseInt(m[1],16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 } }
+function hexToRgb(hex:string){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return {r:26,g:31,b:42}
+  const n = parseInt(m[1],16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 }
+}
 function mix(a:number,b:number,t:number){ return Math.round(a*(1-t)+b*t)}
 function lighten(hex:string, t=0.45){ const {r,g,b} = hexToRgb(hex); return `rgba(${mix(r,255,t)}, ${mix(g,255,t)}, ${mix(b,255,t)}, 0.9)` }
+
+// Contraste (approx. fond clair des certificats : #F4F1EC)
+const CERT_BG_HEX = '#F4F1EC'
+function relLum({r,g,b}:{r:number,g:number,b:number}){
+  const srgb = (c:number)=>{ c/=255; return c<=0.03928? c/12.92 : Math.pow((c+0.055)/1.055, 2.4) }
+  const R=srgb(r), G=srgb(g), B=srgb(b)
+  return 0.2126*R + 0.7152*G + 0.0722*B
+}
+function contrastRatio(fgHex:string, bgHex= CERT_BG_HEX){
+  const L1 = relLum(hexToRgb(fgHex)), L2 = relLum(hexToRgb(bgHex))
+  const light = Math.max(L1, L2), dark = Math.min(L1, L2)
+  return (light + 0.05) / (dark + 0.05)
+}
+function ratioLabel(r:number){
+  if (r >= 7) return {label:'AAA', color:'#0BBF6A'}
+  if (r >= 4.5) return {label:'AA', color:'#E4B73D'}
+  return {label:'⚠︎ Low', color:'#FF7A7A'}
+}
 
 export default function ClientClaim() {
   const params = useSearchParams()
@@ -105,10 +126,10 @@ export default function ClientClaim() {
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
-  // Sélecteur local
+  // Sélecteur local/UTC
   const now = new Date()
   const prefillDate = parseToDateOrNull(prefillTs) || now
-  const [pickMode, setPickMode] = useState<'local'|'iso'>(prefillTs ? 'iso' : 'local')
+  const [pickMode, setPickMode] = useState<'local'|'utc'>(prefillTs ? 'utc' : 'local')
   const [Y, setY]   = useState<number>(prefillDate.getFullYear())
   const [M, setM]   = useState<number>(prefillDate.getMonth()+1)
   const [D, setD]   = useState<number>(prefillDate.getDate())
@@ -116,11 +137,6 @@ export default function ClientClaim() {
   const [m, setMin] = useState<number>(prefillDate.getMinutes())
 
   useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M]) // eslint-disable-line
-  useEffect(()=>{
-    if (pickMode!=='local') return
-    const local = new Date(Y, M-1, D, h, m, 0, 0)
-    setForm(f=>({ ...f, ts: isoMinuteString(local) }))
-  }, [pickMode, Y,M,D,h,m]) // eslint-disable-line
 
   /** Form principal */
   const [form, setForm] = useState({
@@ -131,15 +147,46 @@ export default function ClientClaim() {
     link_url: '',
     ts: prefillTs,
     cert_style: initialStyle as CertStyle,
-    time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',     // ✅ par défaut
-    local_date_only: false,                                         // ✅ NEW
-    text_color: '#1A1F2A',                                          // ✅ NEW (hex)
+    time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
+    local_date_only: false,
+    text_color: '#1A1F2A',
   })
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
-  // Derived date
+  // Quand on change de mode, on resynchronise les champs Y/M/D/h/m avec la date courante
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
+  useEffect(()=>{
+    if(!parsedDate) return
+    if(pickMode==='utc'){
+      setY(parsedDate.getUTCFullYear())
+      setM(parsedDate.getUTCMonth()+1)
+      setD(parsedDate.getUTCDate())
+      setH(parsedDate.getUTCHours())
+      setMin(parsedDate.getUTCMinutes())
+    } else {
+      setY(parsedDate.getFullYear())
+      setM(parsedDate.getMonth()+1)
+      setD(parsedDate.getDate())
+      setH(parsedDate.getHours())
+      setMin(parsedDate.getMinutes())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickMode])
+
+  // Recalcule form.ts dès que Y/M/D/h/m changent (dans le mode actif)
+  useEffect(()=>{
+    let d: Date
+    if (pickMode==='local') {
+      d = new Date(Y, M-1, D, h, m, 0, 0) // interprété en local
+    } else {
+      const ms = Date.UTC(Y, M-1, D, h, m, 0, 0) // interprété en UTC
+      d = new Date(ms)
+    }
+    setForm(f=>({ ...f, ts: isoMinuteString(d) }))
+  }, [pickMode, Y, M, D, h, m])
+
+  // Readouts
   const utcReadable = useMemo(
     () => parsedDate ? parsedDate.toISOString().replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC') : '',
     [parsedDate]
@@ -199,13 +246,15 @@ export default function ClientClaim() {
   // Couleurs pour l’aperçu (dérivées de text_color)
   const mainColor = form.text_color || '#1A1F2A'
   const subtleColor = lighten(mainColor, 0.55)
+  const ratio = contrastRatio(mainColor)
+  const ratioMeta = ratioLabel(ratio)
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
 
     const d = parseToDateOrNull(form.ts)
-    if (!d) { setStatus('error'); setError('Merci de saisir une minute valide (ISO ex. 2100-01-01T00:00Z).'); return }
+    if (!d) { setStatus('error'); setError('Merci de saisir une minute valide.'); return }
 
     const payload:any = {
       ts: d.toISOString(),
@@ -255,6 +304,22 @@ export default function ClientClaim() {
     ['--shadow-elev2' as any]: '0 12px 36px rgba(0,0,0,.45)',
     background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh'
   }
+
+  // Palette élargie
+  const SWATCHES = [
+    // Neutres / foncés
+    '#000000','#111111','#1A1F2A','#222831','#2E3440','#37474F','#3E3E3E','#4B5563',
+    // Marrons / chauds
+    '#5E452A','#6D4C41','#795548','#8D6E63',
+    // Verts / bleus profonds
+    '#0B3D2E','#1B5E20','#2E7D32','#004D40','#0D47A1','#1A237E','#283593',
+    // Accents sobres
+    '#880E4F','#6A1B9A','#AD1457','#C2185B','#9C27B0',
+    // Presque noirs colorés
+    '#102A43','#0F2A2E','#14213D',
+    // Très clairs (utiles seulement sur fonds foncés)
+    '#FFFFFF','#E6EAF2',
+  ]
 
   return (
     <main style={containerStyle}>
@@ -329,6 +394,61 @@ export default function ClientClaim() {
               </details>
             </div>
 
+            {/* ✅ Nouveau bloc : Couleur de la police (juste sous l'étape 1, UI/UX améliorée) */}
+            <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10}}>
+                <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>COULEUR DE LA POLICE</div>
+                <div style={{display:'flex', alignItems:'center', gap:8, fontSize:12}}>
+                  <span style={{width:10, height:10, borderRadius:99, background:ratioMeta.color, display:'inline-block'}} />
+                  <span>Contraste : {ratio.toFixed(2)} — {ratioMeta.label}</span>
+                </div>
+              </div>
+
+              {/* Aperçu rapide */}
+              <div aria-label="Aperçu de texte" style={{marginTop:10, display:'flex', alignItems:'center', gap:12}}>
+                <div style={{width:42, height:42, borderRadius:10, border:'1px solid var(--color-border)', display:'grid', placeItems:'center', background: CERT_BG_HEX, color: mainColor, fontWeight:800}}>
+                  Aa
+                </div>
+                <div style={{flex:1, height:12, borderRadius:99, background: CERT_BG_HEX, position:'relative', border:'1px solid var(--color-border)'}}>
+                  <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', padding:'0 10px', color:mainColor, fontSize:12}}>“Owned by — 11:11 — 2024-12-31 UTC”</div>
+                </div>
+              </div>
+
+              {/* Palette élargie */}
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(34px, 1fr))', gap:8, marginTop:12}}>
+                {SWATCHES.map(c => (
+                  <button key={c} type="button" onClick={()=>setForm(f=>({...f, text_color: c}))}
+                    aria-label={`Couleur ${c}`} title={c}
+                    style={{
+                      width:34, height:34, borderRadius:12, cursor:'pointer',
+                      background:c, border:'1px solid var(--color-border)',
+                      outline: form.text_color===c ? '3px solid rgba(228,183,61,.5)' : 'none'
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Picker + HEX */}
+              <div style={{display:'flex', alignItems:'center', gap:10, marginTop:12, flexWrap:'wrap'}}>
+                <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                  <input type="color" value={form.text_color}
+                    onChange={e=>setForm(f=>({...f, text_color: e.target.value}))}/>
+                  <span style={{fontSize:12, opacity:.8}}>Sélecteur</span>
+                </label>
+                <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                  <span style={{fontSize:12, opacity:.8}}>HEX</span>
+                  <input type="text" value={form.text_color}
+                    onChange={e=>{
+                      const v = e.target.value.trim()
+                      if (/^#[0-9a-fA-F]{6}$/.test(v)) setForm(f=>({...f, text_color: v}))
+                    }}
+                    style={{width:120, padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                    placeholder="#1A1F2A"/>
+                </label>
+                <small style={{opacity:.7}}>Astuce : privilégiez une couleur sombre pour conserver une bonne lisibilité sur fond clair.</small>
+              </div>
+            </div>
+
             {/* Step 2 — Minute */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE MINUTE</div>
@@ -340,66 +460,58 @@ export default function ClientClaim() {
                     border: pickMode==='local' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                     background:'transparent', color:'var(--color-text)'}}>Sélection locale (recommandé)</button>
 
-                <button type="button" onClick={()=>setPickMode('iso')} aria-pressed={pickMode==='iso'}
+                {/* ✅ Renommé + mêmes outils que le mode local */}
+                <button type="button" onClick={()=>setPickMode('utc')} aria-pressed={pickMode==='utc'}
                   style={{padding:'8px 10px', borderRadius:10, cursor:'pointer',
-                    border: pickMode==='iso' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                    background:'transparent', color:'var(--color-text)'}}>Saisie ISO UTC avancée</button>
+                    border: pickMode==='utc' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    background:'transparent', color:'var(--color-text)'}}>Saisie UTC</button>
               </div>
 
-              {/* LOCAL PICKER */}
-              {pickMode==='local' && (
-                <div style={{display:'grid', gap:12}}>
-                  <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8}}>
-                    <label style={{display:'grid', gap:6}}>
-                      <span>Année</span>
-                      <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                        {range(1900, 2100).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
-                      </select>
-                    </label>
-                    <label style={{display:'grid', gap:6}}>
-                      <span>Mois</span>
-                      <select value={M} onChange={e=>setM(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                        {MONTHS_FR.map((txt,idx)=> <option key={idx} value={idx+1} style={{color:'#000'}}>{txt}</option>)}
-                      </select>
-                    </label>
-                    <label style={{display:'grid', gap:6}}>
-                      <span>Jour</span>
-                      <select value={D} onChange={e=>setD(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                        {range(1, daysInMonth(Y,M)).map(d=> <option key={d} value={d} style={{color:'#000'}}>{d.toString().padStart(2,'0')}</option>)}
-                      </select>
-                    </label>
-                    <label style={{display:'grid', gap:6}}>
-                      <span>Heure</span>
-                      <select value={h} onChange={e=>setH(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                        {range(0,23).map(H=> <option key={H} value={H} style={{color:'#000'}}>{H.toString().padStart(2,'0')}</option>)}
-                      </select>
-                    </label>
-                    <label style={{display:'grid', gap:6}}>
-                      <span>Minute</span>
-                      <select value={m} onChange={e=>setMin(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                        {range(0,59).map(Mi=> <option key={Mi} value={Mi} style={{color:'#000'}}>{Mi.toString().padStart(2,'0')}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                  <small style={{opacity:.7}}>Fuseau local détecté : <strong>{tzLabel}</strong>. L’horodatage final est enregistré en <strong>UTC</strong>.</small>
-                </div>
-              )}
-
-              {/* ISO INPUT */}
-              {pickMode==='iso' && (
+              {/* Sélecteurs communs (interprétés en local ou en UTC selon le mode) */}
+              <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8}}>
                 <label style={{display:'grid', gap:6}}>
-                  <span>Horodatage <strong>UTC</strong> (ISO — ex. <code>2100-01-01T00:00Z</code>)</span>
-                  <input placeholder="2100-01-01T00:00Z" type="text" value={form.ts}
-                    onChange={e=>setForm(f=>({...f, ts:e.target.value}))}
-                    style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                  />
+                  <span>Année</span>
+                  <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
+                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                    {range(1900, 2100).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
+                  </select>
                 </label>
-              )}
+                <label style={{display:'grid', gap:6}}>
+                  <span>Mois</span>
+                  <select value={M} onChange={e=>setM(parseInt(e.target.value))}
+                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                    {MONTHS_FR.map((txt,idx)=> <option key={idx} value={idx+1} style={{color:'#000'}}>{txt}</option>)}
+                  </select>
+                </label>
+                <label style={{display:'grid', gap:6}}>
+                  <span>Jour</span>
+                  <select value={D} onChange={e=>setD(parseInt(e.target.value))}
+                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                    {range(1, daysInMonth(Y,M)).map(d=> <option key={d} value={d} style={{color:'#000'}}>{d.toString().padStart(2,'0')}</option>)}
+                  </select>
+                </label>
+                <label style={{display:'grid', gap:6}}>
+                  <span>Heure</span>
+                  <select value={h} onChange={e=>setH(parseInt(e.target.value))}
+                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                    {range(0,23).map(H=> <option key={H} value={H} style={{color:'#000'}}>{H.toString().padStart(2,'0')}</option>)}
+                  </select>
+                </label>
+                <label style={{display:'grid', gap:6}}>
+                  <span>Minute</span>
+                  <select value={m} onChange={e=>setMin(parseInt(e.target.value))}
+                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                    {range(0,59).map(Mi=> <option key={Mi} value={Mi} style={{color:'#000'}}>{Mi.toString().padStart(2,'0')}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              {/* Infos fuseau / mode */}
+              <small style={{opacity:.7, display:'block', marginTop:8}}>
+                {pickMode==='local'
+                  ? <>Fuseau local détecté : <strong>{tzLabel}</strong>. L’horodatage final est enregistré en <strong>UTC</strong>.</>
+                  : <>Mode <strong>UTC</strong> : vos sélections (année, mois, jour, heure, minute) sont interprétées directement en UTC.</>}
+              </small>
 
               {/* Readouts */}
               <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
@@ -425,7 +537,6 @@ export default function ClientClaim() {
                     </label>
                   ))}
 
-                  {/* ⟵ date locale seulement */}
                   {(form.time_display==='local+utc' || form.time_display==='utc+local') && (
                     <label style={{marginLeft:6, display:'inline-flex', alignItems:'center', gap:8, fontSize:14}}>
                       <input type="checkbox" checked={form.local_date_only}
@@ -437,9 +548,9 @@ export default function ClientClaim() {
               </div>
             </div>
 
-            {/* Step 3 — Style + Couleur */}
+            {/* Step 3 — Style (couleur déplacée au-dessus) */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE & COULEUR</div>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE</div>
 
               {/* Styles */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
@@ -472,38 +583,7 @@ export default function ClientClaim() {
                 })}
               </div>
 
-              {/* Couleur du texte */}
-              <div style={{marginTop:14, paddingTop:12, borderTop:'1px dashed var(--color-border)'}}>
-                <div style={{fontSize:14, color:'var(--color-muted)', marginBottom:8}}>Couleur de la police</div>
-                <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
-                  {/* palette rapide */}
-                  {['#1A1F2A','#0E0E0E','#222831','#5E452A','#37474F','#1B5E20','#1A237E','#880E4F','#000000','#FFFFFF'].map(c=>(
-                    <button key={c} type="button" onClick={()=>setForm(f=>({...f, text_color: c}))}
-                      aria-label={`Couleur ${c}`}
-                      style={{
-                        width:26, height:26, borderRadius:999, border: '1px solid var(--color-border)',
-                        background: c, outline: form.text_color===c ? '3px solid rgba(228,183,61,.5)' : 'none', cursor:'pointer'
-                      }}/>
-                  ))}
-                  {/* picker/hex */}
-                  <label style={{display:'flex', alignItems:'center', gap:8, marginLeft:6}}>
-                    <input type="color" value={form.text_color}
-                      onChange={e=>setForm(f=>({...f, text_color: e.target.value}))}/>
-                    <input type="text" value={form.text_color}
-                      onChange={e=>{
-                        const v = e.target.value.trim()
-                        if (/^#[0-9a-fA-F]{6}$/.test(v)) setForm(f=>({...f, text_color: v}))
-                      }}
-                      style={{width:120, padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                      placeholder="#1A1F2A"/>
-                  </label>
-                  <small style={{opacity:.7}}>
-                    Astuce : privilégiez une couleur suffisamment sombre pour imprimer lisiblement sur fond clair.
-                  </small>
-                </div>
-              </div>
-
-              {/* Custom BG importer */}
+              {/* Import Custom */}
               {form.cert_style === 'custom' && (
                 <div style={{marginTop:12, padding:12, border:'1px dashed var(--color-border)', borderRadius:12}}>
                   <label style={{display:'grid', gap:8}}>
