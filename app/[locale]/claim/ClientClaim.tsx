@@ -1,7 +1,7 @@
 // app/claim/ClientClaim.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 type CertStyle =
@@ -9,7 +9,7 @@ type CertStyle =
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
 
 const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
-  // ✅ Custom en premier
+  // ✅ Custom en premier (ordre d’affichage)
   { id: 'custom',     label: 'Custom',      hint: 'Importer image 2480×3508 (A4) ou 1024×1536' },
   { id: 'neutral',    label: 'Neutral',     hint: 'sobre & élégant' },
   { id: 'romantic',   label: 'Romantic',    hint: 'hearts & lace' },
@@ -114,8 +114,9 @@ export default function ClientClaim() {
   const initialGift = giftParam === '1' || giftParam === 'true'
 
   const allowed = STYLES.map(s => s.id)
+  // ⬅️ Neutral par défaut (sauf si un style valide est passé en query)
   const initialStyle: CertStyle = (allowed as readonly string[]).includes(styleParam as CertStyle)
-    ? (styleParam as CertStyle) : 'custom' // ⬅️ on privilégie Custom si query param valide sinon 'custom' par défaut ?
+    ? (styleParam as CertStyle) : 'neutral'
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
@@ -210,6 +211,8 @@ export default function ClientClaim() {
   // Custom BG
   const [customBg, setCustomBg] = useState<{ url:string; dataUrl:string; w:number; h:number } | null>(null)
   const [customErr, setCustomErr] = useState('')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const openFileDialog = () => fileInputRef.current?.click()
 
   async function fileToDataUrl(f: File): Promise<string> {
     return new Promise((res, rej) => {
@@ -277,7 +280,6 @@ export default function ClientClaim() {
       setStatus('error')
       try {
         const j = await res.json()
-        // 🔎 messages un peu plus parlants
         const map: Record<string,string> = {
           rate_limited: 'Trop de tentatives. Réessaye dans ~1 minute.',
           invalid_ts: 'Horodatage invalide. Utilise un ISO comme 2100-01-01T00:00Z.',
@@ -310,7 +312,6 @@ export default function ClientClaim() {
     background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh'
   }
 
-  // Palette élargie
   const SWATCHES = [
     '#000000','#111111','#1A1F2A','#222831','#2E3440','#37474F','#3E3E3E','#4B5563',
     '#5E452A','#6D4C41','#795548','#8D6E63',
@@ -561,9 +562,18 @@ export default function ClientClaim() {
               </div>
             </div>
 
-            {/* Step 3 — Style (avec import Custom directement sous la carte) */}
+            {/* Step 3 — Style (ouverture directe du picker pour Custom) */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE</div>
+
+              {/* input caché pour Custom */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                style={{display:'none'}}
+                onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
+              />
 
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
                 {STYLES.map(s => {
@@ -572,41 +582,47 @@ export default function ClientClaim() {
                   const full = `/cert_bg/${s.id}.png`
                   const isCustom = s.id === 'custom'
                   return (
-                    <div key={s.id} style={{display:'grid', gap:10}}>
-                      <label style={{
-                        cursor:'pointer',
-                        border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                        borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
-                        boxShadow: selected ? 'var(--shadow-elev1)' : undefined
-                      }}>
-                        <input type="radio" name="cert_style" value={s.id} checked={selected}
-                          onChange={()=>setForm(f=>({...f, cert_style:s.id}))} style={{display:'none'}}/>
-                        <div style={{
-                          height:110, borderRadius:12, border:'1px solid var(--color-border)',
-                          backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
-                        }} aria-hidden />
-                        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-                          <div>
-                            <div style={{fontWeight:700}}>{s.label}</div>
-                            {s.hint && <div style={{opacity:.6, fontSize:12}}>{s.hint}</div>}
-                          </div>
-                          <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
-                        </div>
-                      </label>
+                    <label key={s.id} style={{
+                      cursor:'pointer',
+                      border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
+                      boxShadow: selected ? 'var(--shadow-elev1)' : undefined, position:'relative'
+                    }}
+                      onClick={()=>{
+                        // si on clique la carte Custom, on ouvre directement le file picker
+                        if (isCustom) openFileDialog()
+                      }}
+                    >
+                      <input
+                        type="radio" name="cert_style" value={s.id}
+                        checked={selected}
+                        onChange={()=>setForm(f=>({...f, cert_style:s.id}))}
+                        style={{display:'none'}}
+                      />
+                      <div style={{
+                        height:110, borderRadius:12, border:'1px solid var(--color-border)',
+                        backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
+                      }} aria-hidden />
 
-                      {/* ⬇️ Importer votre fond immédiatement sous la carte Custom quand sélectionnée */}
-                      {isCustom && selected && (
-                        <div style={{marginTop:-2, padding:12, border:'1px dashed var(--color-border)', borderRadius:12}}>
-                          <label style={{display:'grid', gap:8}}>
-                            <span><strong>Importer votre fond (A4 portrait)</strong> — PNG/JPG 2480×3508 ou 1024×1536</span>
-                            <input type="file" accept="image/png,image/jpeg" onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)} />
-                          </label>
-                          {!!customErr && <p style={{color:'#ff8a8a', marginTop:8}}>{customErr}</p>}
-                          {customBg && (<p style={{opacity:.7, fontSize:12, marginTop:8}}>Image chargée : {customBg.w}×{customBg.h}px</p>)}
-                          {!customBg && <p style={{opacity:.6, fontSize:12, marginTop:8}}>Astuce : privilégiez une image haute résolution pour un rendu net à l’impression.</p>}
+                      {/* Badge discret quand un fond custom est chargé */}
+                      {isCustom && customBg && (
+                        <div style={{
+                          position:'absolute', top:10, right:10,
+                          fontSize:11, padding:'4px 8px', borderRadius:999,
+                          background:'rgba(228,183,61,.14)', border:'1px solid var(--color-primary)'
+                        }}>
+                          Image chargée ✓
                         </div>
                       )}
-                    </div>
+
+                      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                        <div>
+                          <div style={{fontWeight:700}}>{s.label}</div>
+                          {s.hint && <div style={{opacity:.6, fontSize:12}}>{s.hint}</div>}
+                        </div>
+                        <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
+                      </div>
+                    </label>
                   )
                 })}
               </div>
