@@ -115,7 +115,7 @@ export default function ClientClaim() {
 
   const allowed = STYLES.map(s => s.id)
   const initialStyle: CertStyle = (allowed as readonly string[]).includes(styleParam as CertStyle)
-    ? (styleParam as CertStyle) : 'neutral'
+    ? (styleParam as CertStyle) : 'custom' // ⬅️ on privilégie Custom si query param valide sinon 'custom' par défaut ?
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
@@ -143,7 +143,7 @@ export default function ClientClaim() {
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
     local_date_only: false,
     text_color: '#1A1F2A',
-    // ✅ Nouveaux drapeaux de publication (opt-in)
+    // ✅ Drapeaux registre public (opt-in)
     title_public: false,
     message_public: false,
   })
@@ -277,7 +277,17 @@ export default function ClientClaim() {
       setStatus('error')
       try {
         const j = await res.json()
-        setError(j.error || 'Unknown error')
+        // 🔎 messages un peu plus parlants
+        const map: Record<string,string> = {
+          rate_limited: 'Trop de tentatives. Réessaye dans ~1 minute.',
+          invalid_ts: 'Horodatage invalide. Utilise un ISO comme 2100-01-01T00:00Z.',
+          missing_fields: 'Merci de renseigner au minimum l’e-mail et la minute.',
+          custom_bg_invalid: 'Image personnalisée invalide (doit être PNG/JPG en data URL).',
+          stripe_key_missing: 'Configuration Stripe absente côté serveur.',
+          bad_price: 'Prix invalide pour cette minute.',
+          stripe_error: 'Erreur Stripe côté serveur.',
+        }
+        setError(map[j.error] || j.error || 'Unknown error')
       } catch { setError('Unknown error') }
       return
     }
@@ -421,14 +431,7 @@ export default function ClientClaim() {
 
               {/* Palette élargie */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(34px, 1fr))', gap:8, marginTop:12}}>
-                {[
-                  '#000000','#111111','#1A1F2A','#222831','#2E3440','#37474F','#3E3E3E','#4B5563',
-                  '#5E452A','#6D4C41','#795548','#8D6E63',
-                  '#0B3D2E','#1B5E20','#2E7D32','#004D40','#0D47A1','#1A237E','#283593',
-                  '#880E4F','#6A1B9A','#AD1457','#C2185B','#9C27B0',
-                  '#102A43','#0F2A2E','#14213D',
-                  '#FFFFFF','#E6EAF2',
-                ].map(c => (
+                {SWATCHES.map(c => (
                   <button key={c} type="button" onClick={()=>setForm(f=>({...f, text_color: c}))}
                     aria-label={`Couleur ${c}`} title={c}
                     style={{
@@ -558,7 +561,7 @@ export default function ClientClaim() {
               </div>
             </div>
 
-            {/* Step 3 — Style */}
+            {/* Step 3 — Style (avec import Custom directement sous la carte) */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE</div>
 
@@ -567,41 +570,46 @@ export default function ClientClaim() {
                   const selected = form.cert_style === s.id
                   const thumb = `/cert_bg/${s.id}_thumb.jpg`
                   const full = `/cert_bg/${s.id}.png`
+                  const isCustom = s.id === 'custom'
                   return (
-                    <label key={s.id} style={{
-                      cursor:'pointer',
-                      border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                      borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
-                      boxShadow: selected ? 'var(--shadow-elev1)' : undefined
-                    }}>
-                      <input type="radio" name="cert_style" value={s.id} checked={selected}
-                        onChange={()=>setForm(f=>({...f, cert_style:s.id}))} style={{display:'none'}}/>
-                      <div style={{
-                        height:110, borderRadius:12, border:'1px solid var(--color-border)',
-                        backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
-                      }} aria-hidden />
-                      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-                        <div>
-                          <div style={{fontWeight:700}}>{s.label}</div>
-                          {s.hint && <div style={{opacity:.6, fontSize:12}}>{s.hint}</div>}
+                    <div key={s.id} style={{display:'grid', gap:10}}>
+                      <label style={{
+                        cursor:'pointer',
+                        border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                        borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
+                        boxShadow: selected ? 'var(--shadow-elev1)' : undefined
+                      }}>
+                        <input type="radio" name="cert_style" value={s.id} checked={selected}
+                          onChange={()=>setForm(f=>({...f, cert_style:s.id}))} style={{display:'none'}}/>
+                        <div style={{
+                          height:110, borderRadius:12, border:'1px solid var(--color-border)',
+                          backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
+                        }} aria-hidden />
+                        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                          <div>
+                            <div style={{fontWeight:700}}>{s.label}</div>
+                            {s.hint && <div style={{opacity:.6, fontSize:12}}>{s.hint}</div>}
+                          </div>
+                          <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
                         </div>
-                        <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
-                      </div>
-                    </label>
+                      </label>
+
+                      {/* ⬇️ Importer votre fond immédiatement sous la carte Custom quand sélectionnée */}
+                      {isCustom && selected && (
+                        <div style={{marginTop:-2, padding:12, border:'1px dashed var(--color-border)', borderRadius:12}}>
+                          <label style={{display:'grid', gap:8}}>
+                            <span><strong>Importer votre fond (A4 portrait)</strong> — PNG/JPG 2480×3508 ou 1024×1536</span>
+                            <input type="file" accept="image/png,image/jpeg" onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)} />
+                          </label>
+                          {!!customErr && <p style={{color:'#ff8a8a', marginTop:8}}>{customErr}</p>}
+                          {customBg && (<p style={{opacity:.7, fontSize:12, marginTop:8}}>Image chargée : {customBg.w}×{customBg.h}px</p>)}
+                          {!customBg && <p style={{opacity:.6, fontSize:12, marginTop:8}}>Astuce : privilégiez une image haute résolution pour un rendu net à l’impression.</p>}
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
               </div>
-
-              {form.cert_style === 'custom' && (
-                <div style={{marginTop:12, padding:12, border:'1px dashed var(--color-border)', borderRadius:12}}>
-                  <label style={{display:'grid', gap:8}}>
-                    <span><strong>Importer votre fond (A4 portrait)</strong> — PNG/JPG 2480×3508 ou 1024×1536</span>
-                    <input type="file" accept="image/png,image/jpeg" onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)} />
-                  </label>
-                  {!!customErr && <p style={{color:'#ff8a8a', marginTop:8}}>{customErr}</p>}
-                  {customBg && (<p style={{opacity:.7, fontSize:12, marginTop:8}}>Image chargée : {customBg.w}×{customBg.h}px</p>)}
-                </div>
-              )}
 
               <p style={{margin:'10px 2px 0', fontSize:12, opacity:.7}}>
                 Les vignettes utilisent <code>/public/cert_bg/&lt;style&gt;_thumb.jpg</code> (fallback <code>&lt;style&gt;.png</code>).
