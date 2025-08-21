@@ -47,13 +47,11 @@ function safeDecode(value: string): string {
   try { for (let i=0;i<3;i++){ const dec=decodeURIComponent(out); if(dec===out) break; out=dec } } catch {}
   return out
 }
-
 function isoMinuteString(d: Date) {
   const copy = new Date(d.getTime())
   copy.setUTCSeconds(0,0)
   return copy.toISOString()
 }
-
 function parseToDateOrNull(input: string): Date | null {
   const s = (input || '').trim()
   if (!s) return null
@@ -62,7 +60,6 @@ function parseToDateOrNull(input: string): Date | null {
   d.setUTCSeconds(0,0)
   return d
 }
-
 function localReadable(d: Date | null) {
   if (!d) return ''
   try {
@@ -78,15 +75,11 @@ function localDayOnly(d: Date | null) {
     return d.toLocaleDateString(undefined, { year:'numeric', month:'2-digit', day:'2-digit' })
   } catch { return '' }
 }
-
-function daysInMonth(y:number, m:number) {
-  return new Date(y, m, 0).getDate()
-}
+function daysInMonth(y:number, m:number) { return new Date(y, m, 0).getDate() }
 const MONTHS_FR = ['01 — Jan','02 — Fév','03 — Mar','04 — Avr','05 — Mai','06 — Juin','07 — Juil','08 — Août','09 — Sep','10 — Oct','11 — Nov','12 — Déc']
 const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
 
 // couleurs utils
-function clamp01(x:number){ return Math.max(0, Math.min(1, x)) }
 function hexToRgb(hex:string){
   const m = /^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return {r:26,g:31,b:42}
   const n = parseInt(m[1],16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 }
@@ -150,11 +143,14 @@ export default function ClientClaim() {
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
     local_date_only: false,
     text_color: '#1A1F2A',
+    // ✅ Nouveaux drapeaux de publication (opt-in)
+    title_public: false,
+    message_public: false,
   })
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
-  // Quand on change de mode, on resynchronise les champs Y/M/D/h/m avec la date courante
+  // Resync Y/M/D/h/m quand on change de mode
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
   useEffect(()=>{
     if(!parsedDate) return
@@ -174,15 +170,11 @@ export default function ClientClaim() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickMode])
 
-  // Recalcule form.ts dès que Y/M/D/h/m changent (dans le mode actif)
+  // Recalcule form.ts dès que Y/M/D/h/m changent
   useEffect(()=>{
     let d: Date
-    if (pickMode==='local') {
-      d = new Date(Y, M-1, D, h, m, 0, 0) // interprété en local
-    } else {
-      const ms = Date.UTC(Y, M-1, D, h, m, 0, 0) // interprété en UTC
-      d = new Date(ms)
-    }
+    if (pickMode==='local') d = new Date(Y, M-1, D, h, m, 0, 0)
+    else d = new Date(Date.UTC(Y, M-1, D, h, m, 0, 0))
     setForm(f=>({ ...f, ts: isoMinuteString(d) }))
   }, [pickMode, Y, M, D, h, m])
 
@@ -243,7 +235,7 @@ export default function ClientClaim() {
     img.src = dataUrl
   }
 
-  // Couleurs pour l’aperçu (dérivées de text_color)
+  // Couleurs pour l’aperçu
   const mainColor = form.text_color || '#1A1F2A'
   const subtleColor = lighten(mainColor, 0.55)
   const ratio = contrastRatio(mainColor)
@@ -267,6 +259,9 @@ export default function ClientClaim() {
       time_display: form.time_display,
       local_date_only: form.local_date_only ? '1' : '0',
       text_color: mainColor,
+      // ✅ publier ou non dans le registre
+      title_public: form.title_public ? '1' : '0',
+      message_public: form.message_public ? '1' : '0',
     }
     if (form.cert_style === 'custom' && customBg?.dataUrl) {
       payload.custom_bg_data_url = customBg.dataUrl
@@ -307,17 +302,11 @@ export default function ClientClaim() {
 
   // Palette élargie
   const SWATCHES = [
-    // Neutres / foncés
     '#000000','#111111','#1A1F2A','#222831','#2E3440','#37474F','#3E3E3E','#4B5563',
-    // Marrons / chauds
     '#5E452A','#6D4C41','#795548','#8D6E63',
-    // Verts / bleus profonds
     '#0B3D2E','#1B5E20','#2E7D32','#004D40','#0D47A1','#1A237E','#283593',
-    // Accents sobres
     '#880E4F','#6A1B9A','#AD1457','#C2185B','#9C27B0',
-    // Presque noirs colorés
     '#102A43','#0F2A2E','#14213D',
-    // Très clairs (utiles seulement sur fonds foncés)
     '#FFFFFF','#E6EAF2',
   ]
 
@@ -364,23 +353,39 @@ export default function ClientClaim() {
                 />
               </label>
 
-              <label style={{display:'grid', gap:6, marginTop:10}}>
-                <span>Titre (optionnel) — affiché sur le certificat</span>
-                <input type="text" value={form.title}
-                  onChange={e=>setForm(f=>({...f, title:e.target.value}))}
-                  placeholder="Ex. “Premier baiser sous la pluie”"
-                  style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                />
-              </label>
+              <div style={{display:'grid', gap:6, marginTop:10}}>
+                <label>
+                  <span>Titre (optionnel) — affiché sur le certificat</span>
+                  <input type="text" value={form.title}
+                    onChange={e=>setForm(f=>({...f, title:e.target.value}))}
+                    placeholder="Ex. “Premier baiser sous la pluie”"
+                    style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                  />
+                </label>
+                <label style={{display:'inline-flex', alignItems:'center', gap:8, fontSize:13, marginTop:4}}>
+                  <input type="checkbox"
+                         checked={form.title_public}
+                         onChange={e=>setForm(f=>({...f, title_public: e.target.checked}))} />
+                  <span>Publier le <strong>titre</strong> anonymement dans le registre public</span>
+                </label>
+              </div>
 
-              <label style={{display:'grid', gap:6, marginTop:10}}>
-                <span>Message (optionnel)</span>
-                <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} rows={3}
-                  placeholder={isGift ? '“Pour la minute de notre rencontre…”' : '“La minute où tout a commencé.”'}
-                  style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                />
-                <small style={{opacity:.6}}>Contenu modéré. Restez bienveillant(e) ❤️</small>
-              </label>
+              <div style={{display:'grid', gap:6, marginTop:10}}>
+                <label>
+                  <span>Message (optionnel)</span>
+                  <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} rows={3}
+                    placeholder={isGift ? '“Pour la minute de notre rencontre…”' : '“La minute où tout a commencé.”'}
+                    style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                  />
+                </label>
+                <label style={{display:'inline-flex', alignItems:'center', gap:8, fontSize:13, marginTop:4}}>
+                  <input type="checkbox"
+                         checked={form.message_public}
+                         onChange={e=>setForm(f=>({...f, message_public: e.target.checked}))} />
+                  <span>Publier le <strong>message</strong> anonymement dans le registre public</span>
+                </label>
+                <small style={{opacity:.6}}>Aucune autre information n’est publiée. Contenu modéré. Restez bienveillant(e) ❤️</small>
+              </div>
 
               <details style={{marginTop:10}}>
                 <summary style={{cursor:'pointer'}}>Lien (optionnel)</summary>
@@ -389,12 +394,12 @@ export default function ClientClaim() {
                     placeholder="https://votre-lien.exemple"
                     style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
-                  <small style={{opacity:.6}}>Le lien peut pointer vers une vidéo, une galerie, un site…</small>
+                  <small style={{opacity:.6}}>Le lien peut pointer vers une vidéo, une galerie, un site… (jamais publié dans le registre)</small>
                 </div>
               </details>
             </div>
 
-            {/* ✅ Nouveau bloc : Couleur de la police (juste sous l'étape 1, UI/UX améliorée) */}
+            {/* ✅ Couleur de la police (sous l'étape 1) */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>COULEUR DE LA POLICE</div>
@@ -416,7 +421,14 @@ export default function ClientClaim() {
 
               {/* Palette élargie */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(34px, 1fr))', gap:8, marginTop:12}}>
-                {SWATCHES.map(c => (
+                {[
+                  '#000000','#111111','#1A1F2A','#222831','#2E3440','#37474F','#3E3E3E','#4B5563',
+                  '#5E452A','#6D4C41','#795548','#8D6E63',
+                  '#0B3D2E','#1B5E20','#2E7D32','#004D40','#0D47A1','#1A237E','#283593',
+                  '#880E4F','#6A1B9A','#AD1457','#C2185B','#9C27B0',
+                  '#102A43','#0F2A2E','#14213D',
+                  '#FFFFFF','#E6EAF2',
+                ].map(c => (
                   <button key={c} type="button" onClick={()=>setForm(f=>({...f, text_color: c}))}
                     aria-label={`Couleur ${c}`} title={c}
                     style={{
@@ -445,7 +457,7 @@ export default function ClientClaim() {
                     style={{width:120, padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                     placeholder="#1A1F2A"/>
                 </label>
-                <small style={{opacity:.7}}>Astuce : privilégiez une couleur sombre pour conserver une bonne lisibilité sur fond clair.</small>
+                <small style={{opacity:.7}}>Astuce : choisissez une couleur sombre pour une bonne lisibilité sur fond clair.</small>
               </div>
             </div>
 
@@ -460,14 +472,13 @@ export default function ClientClaim() {
                     border: pickMode==='local' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                     background:'transparent', color:'var(--color-text)'}}>Sélection locale (recommandé)</button>
 
-                {/* ✅ Renommé + mêmes outils que le mode local */}
                 <button type="button" onClick={()=>setPickMode('utc')} aria-pressed={pickMode==='utc'}
                   style={{padding:'8px 10px', borderRadius:10, cursor:'pointer',
                     border: pickMode==='utc' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                     background:'transparent', color:'var(--color-text)'}}>Saisie UTC</button>
               </div>
 
-              {/* Sélecteurs communs (interprétés en local ou en UTC selon le mode) */}
+              {/* Sélecteurs communs */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8}}>
                 <label style={{display:'grid', gap:6}}>
                   <span>Année</span>
@@ -506,7 +517,6 @@ export default function ClientClaim() {
                 </label>
               </div>
 
-              {/* Infos fuseau / mode */}
               <small style={{opacity:.7, display:'block', marginTop:8}}>
                 {pickMode==='local'
                   ? <>Fuseau local détecté : <strong>{tzLabel}</strong>. L’horodatage final est enregistré en <strong>UTC</strong>.</>
@@ -548,11 +558,10 @@ export default function ClientClaim() {
               </div>
             </div>
 
-            {/* Step 3 — Style (couleur déplacée au-dessus) */}
+            {/* Step 3 — Style */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE</div>
 
-              {/* Styles */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
                 {STYLES.map(s => {
                   const selected = form.cert_style === s.id
@@ -583,7 +592,6 @@ export default function ClientClaim() {
                 })}
               </div>
 
-              {/* Import Custom */}
               {form.cert_style === 'custom' && (
                 <div style={{marginTop:12, padding:12, border:'1px dashed var(--color-border)', borderRadius:12}}>
                   <label style={{display:'grid', gap:8}}>

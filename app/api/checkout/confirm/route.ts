@@ -42,6 +42,10 @@ export async function GET(req: Request) {
     const local_date_only = String(s.metadata?.local_date_only) === '1'
     const text_color = /^#[0-9a-fA-F]{6}$/.test(String(s.metadata?.text_color || '')) ? String(s.metadata?.text_color).toLowerCase() : '#1a1f2a'
 
+    // ✅ flags public
+    const title_public = String(s.metadata?.title_public) === '1'
+    const message_public = String(s.metadata?.message_public) === '1'
+
     const amount_total =
       s.amount_total ??
       (typeof s.payment_intent !== 'string' && s.payment_intent
@@ -63,8 +67,11 @@ export async function GET(req: Request) {
       const ownerId = ownerRows[0].id;
 
       const { rows: claimRows } = await client.query(
-        `INSERT INTO claims (ts, owner_id, price_cents, currency, title, message, link_url, cert_style, time_display, local_date_only, text_color)
-         VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO claims (ts, owner_id, price_cents, currency, title, message, link_url, cert_style,
+                             time_display, local_date_only, text_color,
+                             title_public, message_public)
+         VALUES ($1::timestamptz, $2, $3, 'EUR', $4, $5, $6, $7,
+                 $8, $9, $10, $11, $12)
          ON CONFLICT (ts) DO UPDATE
            SET message         = EXCLUDED.message,
                title           = EXCLUDED.title,
@@ -72,9 +79,13 @@ export async function GET(req: Request) {
                cert_style      = EXCLUDED.cert_style,
                time_display    = EXCLUDED.time_display,
                local_date_only = EXCLUDED.local_date_only,
-               text_color      = EXCLUDED.text_color
+               text_color      = EXCLUDED.text_color,
+               title_public    = EXCLUDED.title_public,
+               message_public  = EXCLUDED.message_public
          RETURNING id, created_at`,
-        [ts, ownerId, amount_total, title, message, link_url, cert_style, time_display, local_date_only, text_color]
+        [ts, ownerId, amount_total, title, message, link_url, cert_style,
+         time_display, local_date_only, text_color,
+         title_public, message_public]
       );
       const claim = claimRows[0];
 

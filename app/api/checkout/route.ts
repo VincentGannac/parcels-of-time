@@ -22,6 +22,9 @@ type Body = {
   time_display?: 'utc'|'utc+local'|'local+utc'
   local_date_only?: string | boolean // '1'/'0' ou bool
   text_color?: string // #rrggbb
+  // ✅ nouveaux flags public
+  title_public?: string | boolean
+  message_public?: string | boolean
 }
 
 const ipBucket = new Map<string, { count:number; ts:number }>()
@@ -55,6 +58,10 @@ export async function POST(req: Request) {
       ? body.time_display : 'local+utc'
     const local_date_only = (String(body.local_date_only) === '1' || body.local_date_only === true) ? '1' : '0'
     const text_color = /^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'
+
+    // ✅ registres publics (opt-in)
+    const title_public   = (String(body.title_public)   === '1' || body.title_public   === true) ? '1' : '0'
+    const message_public = (String(body.message_public) === '1' || body.message_public === true) ? '1' : '0'
 
     // custom BG → table temp
     let custom_bg_key = ''
@@ -105,6 +112,9 @@ export async function POST(req: Request) {
         time_display,
         local_date_only,
         text_color,
+        // ✅ flags publics vers webhook/confirm
+        title_public,
+        message_public,
       },
       success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,
