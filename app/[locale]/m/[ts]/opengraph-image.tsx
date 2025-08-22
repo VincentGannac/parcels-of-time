@@ -10,17 +10,13 @@ export default async function Image(
 ) {
   try {
     const { ts } = await params
-    const tsNice = decodeURIComponent(ts)
-      .replace(':00.000Z', 'Z')
-      .replace('T', ' ')
-      .replace('Z', ' UTC')
-
+    const pretty = decodeURIComponent(ts)
+      .replace(':00.000Z','Z').replace('T',' ').replace('Z',' UTC')
     return new ImageResponse(
       (
         <div style={{
-          width: '100%', height: '100%', display: 'flex',
-          background: '#FAF9F7', color: '#0B0B0C', padding: 64,
-          flexDirection:'column', justifyContent:'space-between'
+          width:'100%', height:'100%', display:'flex', background:'#FAF9F7',
+          color:'#0B0B0C', padding:64, flexDirection:'column', justifyContent:'space-between'
         }}>
           <div style={{ display:'flex', alignItems:'center', gap:16 }}>
             <div style={{ width:48, height:48, border:'6px solid #0B0B0C', borderRadius:'50%', position:'relative' }}>
@@ -30,7 +26,7 @@ export default async function Image(
           </div>
           <div>
             <div style={{ fontSize:80, fontWeight:700, fontFamily:'serif' }}>Own a minute, forever.</div>
-            <div style={{ fontSize:36, marginTop:12 }}>{tsNice}</div>
+            <div style={{ fontSize:36, marginTop:12 }}>{pretty}</div>
           </div>
           <div style={{ opacity:.8 }}>parcelsoftime.com</div>
         </div>
@@ -38,18 +34,11 @@ export default async function Image(
       { ...size }
     )
   } catch {
-    // Fallback pour éviter tout 500
     return new ImageResponse(
-      (
-        <div style={{
-          width:'100%', height:'100%', display:'flex',
-          alignItems:'center', justifyContent:'center',
-          background:'#FAF9F7', color:'#0B0B0C',
-          fontSize:36, fontWeight:700
-        }}>
-          Parcels of Time
-        </div>
-      ),
+      (<div style={{
+        width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center',
+        background:'#FAF9F7', color:'#0B0B0C', fontSize:36, fontWeight:700
+      }}>Parcels of Time</div>),
       { ...size }
     )
   }

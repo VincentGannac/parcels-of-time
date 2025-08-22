@@ -1,18 +1,76 @@
 // app/[locale]/m/[ts]/page.tsx
-import { formatISOAsNice } from '@/lib/date'
-import { absoluteUrl } from '@/lib/url'
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-type Params = { ts: string }
+import { headers } from 'next/headers'
+import { pool } from '@/lib/db'
+import { formatISOAsNice } from '@/lib/date'
 
 type PublicMinute =
   | { found: false }
   | { found: true; id: string; ts: string; title: string | null; message: string | null }
 
-async function getPublicMinute(ts: string): Promise<PublicMinute> {
-  const url = await absoluteUrl(`/api/minutes/${encodeURIComponent(ts)}`)
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return { found: false }
-  return res.json()
+function safeDecode(v: string) {
+  try { return decodeURIComponent(v) } catch { return v }
+}
+
+async function getPublicMinuteSafe(tsISO: string): Promise<PublicMinute> {
+  // 1) fetch absolu
+  try {
+    const h = await headers()
+    const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
+    const host  = (h.get('host') || '').split(',')[0].trim()
+    if (host) {
+      const abs = `${proto}://${host}/api/minutes/${encodeURIComponent(tsISO)}`
+      const res = await fetch(abs, { cache: 'no-store' })
+      if (res.ok) return res.json()
+    }
+  } catch {}
+
+  // 2) fetch relatif
+  try {
+    const rel = `/api/minutes/${encodeURIComponent(tsISO)}`
+    const res = await fetch(rel, { cache: 'no-store' })
+    if (res.ok) return res.json()
+  } catch {}
+
+  // 3) fallback DB direct (jamais throw)
+  try {
+    const { rows } = await pool.query(
+      `select id, ts, title, message from minute_public where ts=$1::timestamptz`,
+      [tsISO]
+    )
+    if (rows.length) {
+      const r = rows[0]
+      return {
+        found: true,
+        id: String(r.id),
+        ts: new Date(r.ts).toISOString(),
+        title: r.title ?? null,
+        message: r.message ?? null,
+      }
+    }
+    const q2 = await pool.query(
+      `select c.id, c.ts,
+              case when c.title_public   then c.title   else null end as title,
+              case when c.message_public then c.message else null end as message
+         from claims c
+        where c.ts=$1::timestamptz`,
+      [tsISO]
+    )
+    if (q2.rows.length) {
+      const r = q2.rows[0]
+      return {
+        found: true,
+        id: String(r.id),
+        ts: new Date(r.ts).toISOString(),
+        title: r.title,
+        message: r.message,
+      }
+    }
+  } catch {}
+  return { found: false }
 }
 
 const TOKENS = {
@@ -29,15 +87,28 @@ const TOKENS = {
 export default async function Page(
   { params }: { params: Promise<{ locale: string; ts: string }> }
 ) {
-  const { locale, ts } = await params
-  const decodedTs = decodeURIComponent(ts)
+  // ← Next 15 : params est une Promise
+  let locale = 'en'
+  let tsParam = ''
+  try {
+    const p = await params
+    locale = p.locale || 'en'
+    tsParam = p.ts || ''
+  } catch {}
 
-  // Registre public minimal (optionnel)
-  const pub = await getPublicMinute(decodedTs)
+  const decodedTs = safeDecode(tsParam)
 
+  // Lis le registre public (sans jamais throw)
+  const pub = await getPublicMinuteSafe(decodedTs)
+
+  // URLs UI
   const pdfHref = `/api/cert/${encodeURIComponent(decodedTs)}`
   const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
+
+  // format lisible : si ça jette, on garde l’ISO brut
+  let niceTs = decodedTs
+  try { niceTs = formatISOAsNice(decodedTs) } catch {}
 
   return (
     <main
@@ -50,152 +121,92 @@ export default async function Page(
         ['--color-on-primary' as any]: TOKENS['--color-on-primary'],
         ['--color-border' as any]: TOKENS['--color-border'],
         ['--shadow-elev1' as any]: TOKENS['--shadow-elev1'],
-        background: 'var(--color-bg)',
-        color: 'var(--color-text)',
-        minHeight: '100vh',
-        fontFamily: 'Inter, system-ui',
+        background: 'var(--color-bg)', color: 'var(--color-text)',
+        minHeight: '100vh', fontFamily: 'Inter, system-ui',
       }}
     >
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 24px' }}>
-        {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-          <a href={homeHref} style={{ textDecoration: 'none', color: 'var(--color-text)', opacity: 0.85 }}>&larr; Parcels of Time</a>
+          <a href={homeHref} style={{ textDecoration:'none', color:'var(--color-text)', opacity:.85 }}>&larr; Parcels of Time</a>
           <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>Paiement sécurisé <strong>Stripe</strong></div>
         </div>
 
-        {/* Titre + minute */}
         <header style={{ marginBottom: 16 }}>
           <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 40, lineHeight: '48px', margin: '0 0 6px' }}>
             Merci ❤ Votre minute est réservée
           </h1>
-          <p style={{ fontSize: 16, opacity: 0.9, margin: 0 }}>{formatISOAsNice(decodedTs)}</p>
+          <p style={{ fontSize: 16, opacity: .9, margin: 0 }}>{niceTs}</p>
         </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 18, alignItems: 'start' }}>
-          {/* -------- Colonne principale : Certificat -------- */}
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 18, boxShadow: 'var(--shadow-elev1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1.1fr 0.9fr', gap:18, alignItems:'start' }}>
+          <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:18, boxShadow:'var(--shadow-elev1)' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:10 }}>
               <div>
-                <div style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--color-muted)' }}>Votre certificat</div>
-                <div style={{ fontSize: 16, opacity: .9 }}>Téléchargez le PDF officiel immédiatement.</div>
+                <div style={{ fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)' }}>Votre certificat</div>
+                <div style={{ fontSize:16, opacity:.9 }}>Téléchargez le PDF officiel immédiatement.</div>
               </div>
             </div>
 
-            <a
-              href={pdfHref}
-              target="_blank"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-                background: 'var(--color-primary)',
-                color: 'var(--color-on-primary)',
-                padding: '14px 18px',
-                borderRadius: 12,
-                fontWeight: 800,
-                textDecoration: 'none',
-                border: '1px solid transparent',
-              }}
-            >
+            <a href={pdfHref} target="_blank"
+               style={{ display:'inline-flex', alignItems:'center', gap:10, background:'var(--color-primary)', color:'var(--color-on-primary)',
+                        padding:'14px 18px', borderRadius:12, fontWeight:800, textDecoration:'none', border:'1px solid transparent' }}>
               Télécharger le certificat (PDF)
             </a>
 
-            <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--color-muted)' }}>
-              Le certificat vous est également envoyé par e-mail.<br />
-              Pensez à vérifier votre boîte de réception (et vos indésirables).
+            <p style={{ margin:'12px 0 0', fontSize:13, color:'var(--color-muted)' }}>
+              Le certificat vous est également envoyé par e-mail.<br/>Vérifiez vos indésirables si besoin.
             </p>
           </div>
 
-          {/* -------- Colonne secondaire : Registre public -------- */}
-          <aside
-            style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 16,
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--color-muted)', marginBottom: 8 }}>
+          <aside style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16 }}>
+            <div style={{ fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8 }}>
               Registre public (art participatif)
             </div>
 
             {pub.found ? (
               <div>
-                {pub.title && (
-                  <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 700 }}>{pub.title}</h3>
-                )}
+                {pub.title && <h3 style={{ margin:'0 0 10px', fontSize:18, fontWeight:700 }}>{pub.title}</h3>}
                 {pub.message && (
-                  <blockquote style={{ margin: '0 0 10px', fontStyle: 'italic', opacity: .95 }}>
+                  <blockquote style={{ margin:'0 0 10px', fontStyle:'italic', opacity:.95 }}>
                     &ldquo;{pub.message}&rdquo;
                   </blockquote>
                 )}
                 {!pub.title && !pub.message && (
-                  <p style={{ margin: 0, opacity: .8 }}>Cette minute est visible dans le registre public, sans texte associé.</p>
+                  <p style={{ margin:0, opacity:.8 }}>Cette minute est visible dans le registre public, sans texte associé.</p>
                 )}
-                <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
-                  Entrée anonyme — uniquement les éléments rendus publics par le·la propriétaire.
+                <p style={{ margin:'10px 0 0', fontSize:12, color:'var(--color-muted)' }}>
+                  Entrée anonyme — uniquement les éléments rendus publics.
                 </p>
               </div>
             ) : (
               <div>
-                <p style={{ margin: 0, opacity: .9 }}>
+                <p style={{ margin:0, opacity:.9 }}>
                   Cette minute n’a <strong>pas d’entrée publique</strong> (titre et message privés).
                 </p>
-                <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
+                <p style={{ margin:'10px 0 0', fontSize:12, color:'var(--color-muted)' }}>
                   Le registre public est une œuvre participative célébrant l’amour et les réussites — anonyme et optionnelle.
                 </p>
               </div>
             )}
 
-            <a
-              href={exploreHref}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                marginTop: 12,
-                textDecoration: 'none',
-                background: 'transparent',
-                color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-                padding: '10px 12px',
-                borderRadius: 10,
-              }}
-            >
+            <a href={exploreHref}
+               style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:12, textDecoration:'none',
+                        background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)',
+                        padding:'10px 12px', borderRadius:10 }}>
               Découvrir le registre public →
             </a>
           </aside>
         </div>
 
-        {/* CTA bas de page */}
-        <div style={{ marginTop: 18, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <a
-            href={pdfHref}
-            target="_blank"
-            style={{
-              textDecoration: 'none',
-              background: 'var(--color-primary)',
-              color: 'var(--color-on-primary)',
-              borderRadius: 12,
-              padding: '12px 16px',
-              fontWeight: 800,
-              border: '1px solid transparent',
-            }}
-          >
+        <div style={{ marginTop:18, display:'flex', gap:12, flexWrap:'wrap' }}>
+          <a href={pdfHref} target="_blank"
+             style={{ textDecoration:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', borderRadius:12,
+                      padding:'12px 16px', fontWeight:800, border:'1px solid transparent' }}>
             Ouvrir le PDF
           </a>
-          <a
-            href={homeHref}
-            style={{
-              textDecoration: 'none',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 12,
-              padding: '12px 16px',
-              fontWeight: 700,
-            }}
-          >
+          <a href={homeHref}
+             style={{ textDecoration:'none', background:'var(--color-surface)', color:'var(--color-text)',
+                      border:'1px solid var(--color-border)', borderRadius:12, padding:'12px 16px', fontWeight:700 }}>
             Retour à l’accueil
           </a>
         </div>
