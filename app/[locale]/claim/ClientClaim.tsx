@@ -259,39 +259,111 @@ async function normalizeToPng(original: File) {
   } finally { URL.revokeObjectURL(tmpUrl) }
 }
 
+function bytesFromDataURL(u: string) {
+  const i = u.indexOf(',');
+  const b64 = i >= 0 ? u.slice(i + 1) : u;
+  return Math.floor(b64.length * 0.75); // approx bytes
+}
+
+function coverToA4JPEG(dataUrl: string, srcW: number, srcH: number) {
+  const TARGET_W = 2480, TARGET_H = 3508;           // A4@300dpi
+  const MAX_BYTES = 3.5 * 1024 * 1024;              // < 3.5 MB pour passer le POST
+
+  return new Promise<{ dataUrl: string; w: number; h: number }>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = TARGET_W; c.height = TARGET_H;
+      const ctx = c.getContext('2d')!;
+      ctx.imageSmoothingQuality = 'high';
+
+      // cover (centré, recadré) pour respecter le ratio A4
+      const scale = Math.max(TARGET_W / srcW, TARGET_H / srcH);
+      const dw = srcW * scale, dh = srcH * scale;
+      const dx = (TARGET_W - dw) / 2, dy = (TARGET_H - dh) / 2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+
+      // export en JPEG et réduit la qualité si > MAX_BYTES
+      let q = 0.82;
+      let out = c.toDataURL('image/jpeg', q);
+      while (bytesFromDataURL(out) > MAX_BYTES && q > 0.5) {
+        q -= 0.06;
+        out = c.toDataURL('image/jpeg', q);
+      }
+      resolve({ dataUrl: out, w: TARGET_W, h: TARGET_H });
+    };
+    img.src = dataUrl;
+  });
+}
+
+
 async function onPickCustomBg(file?: File | null) {
   try {
-    setCustomErr('')
-    if (!file) { log('Aucun fichier sélectionné'); return }
-    setImgLoading(true)
+    setCustomErr('');
+    if (!file) { log('Aucun fichier sélectionné'); return; }
+    setImgLoading(true);
 
-    // -> PNG normalisé (pixels déjà dans le bon sens)
-    const { dataUrl, w, h, wasHeic } = await normalizeToPng(file)
-    log('Image normalisée', { w, h, wasHeic })
+    // 1) Normalise (HEIC->PNG si besoin + orientation EXIF corrigée)
+    const { dataUrl: normalizedUrl, w, h } = await normalizeToPng(file);
 
-    // validation dimensions (on RELAXE pour HEIC/HEIF comme demandé)
-    const A4_RATIO = 2480/3508, RATIO_2x3 = 1024/1536, RATIO_TOL = 0.01
-    const ALLOWED_EXACT_SIZES = [{w:2480,h:3508},{w:1024,h:1536}]
-    const ratio = w/h
-    const okExact = ALLOWED_EXACT_SIZES.some(s => s.w===w && s.h===h)
-    const okRatio = Math.abs(ratio-A4_RATIO) < RATIO_TOL || Math.abs(ratio-RATIO_2x3) < RATIO_TOL
-    if (!okExact && !okRatio && !wasHeic) {
-      // (pas de message si HEIC/HEIF)
-      setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
-      log('Dimensions non supportées:', { w, h, ratio })
+    // Helpers locaux
+    const bytesFromDataURL = (u: string) => {
+      const i = u.indexOf(',');
+      const b64 = i >= 0 ? u.slice(i + 1) : u;
+      return Math.floor(b64.length * 0.75); // ~octets
+    };
+
+    const coverToA4JPEG = (srcDataUrl: string, srcW: number, srcH: number) =>
+      new Promise<{ dataUrl: string; w: number; h: number }>((resolve) => {
+        const TARGET_W = 2480, TARGET_H = 3508;
+        const MAX_BYTES = 3.5 * 1024 * 1024; // borne pour le POST
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = TARGET_W; c.height = TARGET_H;
+          const ctx = c.getContext('2d')!;
+          ctx.imageSmoothingQuality = 'high';
+
+          // cover centré pour respecter le ratio A4
+          const scale = Math.max(TARGET_W / srcW, TARGET_H / srcH);
+          const dw = srcW * scale, dh = srcH * scale;
+          const dx = (TARGET_W - dw) / 2, dy = (TARGET_H - dh) / 2;
+          ctx.drawImage(img, dx, dy, dw, dh);
+
+          // export JPEG et compression adaptative
+          let q = 0.82;
+          let out = c.toDataURL('image/jpeg', q);
+          while (bytesFromDataURL(out) > MAX_BYTES && q > 0.5) {
+            q -= 0.06;
+            out = c.toDataURL('image/jpeg', q);
+          }
+          resolve({ dataUrl: out, w: TARGET_W, h: TARGET_H });
+        };
+        img.src = srcDataUrl;
+      });
+
+    // 2) Recadre/scale vers A4 et compresse
+    const { dataUrl: a4Url, w: tw, h: th } = await coverToA4JPEG(normalizedUrl, w, h);
+
+    // 3) Sécurité taille finale
+    if (bytesFromDataURL(a4Url) > 4 * 1024 * 1024) {
+      setCustomErr('Image trop lourde après préparation. Réessayez avec une photo plus légère.');
+      return;
     }
 
-    // Preview & payload utilisent le MÊME dataURL normalisé => identique au PDF
-    setCustomBg({ url: dataUrl, dataUrl, w, h })
-    setForm(f => ({ ...f, cert_style: 'custom' }))
+    // 4) Aperçu = exactement ce qui sera envoyé au serveur
+    setCustomBg({ url: a4Url, dataUrl: a4Url, w: tw, h: th });
+    setForm(f => ({ ...f, cert_style: 'custom' }));
+    log('CustomBG prêt (A4 JPEG)', { w: tw, h: th, approxKB: Math.round(bytesFromDataURL(a4Url) / 1024) });
   } catch (e) {
-    console.error('[Claim/CustomBG] Exception onPickCustomBg', e)
-    setCustomErr('Erreur de lecture ou de conversion de l’image.')
+    console.error('[Claim/CustomBG] onPickCustomBg', e);
+    setCustomErr('Erreur de lecture ou de conversion de l’image.');
   } finally {
-    if (fileInputRef.current) fileInputRef.current.value = ''
-    setImgLoading(false)
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setImgLoading(false);
   }
 }
+
 // clean: plus besoin d’ObjectURL persistant
 useEffect(() => () => {}, [])
 
