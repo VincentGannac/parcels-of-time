@@ -4,6 +4,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
+declare module 'exifr' {
+  export function parse(input: Blob | ArrayBuffer | string, options?: any): Promise<any>;
+}
+
 type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
@@ -171,114 +175,126 @@ export default function ClientClaim() {
 
   useEffect(()=>{ if (prefillTs) setForm(f=>({...f, ts: prefillTs})) }, []) // pré-remplissage
 
-  /** --------- Custom background --------- */
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [customBg, setCustomBg] = useState<{ url:string; dataUrl:string; w:number; h:number } | null>(null)
-  const [customErr, setCustomErr] = useState('')
-  const [imgLoading, setImgLoading] = useState(false)
-  const lastObjectUrl = useRef<string | null>(null)
 
-  function log(...args:any[]){ console.debug('[Claim/CustomBG]', ...args) }
+/** --------- Custom background --------- */
+const fileInputRef = useRef<HTMLInputElement | null>(null)
+const [customBg, setCustomBg] = useState<{ url:string; dataUrl:string; w:number; h:number } | null>(null)
+const [customErr, setCustomErr] = useState('')
+const [imgLoading, setImgLoading] = useState(false)
 
-  const openFileDialog = () => {
-    const el = fileInputRef.current
-    if (!el) { console.error('[Claim/CustomBG] file input ref manquant'); return }
-    log('Ouverture du sélecteur de fichier…')
-    el.click()
+function log(...args:any[]){ console.debug('[Claim/CustomBG]', ...args) }
+const openFileDialog = () => { fileInputRef.current?.click() }
+
+const onSelectStyle = (id: CertStyle) => {
+  setForm(f => ({ ...f, cert_style: id }));
+  if (id === 'custom') openFileDialog();
+};
+
+// util
+async function fileToDataUrl(f: File): Promise<string> {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
+}
+
+// HEIC/HEIF -> PNG si besoin
+async function heicToPngIfNeeded(original: File): Promise<{file: File, wasHeic:boolean}> {
+  const type = (original.type || '').toLowerCase()
+  const looksHeic = /^image\/(heic|heif|heic-sequence|heif-sequence)$/.test(type) || /\.(heic|heif)$/i.test(original.name)
+  if (!looksHeic) return { file: original, wasHeic:false }
+  const heic2any = (await import('heic2any')).default as (opts:any)=>Promise<Blob>
+  const out = await heic2any({ blob: original, toType: 'image/png', quality: 0.92 })
+  return { file: new File([out], original.name.replace(/\.(heic|heif)\b/i, '.png'), { type:'image/png' }), wasHeic:true }
+}
+
+// EXIF Orientation (1..8). Si indispo → 1
+async function getExifOrientation(file: File): Promise<number> {
+  try {
+    const { parse } = (await import('exifr')) as any;
+    const meta = await parse(file, { pick: ['Orientation'] });
+    return meta?.Orientation || 1;
+  } catch {
+    return 1;
   }
+}
 
-  // bouton "Custom" → sélectionne le style + ouvre le picker (pas de bloc “Importer…”)
-  const onSelectStyle = (id: CertStyle) => {
-    setForm(f=>({...f, cert_style:id}))
-    if (id === 'custom') openFileDialog()
+
+// Dessin sur canvas avec orientation EXIF appliquée
+function drawNormalized(img: HTMLImageElement, orientation: number) {
+  const w = img.naturalWidth, h = img.naturalHeight
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')!
+  const swap = (o:number) => o >= 5 && o <= 8
+
+  canvas.width  = swap(orientation) ? h : w
+  canvas.height = swap(orientation) ? w : h
+
+  switch (orientation) {
+    case 2: ctx.transform(-1, 0, 0, 1, canvas.width, 0); break;                       // miroir H
+    case 3: ctx.transform(-1, 0, 0, -1, canvas.width, canvas.height); break;          // 180°
+    case 4: ctx.transform(1, 0, 0, -1, 0, canvas.height); break;                      // miroir V
+    case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;                                   // transpose
+    case 6: ctx.transform(0, 1, -1, 0, canvas.height, 0); break;                      // 90° CW
+    case 7: ctx.transform(0, -1, -1, 0, canvas.height, canvas.width); break;          // transverse
+    case 8: ctx.transform(0, -1, 1, 0, 0, canvas.width); break;                       // 90° CCW
+    default: /* 1 */ break;
   }
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(img, 0, 0, w, h)
+  return { dataUrl: canvas.toDataURL('image/png', 0.92), w: canvas.width, h: canvas.height }
+}
 
-  // lecture fichier → DataURL + ObjectURL ; robustesse pour re-choisir le même fichier ensuite
-  async function fileToDataUrl(f: File): Promise<string> {
-    return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
-  }
+// Pipeline complet : conversion éventuelle + orientation normalisée
+async function normalizeToPng(original: File) {
+  const { file: afterHeic, wasHeic } = await heicToPngIfNeeded(original)
+  const orientation = await getExifOrientation(original) // lire l'EXIF du fichier d'origine
+  const tmpUrl = URL.createObjectURL(afterHeic)
+  try {
+    const img = new Image()
+    const done = new Promise<{dataUrl:string; w:number; h:number}>((resolve, reject) => {
+      img.onload = () => resolve(drawNormalized(img, orientation || 1))
+      img.onerror = reject
+    })
+    img.src = tmpUrl
+    const out = await done
+    return { ...out, wasHeic }
+  } finally { URL.revokeObjectURL(tmpUrl) }
+}
 
-  // Conversion HEIC/HEIF -> PNG (via heic2any), chargée dynamiquement
-  async function maybeConvertHeicToPng(original: File, setErr: (s:string)=>void, logFn:(...a:any[])=>void): Promise<File> {
-    const type = (original.type || '').toLowerCase()
-    const looksHeic =
-      /^image\/(heic|heif|heic-sequence|heif-sequence)$/.test(type) ||
-      /\.(heic|heif)$/i.test(original.name)
+async function onPickCustomBg(file?: File | null) {
+  try {
+    setCustomErr('')
+    if (!file) { log('Aucun fichier sélectionné'); return }
+    setImgLoading(true)
 
-    if (!looksHeic) return original
+    // -> PNG normalisé (pixels déjà dans le bon sens)
+    const { dataUrl, w, h, wasHeic } = await normalizeToPng(file)
+    log('Image normalisée', { w, h, wasHeic })
 
-    logFn('HEIC/HEIF détecté — conversion → PNG via heic2any…', { name: original.name, type: original.type, size: original.size })
-    try {
-      const heic2any = (await import('heic2any')).default as (opts: any) => Promise<Blob>
-      const outBlob = await heic2any({ blob: original, toType: 'image/png', quality: 0.92 })
-      const pngFile = new File([outBlob], original.name.replace(/\.(heic|heif)\b/i, '.png'), { type: 'image/png' })
-      logFn('Conversion HEIC->PNG OK', { outSize: outBlob.size })
-      return pngFile
-    } catch (e) {
-      console.error('[Claim/CustomBG] Conversion HEIC/HEIF échouée', e)
-      setErr('Impossible de convertir votre HEIC/HEIF. Essayez avec un PNG/JPG, ou réessayez.')
-      throw e
+    // validation dimensions (on RELAXE pour HEIC/HEIF comme demandé)
+    const A4_RATIO = 2480/3508, RATIO_2x3 = 1024/1536, RATIO_TOL = 0.01
+    const ALLOWED_EXACT_SIZES = [{w:2480,h:3508},{w:1024,h:1536}]
+    const ratio = w/h
+    const okExact = ALLOWED_EXACT_SIZES.some(s => s.w===w && s.h===h)
+    const okRatio = Math.abs(ratio-A4_RATIO) < RATIO_TOL || Math.abs(ratio-RATIO_2x3) < RATIO_TOL
+    if (!okExact && !okRatio && !wasHeic) {
+      // (pas de message si HEIC/HEIF)
+      setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
+      log('Dimensions non supportées:', { w, h, ratio })
     }
+
+    // Preview & payload utilisent le MÊME dataURL normalisé => identique au PDF
+    setCustomBg({ url: dataUrl, dataUrl, w, h })
+    setForm(f => ({ ...f, cert_style: 'custom' }))
+  } catch (e) {
+    console.error('[Claim/CustomBG] Exception onPickCustomBg', e)
+    setCustomErr('Erreur de lecture ou de conversion de l’image.')
+  } finally {
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setImgLoading(false)
   }
+}
+// clean: plus besoin d’ObjectURL persistant
+useEffect(() => () => {}, [])
 
-
-
-  
-  async function onPickCustomBg(file?: File | null) {
-    try {
-      setCustomErr('')
-      if (!file) { log('Aucun fichier sélectionné'); return }
-
-      // Était-ce un HEIC/HEIF à l'origine ?
-      const wasHeic = /^image\/(heic|heif|heic-sequence|heif-sequence)$/.test((file.type||'').toLowerCase())
-                  || /\.(heic|heif)$/i.test(file.name)
-
-      // Conversion HEIC/HEIF → PNG (sinon on garde tel quel)
-      let workingFile = file
-      try { workingFile = await maybeConvertHeicToPng(file, setCustomErr, log) } catch { return }
-
-      const mime = (workingFile.type || '').toLowerCase()
-      if (!/^image\/(png|jpeg|jpg)$/.test(mime)) {
-        setCustomErr('Format invalide. Utilisez PNG ou JPG (HEIC/HEIF sont convertis automatiquement).')
-        return
-      }
-
-      setImgLoading(true)
-
-      const dataUrl = await fileToDataUrl(workingFile)
-      const probe = new Image()
-      probe.onload = () => {
-        const w = probe.naturalWidth, h = probe.naturalHeight
-        const ratio = w / h
-        const okExact = ALLOWED_EXACT_SIZES.some(s => s.w===w && s.h===h)
-        const okRatio = Math.abs(ratio - A4_RATIO) < RATIO_TOL || Math.abs(ratio - RATIO_2x3) < RATIO_TOL
-
-        // ⬇️ pas d'erreur de dimensions si c'était un HEIC/HEIF
-        if (!okExact && !okRatio && !wasHeic) {
-          setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
-        }
-
-        const url = URL.createObjectURL(workingFile)
-        if (lastObjectUrl.current) URL.revokeObjectURL(lastObjectUrl.current)
-        lastObjectUrl.current = url
-
-        setCustomBg({ url, dataUrl, w, h })
-        setForm(f => ({ ...f, cert_style: 'custom' }))
-      }
-      probe.onerror = () => setCustomErr('Impossible de lire l’image.')
-      probe.src = dataUrl
-    } catch (e) {
-      console.error('[Claim/CustomBG] Exception onPickCustomBg', e)
-      setCustomErr('Erreur de lecture du fichier.')
-    } finally {
-      const el = fileInputRef.current; if (el) el.value = ''
-      setImgLoading(false)
-    }
-  }
-
-
-  // clean objectURL on unmount
-  useEffect(() => () => { if (lastObjectUrl.current) URL.revokeObjectURL(lastObjectUrl.current) }, [])
 
   // Couleurs
   const mainColor = form.text_color || '#1A1F2A'
