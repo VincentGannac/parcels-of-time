@@ -9,7 +9,6 @@ type CertStyle =
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
 
 const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
-  { id: 'custom',     label: 'Custom',      hint: 'Importer image 2480×3508 (A4) ou 1024×1536' },
   { id: 'neutral',    label: 'Neutral',     hint: 'sobre & élégant' },
   { id: 'romantic',   label: 'Romantic',    hint: 'hearts & lace' },
   { id: 'birthday',   label: 'Birthday',    hint: 'balloons & confetti' },
@@ -18,9 +17,10 @@ const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
   { id: 'christmas',  label: 'Christmas',   hint: 'pine & snow' },
   { id: 'newyear',    label: 'New Year',    hint: 'fireworks trails' },
   { id: 'graduation', label: 'Graduation',  hint: 'laurel & caps' },
+  { id: 'custom',     label: 'Custom',      hint: 'A4 2480×3508 ou 1024×1536' },
 ] as const
 
-const SAFE_INSETS_PCT = {
+const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;left:number}> = {
   neutral:    { top:16.6, right:16.1, bottom:18.5, left:16.1 },
   romantic:   { top:19.0, right:19.5, bottom:18.5, left:19.5 },
   birthday:   { top:17.1, right:22.2, bottom:18.5, left:22.2 },
@@ -29,8 +29,8 @@ const SAFE_INSETS_PCT = {
   christmas:  { top:17.8, right:18.8, bottom:18.5, left:18.8 },
   newyear:    { top:17.8, right:18.8, bottom:18.5, left:18.8 },
   graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-  custom:     { top:16.6, right:16.1, bottom:18.5, left:16.1 }
-} as const
+  custom:     { top:16.6, right:16.1, bottom:18.5, left:16.1 },
+}
 
 const A4_RATIO = 2480 / 3508
 const RATIO_2x3 = 1024 / 1536
@@ -41,23 +41,17 @@ const ALLOWED_EXACT_SIZES = [
 ]
 
 /** ------- Utils ------- **/
+const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
 function safeDecode(value: string): string {
   let out = value
   try { for (let i=0;i<3;i++){ const dec=decodeURIComponent(out); if(dec===out) break; out=dec } } catch {}
   return out
 }
-function isoMinuteString(d: Date) {
-  const copy = new Date(d.getTime())
-  copy.setUTCSeconds(0,0)
-  return copy.toISOString()
-}
+function isoMinuteString(d: Date) { const c = new Date(d.getTime()); c.setUTCSeconds(0,0); return c.toISOString() }
 function parseToDateOrNull(input: string): Date | null {
-  const s = (input || '').trim()
-  if (!s) return null
-  const d = new Date(s)
-  if (isNaN(d.getTime())) return null
-  d.setUTCSeconds(0,0)
-  return d
+  const s = (input || '').trim(); if (!s) return null
+  const d = new Date(s); if (isNaN(d.getTime())) return null
+  d.setUTCSeconds(0,0); return d
 }
 function localReadable(d: Date | null) {
   if (!d) return ''
@@ -70,13 +64,10 @@ function localReadable(d: Date | null) {
 }
 function localDayOnly(d: Date | null) {
   if (!d) return ''
-  try {
-    return d.toLocaleDateString(undefined, { year:'numeric', month:'2-digit', day:'2-digit' })
-  } catch { return '' }
+  try { return d.toLocaleDateString(undefined, { year:'numeric', month:'2-digit', day:'2-digit' }) } catch { return '' }
 }
 function daysInMonth(y:number, m:number) { return new Date(y, m, 0).getDate() }
 const MONTHS_FR = ['01 — Jan','02 — Fév','03 — Mar','04 — Avr','05 — Mai','06 — Juin','07 — Juil','08 — Août','09 — Sep','10 — Oct','11 — Nov','12 — Déc']
-const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
 
 // couleurs utils
 function hexToRgb(hex:string){
@@ -84,25 +75,11 @@ function hexToRgb(hex:string){
   const n = parseInt(m[1],16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 }
 }
 function mix(a:number,b:number,t:number){ return Math.round(a*(1-t)+b*t)}
-function lighten(hex:string, t=0.45){ const {r,g,b} = hexToRgb(hex); return `rgba(${mix(r,255,t)}, ${mix(g,255,t)}, ${mix(b,255,t)}, 0.9)` }
-
-// Contraste (approx. fond clair des certificats : #F4F1EC)
+function lighten(hex:string, t=0.55){ const {r,g,b} = hexToRgb(hex); return `rgba(${mix(r,255,t)}, ${mix(g,255,t)}, ${mix(b,255,t)}, 0.9)` }
 const CERT_BG_HEX = '#F4F1EC'
-function relLum({r,g,b}:{r:number,g:number,b:number}){
-  const srgb = (c:number)=>{ c/=255; return c<=0.03928? c/12.92 : Math.pow((c+0.055)/1.055, 2.4) }
-  const R=srgb(r), G=srgb(g), B=srgb(b)
-  return 0.2126*R + 0.7152*G + 0.0722*B
-}
-function contrastRatio(fgHex:string, bgHex= CERT_BG_HEX){
-  const L1 = relLum(hexToRgb(fgHex)), L2 = relLum(hexToRgb(bgHex))
-  const light = Math.max(L1, L2), dark = Math.min(L1, L2)
-  return (light + 0.05) / (dark + 0.05)
-}
-function ratioLabel(r:number){
-  if (r >= 7) return {label:'AAA', color:'#0BBF6A'}
-  if (r >= 4.5) return {label:'AA', color:'#E4B73D'}
-  return {label:'⚠︎ Low', color:'#FF7A7A'}
-}
+function relLum({r,g,b}:{r:number,g:number,b:number}){ const srgb=(c:number)=>{ c/=255; return c<=0.03928? c/12.92 : Math.pow((c+0.055)/1.055, 2.4) }; const R=srgb(r),G=srgb(g),B=srgb(b); return 0.2126*R+0.7152*G+0.0722*B }
+function contrastRatio(fgHex:string, bgHex=CERT_BG_HEX){ const L1=relLum(hexToRgb(fgHex)), L2=relLum(hexToRgb(bgHex)); const light=Math.max(L1,L2), dark=Math.min(L1,L2); return (light+0.05)/(dark+0.05) }
+function ratioLabel(r:number){ if(r>=7) return {label:'AAA', color:'#0BBF6A'}; if(r>=4.5) return {label:'AA', color:'#E4B73D'}; return {label:'⚠︎ Low', color:'#FF7A7A'} }
 
 export default function ClientClaim() {
   const params = useSearchParams()
@@ -113,9 +90,8 @@ export default function ClientClaim() {
   const initialGift = giftParam === '1' || giftParam === 'true'
 
   const allowed = STYLES.map(s => s.id)
-  // Neutral par défaut (sauf si un style valide est passé en query)
   const initialStyle: CertStyle = (allowed as readonly string[]).includes(styleParam as CertStyle)
-    ? (styleParam as CertStyle) : 'neutral'
+    ? (styleParam as CertStyle) : 'neutral' // Neutral par défaut
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
@@ -129,7 +105,7 @@ export default function ClientClaim() {
   const [h, setH]   = useState<number>(prefillDate.getHours())
   const [m, setMin] = useState<number>(prefillDate.getMinutes())
 
-  useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M]) // eslint-disable-line
+  useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M]) // clamp
 
   /** Form principal */
   const [form, setForm] = useState({
@@ -149,27 +125,21 @@ export default function ClientClaim() {
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
-  // Resync Y/M/D/h/m quand on change de mode
+  // resync quand on bascule local/utc
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
   useEffect(()=>{
     if(!parsedDate) return
     if(pickMode==='utc'){
-      setY(parsedDate.getUTCFullYear())
-      setM(parsedDate.getUTCMonth()+1)
-      setD(parsedDate.getUTCDate())
-      setH(parsedDate.getUTCHours())
-      setMin(parsedDate.getUTCMinutes())
+      setY(parsedDate.getUTCFullYear()); setM(parsedDate.getUTCMonth()+1); setD(parsedDate.getUTCDate())
+      setH(parsedDate.getUTCHours()); setMin(parsedDate.getUTCMinutes())
     } else {
-      setY(parsedDate.getFullYear())
-      setM(parsedDate.getMonth()+1)
-      setD(parsedDate.getDate())
-      setH(parsedDate.getHours())
-      setMin(parsedDate.getMinutes())
+      setY(parsedDate.getFullYear()); setM(parsedDate.getMonth()+1); setD(parsedDate.getDate())
+      setH(parsedDate.getHours()); setMin(parsedDate.getMinutes())
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickMode])
 
-  // Recalcule form.ts dès que Y/M/D/h/m changent
+  // recalcule ts quand on modifie le sélecteur local/utc
   useEffect(()=>{
     let d: Date
     if (pickMode==='local') d = new Date(Y, M-1, D, h, m, 0, 0)
@@ -177,7 +147,7 @@ export default function ClientClaim() {
     setForm(f=>({ ...f, ts: isoMinuteString(d) }))
   }, [pickMode, Y, M, D, h, m])
 
-  // Readouts
+  // readouts
   const utcReadable = useMemo(
     () => parsedDate ? parsedDate.toISOString().replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC') : '',
     [parsedDate]
@@ -186,85 +156,107 @@ export default function ClientClaim() {
     () => parsedDate ? (form.local_date_only ? localDayOnly(parsedDate) : localReadable(parsedDate)) : '',
     [parsedDate, form.local_date_only]
   )
-  const tzLabel = useMemo(()=> {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local' } catch { return 'Local' }
-  }, [])
+  const tzLabel = useMemo(()=> { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local' } catch { return 'Local' } }, [])
 
-  // UX edition hint
+  // hint édition
   const edition = useMemo(() => {
     if (!parsedDate) return null
-    const y = parsedDate.getUTCFullYear()
-    const mm = parsedDate.getUTCMonth()
-    const dd = parsedDate.getUTCDate()
-    const H = parsedDate.getUTCHours().toString().padStart(2,'0')
-    const Mi = parsedDate.getUTCMinutes().toString().padStart(2,'0')
+    const y = parsedDate.getUTCFullYear(), mm = parsedDate.getUTCMonth(), dd = parsedDate.getUTCDate()
+    const H = parsedDate.getUTCHours().toString().padStart(2,'0'), Mi = parsedDate.getUTCMinutes().toString().padStart(2,'0')
     const t = `${H}:${Mi}`
     const isLeap = ((y%4===0 && y%100!==0) || y%400===0) && mm===1 && dd===29
     const pretty = (t==='11:11' || t==='12:34' || t==='22:22' || (/^([0-9])\1:([0-9])\2$/).test(t))
     return (isLeap || pretty) ? 'premium' : 'standard'
   }, [parsedDate])
 
-  useEffect(()=>{ if (prefillTs) setForm(f=>({...f, ts: prefillTs})) }, []) // eslint-disable-line
+  useEffect(()=>{ if (prefillTs) setForm(f=>({...f, ts: prefillTs})) }, []) // pré-remplissage
 
-  // -------- Custom BG handling --------
+  /** --------- Custom background --------- */
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [customBg, setCustomBg] = useState<{ url:string; dataUrl:string; w:number; h:number } | null>(null)
   const [customErr, setCustomErr] = useState('')
   const [imgLoading, setImgLoading] = useState(false)
-  const didAutoOpen = useRef(false)
+  const lastObjectUrl = useRef<string | null>(null)
 
-  const openFileDialog = () => fileInputRef.current?.click()
+  function log(...args:any[]){ console.debug('[Claim/CustomBG]', ...args) }
 
-  // Ouvre automatiquement le picker quand on passe sur "custom" et qu’aucune image n’est chargée
-  useEffect(() => {
-    if (form.cert_style === 'custom' && !customBg && !didAutoOpen.current) {
-      didAutoOpen.current = true
-      openFileDialog()
-    }
-    if (form.cert_style !== 'custom') {
-      didAutoOpen.current = false
-    }
-  }, [form.cert_style, customBg])
-
-  // Nettoie l’ancienne URL si on remplace l’image
-  useEffect(() => {
-    return () => { if (customBg?.url) URL.revokeObjectURL(customBg.url) }
-  }, [customBg?.url])
-
-  async function fileToDataUrl(f: File): Promise<string> {
-    return new Promise((res, rej) => {
-      const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f)
-    })
+  const openFileDialog = () => {
+    const el = fileInputRef.current
+    if (!el) { console.error('[Claim/CustomBG] file input ref manquant'); return }
+    log('Ouverture du sélecteur de fichier…')
+    el.click()
   }
-  async function onPickCustomBg(file?: File | null) {
-    setCustomErr('')
-    if (!file) return
-    const mime = file.type.toLowerCase()
-    if (!/^image\/(png|jpeg|jpg)$/.test(mime)) { setCustomErr('Format invalide. Utilisez PNG ou JPG.'); return }
 
-    setImgLoading(true)
+  // bouton "Custom" → sélectionne le style + ouvre le picker (pas de bloc “Importer…”)
+  const onSelectStyle = (id: CertStyle) => {
+    setForm(f=>({...f, cert_style:id}))
+    if (id === 'custom') openFileDialog()
+  }
+
+  // lecture fichier → DataURL + ObjectURL ; robustesse pour re-choisir le même fichier ensuite
+  async function fileToDataUrl(f: File): Promise<string> {
+    return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
+  }
+
+  async function onPickCustomBg(file?: File | null) {
     try {
+      setCustomErr('')
+      if (!file) { log('Aucun fichier sélectionné'); return }
+
+      const mime = (file.type || '').toLowerCase()
+      if (!/^image\/(png|jpeg|jpg)$/.test(mime)) {
+        setCustomErr('Format invalide. Utilisez PNG ou JPG.')
+        console.error('[Claim/CustomBG] MIME non supporté:', mime)
+        return
+      }
+
+      setImgLoading(true)
+      log('Fichier choisi:', { name:file.name, size:file.size, type:file.type })
+
       const dataUrl = await fileToDataUrl(file)
-      const img = new Image()
-      img.onload = () => {
-        const w = img.naturalWidth, h = img.naturalHeight
+      const probe = new Image()
+      probe.onload = () => {
+        const w = probe.naturalWidth, h = probe.naturalHeight
         const ratio = w/h
         const okExact = ALLOWED_EXACT_SIZES.some(s => s.w===w && s.h===h)
         const okRatio = Math.abs(ratio-A4_RATIO) < RATIO_TOL || Math.abs(ratio-RATIO_2x3) < RATIO_TOL
-        if (!okExact && !okRatio) setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
+        if (!okExact && !okRatio) {
+          setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
+          console.error('[Claim/CustomBG] Dimensions non supportées:', {w,h,ratio})
+        }
         const url = URL.createObjectURL(file)
-        setCustomBg(prev => { if (prev?.url) URL.revokeObjectURL(prev.url); return { url, dataUrl, w, h } })
-        // Sécurise : si l’utilisateur a importé sans avoir cliqué la radio, on bascule sur custom
-        setForm(f => ({ ...f, cert_style: 'custom' }))
+
+        // nettoie l’ancienne URL si existante
+        if (lastObjectUrl.current) {
+          log('Révocation ancienne ObjectURL')
+          URL.revokeObjectURL(lastObjectUrl.current)
+        }
+        lastObjectUrl.current = url
+
+        setCustomBg({ url, dataUrl, w, h })
+        setForm(f => ({ ...f, cert_style: 'custom' })) // au cas où on n’était pas sur custom
+        log('CustomBG mis à jour → preview', {w,h,url})
       }
-      img.onerror = () => setCustomErr('Impossible de lire l’image.')
-      img.src = dataUrl
+      probe.onerror = (e) => {
+        setCustomErr('Impossible de lire l’image.')
+        console.error('[Claim/CustomBG] onerror Image()', e)
+      }
+      probe.src = dataUrl
+    } catch (e) {
+      console.error('[Claim/CustomBG] Exception onPickCustomBg', e)
+      setCustomErr('Erreur de lecture du fichier.')
     } finally {
+      // reset <input> pour que sélectionner à nouveau le même fichier redéclenche "change"
+      const el = fileInputRef.current
+      if (el) el.value = ''
       setImgLoading(false)
     }
   }
 
-  // Couleurs pour l’aperçu
+  // clean objectURL on unmount
+  useEffect(() => () => { if (lastObjectUrl.current) URL.revokeObjectURL(lastObjectUrl.current) }, [])
+
+  // Couleurs
   const mainColor = form.text_color || '#1A1F2A'
   const subtleColor = lighten(mainColor, 0.55)
   const ratio = contrastRatio(mainColor)
@@ -295,11 +287,7 @@ export default function ClientClaim() {
       payload.custom_bg_data_url = customBg.dataUrl
     }
 
-    const res = await fetch('/api/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
+    const res = await fetch('/api/checkout', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
 
     if (!res.ok) {
       setStatus('error')
@@ -315,7 +303,11 @@ export default function ClientClaim() {
           stripe_error: 'Erreur Stripe côté serveur.',
         }
         setError(map[j.error] || j.error || 'Unknown error')
-      } catch { setError('Unknown error') }
+        console.error('[Checkout] Erreur côté serveur', j)
+      } catch (err) {
+        console.error('[Checkout] Échec parsing erreur', err)
+        setError('Unknown error')
+      }
       return
     }
 
@@ -337,6 +329,7 @@ export default function ClientClaim() {
     background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh'
   }
 
+  // palette
   const SWATCHES = [
     '#000000','#111111','#1A1F2A','#222831','#2E3440','#37474F','#3E3E3E','#4B5563',
     '#5E452A','#6D4C41','#795548','#8D6E63',
@@ -348,6 +341,15 @@ export default function ClientClaim() {
 
   return (
     <main style={containerStyle}>
+      {/* input fichier global, persistant dans le DOM (évite unmount/remount) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg"
+        style={{display:'none'}}
+        onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
+      />
+
       <section style={{maxWidth:1200, margin:'0 auto', padding:'48px 24px'}}>
         {/* header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
@@ -435,7 +437,7 @@ export default function ClientClaim() {
               </details>
             </div>
 
-            {/* ✅ Couleur de la police (sous l'étape 1) */}
+            {/* ✅ Couleur de la police */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>COULEUR DE LA POLICE</div>
@@ -445,7 +447,6 @@ export default function ClientClaim() {
                 </div>
               </div>
 
-              {/* Aperçu rapide */}
               <div aria-label="Aperçu de texte" style={{marginTop:10, display:'flex', alignItems:'center', gap:12}}>
                 <div style={{width:42, height:42, borderRadius:10, border:'1px solid var(--color-border)', display:'grid', placeItems:'center', background: CERT_BG_HEX, color: mainColor, fontWeight:800}}>
                   Aa
@@ -455,38 +456,28 @@ export default function ClientClaim() {
                 </div>
               </div>
 
-              {/* Palette élargie */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(34px, 1fr))', gap:8, marginTop:12}}>
                 {SWATCHES.map(c => (
                   <button key={c} type="button" onClick={()=>setForm(f=>({...f, text_color: c}))}
                     aria-label={`Couleur ${c}`} title={c}
-                    style={{
-                      width:34, height:34, borderRadius:12, cursor:'pointer',
-                      background:c, border:'1px solid var(--color-border)',
-                      outline: form.text_color===c ? '3px solid rgba(228,183,61,.5)' : 'none'
-                    }}
+                    style={{width:34, height:34, borderRadius:12, cursor:'pointer', background:c, border:'1px solid var(--color-border)', outline: form.text_color===c ? '3px solid rgba(228,183,61,.5)' : 'none'}}
                   />
                 ))}
               </div>
 
-              {/* Picker + HEX */}
               <div style={{display:'flex', alignItems:'center', gap:10, marginTop:12, flexWrap:'wrap'}}>
                 <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                  <input type="color" value={form.text_color}
-                    onChange={e=>setForm(f=>({...f, text_color: e.target.value}))}/>
+                  <input type="color" value={form.text_color} onChange={e=>setForm(f=>({...f, text_color: e.target.value}))}/>
                   <span style={{fontSize:12, opacity:.8}}>Sélecteur</span>
                 </label>
                 <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
                   <span style={{fontSize:12, opacity:.8}}>HEX</span>
                   <input type="text" value={form.text_color}
-                    onChange={e=>{
-                      const v = e.target.value.trim()
-                      if (/^#[0-9a-fA-F]{6}$/.test(v)) setForm(f=>({...f, text_color: v}))
-                    }}
+                    onChange={e=>{ const v=e.target.value.trim(); if(/^#[0-9a-fA-F]{6}$/.test(v)) setForm(f=>({...f, text_color:v})) }}
                     style={{width:120, padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                     placeholder="#1A1F2A"/>
                 </label>
-                <small style={{opacity:.7}}>Astuce : choisissez une couleur sombre pour une bonne lisibilité sur fond clair.</small>
+                <small style={{opacity:.7}}>Astuce : choisissez une couleur sombre pour la lisibilité sur fond clair.</small>
               </div>
             </div>
 
@@ -494,20 +485,13 @@ export default function ClientClaim() {
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE MINUTE</div>
 
-              {/* mode de sélection */}
               <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
                 <button type="button" onClick={()=>setPickMode('local')} aria-pressed={pickMode==='local'}
-                  style={{padding:'8px 10px', borderRadius:10, cursor:'pointer',
-                    border: pickMode==='local' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                    background:'transparent', color:'var(--color-text)'}}>Sélection locale (recommandé)</button>
-
+                  style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: pickMode==='local' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>Sélection locale (recommandé)</button>
                 <button type="button" onClick={()=>setPickMode('utc')} aria-pressed={pickMode==='utc'}
-                  style={{padding:'8px 10px', borderRadius:10, cursor:'pointer',
-                    border: pickMode==='utc' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                    background:'transparent', color:'var(--color-text)'}}>Saisie UTC</button>
+                  style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: pickMode==='utc' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>Saisie UTC</button>
               </div>
 
-              {/* Sélecteurs communs */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8}}>
                 <label style={{display:'grid', gap:6}}>
                   <span>Année</span>
@@ -549,25 +533,20 @@ export default function ClientClaim() {
               <small style={{opacity:.7, display:'block', marginTop:8}}>
                 {pickMode==='local'
                   ? <>Fuseau local détecté : <strong>{tzLabel}</strong>. L’horodatage final est enregistré en <strong>UTC</strong>.</>
-                  : <>Mode <strong>UTC</strong> : vos sélections (année, mois, jour, heure, minute) sont interprétées directement en UTC.</>}
+                  : <>Mode <strong>UTC</strong> : vos sélections sont interprétées directement en UTC.</>}
               </small>
 
-              {/* Readouts */}
               <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
                 <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>UTC&nbsp;:</strong> {utcReadable || '—'}</div>
                 <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Heure locale&nbsp;:</strong> {localReadableStr || '—'}</div>
                 <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}</div>
               </div>
 
-              {/* Affichage sur le certificat */}
               <div style={{marginTop:12}}>
                 <div style={{fontSize:14, color:'var(--color-muted)', marginBottom:8}}>Affichage sur le certificat</div>
                 <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
                   {(['utc','utc+local','local+utc'] as const).map(option => (
-                    <label key={option} style={{
-                      padding:'8px 10px', borderRadius:10, cursor:'pointer',
-                      border: form.time_display===option ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'
-                    }}>
+                    <label key={option} style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: form.time_display===option ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'}}>
                       <input type="radio" name="time_display" value={option}
                         checked={form.time_display===option}
                         onChange={()=>setForm(f=>({...f, time_display: option}))}
@@ -587,9 +566,15 @@ export default function ClientClaim() {
               </div>
             </div>
 
-            {/* Step 3 — Style (Custom ouvre directement le picker) */}
+            {/* Step 3 — Style (Custom ouvre directement le picker, pas de bloc “Importer…”) */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE</div>
+
+              {!!customErr && (
+                <div style={{marginBottom:8, padding:'8px 10px', borderRadius:10, border:'1px solid #ff8a8a', color:'#ffb2b2', background:'rgba(255,0,0,.06)'}}>
+                  {customErr}
+                </div>
+              )}
 
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
                 {STYLES.map(s => {
@@ -599,38 +584,18 @@ export default function ClientClaim() {
                   const isCustom = s.id === 'custom'
                   return (
                     <div key={s.id} style={{position:'relative'}}>
-                      <label
+                      <div
+                        onClick={()=>onSelectStyle(s.id)}
+                        onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); onSelectStyle(s.id) } }}
+                        role="button" tabIndex={0} aria-label={`Style ${s.label}`}
                         style={{
                           cursor:'pointer',
                           border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                           borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
                           boxShadow: selected ? 'var(--shadow-elev1)' : undefined
                         }}
-                        onClick={()=>{
-                          setForm(f=>({...f, cert_style: s.id}))
-                          if (isCustom) openFileDialog()
-                        }}
-                        onKeyDown={(e)=>{
-                          if ((e.key==='Enter' || e.key===' ') && isCustom) {
-                            e.preventDefault()
-                            setForm(f=>({...f, cert_style: s.id}))
-                            openFileDialog()
-                          }
-                        }}
-                        aria-label={`Style ${s.label}`}
-                        role="button"
-                        tabIndex={0}
                       >
-                        <input
-                          type="radio" name="cert_style" value={s.id}
-                          checked={selected}
-                          onChange={()=>setForm(f=>({...f, cert_style:s.id}))}
-                          style={{display:'none'}}
-                        />
-                        <div style={{
-                          height:110, borderRadius:12, border:'1px solid var(--color-border)',
-                          backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
-                        }} aria-hidden />
+                        <div style={{height:110, borderRadius:12, border:'1px solid var(--color-border)', backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'}} aria-hidden />
                         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                           <div>
                             <div style={{fontWeight:700}}>{s.label}</div>
@@ -638,40 +603,13 @@ export default function ClientClaim() {
                           </div>
                           <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
                         </div>
-                      </label>
+                      </div>
 
-                      {/* input file caché – uniquement pour Custom */}
-                      {isCustom && (
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/png,image/jpeg,image/jpg"
-                          style={{display:'none'}}
-                          onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
-                        />
-                      )}
-
-                      {/* Badges */}
-                      {isCustom && customBg && (
-                        <div style={{
-                          position:'absolute', top:10, right:10,
-                          fontSize:11, padding:'4px 8px', borderRadius:999,
-                          background:'rgba(228,183,61,.14)', border:'1px solid var(--color-primary)'
-                        }}>
-                          Image chargée ✓
-                        </div>
-                      )}
                       {isCustom && imgLoading && (
-                        <div style={{
-                          position:'absolute', top:10, left:10,
-                          fontSize:11, padding:'4px 8px', borderRadius:999,
-                          background:'rgba(255,255,255,.08)', border:'1px solid var(--color-border)'
-                        }}>
-                          Chargement…
-                        </div>
+                        <div style={{position:'absolute', top:10, left:10, fontSize:11, padding:'4px 8px', borderRadius:999, background:'rgba(255,255,255,.08)', border:'1px solid var(--color-border)'}}>Chargement…</div>
                       )}
-                      {isCustom && customErr && (
-                        <div style={{marginTop:6, fontSize:12, color:'#ff8a8a'}}>{customErr}</div>
+                      {isCustom && customBg && (
+                        <div style={{position:'absolute', top:10, right:10, fontSize:11, padding:'4px 8px', borderRadius:999, background:'rgba(228,183,61,.14)', border:'1px solid var(--color-primary)'}}>Image chargée ✓ {customBg.w}×{customBg.h}</div>
                       )}
                     </div>
                   )
@@ -701,10 +639,8 @@ export default function ClientClaim() {
             style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
             <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
               <img
-                key={customBg?.url || form.cert_style} // force le refresh si nouvelle image
-                src={form.cert_style==='custom'
-                      ? (customBg?.url || '/cert_bg/neutral.png')
-                      : `/cert_bg/${form.cert_style}.png`}
+                key={(form.cert_style==='custom' ? customBg?.url : form.cert_style) || 'none'} // force refresh
+                src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png') : `/cert_bg/${form.cert_style}.png`}
                 alt={`Aperçu fond certificat — ${form.cert_style}`}
                 width={840} height={1188}
                 style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
@@ -715,7 +651,7 @@ export default function ClientClaim() {
                 <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>PARCELS OF TIME — PREVIEW</div>
               </div>
 
-              {/* Overlay : safe-area */}
+              {/* Overlay */}
               {(() => {
                 const ins = SAFE_INSETS_PCT[form.cert_style]
                 const EDGE_PX = 12
@@ -723,18 +659,12 @@ export default function ClientClaim() {
                 const showLocalFirst = form.time_display === 'local+utc'
                 return (
                   <>
-                    <div style={{
-                      position:'absolute',
-                      top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`,
-                      display:'grid', gridTemplateRows:'auto 1fr', color:mainColor, textAlign:'center'
-                    }}>
-                      {/* En-tête */}
+                    <div style={{position:'absolute', top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`, display:'grid', gridTemplateRows:'auto 1fr', color:mainColor, textAlign:'center'}}>
                       <div style={{textAlign:'left', color:subtleColor}}>
                         <div style={{fontWeight:900, fontSize:'min(3.8vw, 20px)'}}>Parcels of Time</div>
                         <div style={{opacity:.9, fontSize:'min(3.2vw, 14px)'}}>Certificate of Claim</div>
                       </div>
 
-                      {/* Zone centrale — horodatages */}
                       <div style={{display:'grid', placeItems:'center'}}>
                         <div style={{maxWidth:520}}>
                           <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
@@ -743,14 +673,10 @@ export default function ClientClaim() {
                           </div>
                           {form.time_display !== 'utc' && (
                             <div style={{color:subtleColor, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
-                              {showLocalFirst
-                                ? (utcReadable || 'YYYY-MM-DD HH:MM UTC')
-                                : (localStr ? `${localStr} (${tzLabel})` : '')
-                              }
+                              {showLocalFirst ? (utcReadable || 'YYYY-MM-DD HH:MM UTC') : (localStr ? `${localStr} (${tzLabel})` : '')}
                             </div>
                           )}
 
-                          {/* Owned by → Title → Message */}
                           <div style={{opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Owned by</div>
                           <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>
                             {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
@@ -766,16 +692,13 @@ export default function ClientClaim() {
                           {form.message && (
                             <>
                               <div style={{opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Message</div>
-                              <div style={{marginTop:6, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)'}}>
-                                “{form.message}”
-                              </div>
+                              <div style={{marginTop:6, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)'}}>“{form.message}”</div>
                             </>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Pied de page ancré */}
                     <div style={{position:'absolute', left: EDGE_PX, bottom: EDGE_PX, fontSize:'min(3.2vw,12px)', color: subtleColor, textAlign:'left', pointerEvents:'none'}}>
                       Certificate ID • Integrity hash (aperçu)
                     </div>
