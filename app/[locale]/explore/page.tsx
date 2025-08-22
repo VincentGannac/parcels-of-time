@@ -29,8 +29,8 @@ const TOKENS = {
   '--shadow-elev2': '0 12px 36px rgba(0,0,0,.45)',
 } as const
 
-export default async function Page({ params }: { params: { locale: string } }) {
-  const { locale } = params
+export default async function Page({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params
   const initial = await getInitial()
 
   return (
