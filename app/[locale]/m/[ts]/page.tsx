@@ -34,7 +34,7 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
   const pub = await getPublicMinute(decodedTs)
 
   const pdfHref = `/api/cert/${encodeURIComponent(decodedTs)}`
-  const homeHref = `/`
+  const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
 
   return (

@@ -38,6 +38,8 @@ function rateLimit(ip: string, limit = 8, windowMs = 60_000) {
 }
 
 export async function POST(req: Request) {
+  const accLang = (req.headers.get('accept-language') || '').toLowerCase();
+  const locale = accLang.startsWith('fr') ? 'fr' : 'en';
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0] || 'unknown'
   if (!rateLimit(ip)) return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
@@ -117,7 +119,7 @@ export async function POST(req: Request) {
         message_public,
       },
       success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,
+      cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,
     })
 
     if (!session.url) return NextResponse.json({ error: 'no_checkout_url' }, { status: 500 })

@@ -10,7 +10,9 @@ type CertStyle = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'
 const ALLOWED_STYLES: readonly CertStyle[] = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
 
 export async function GET(req: Request) {
-  const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
+     const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
+     const accLang = (req.headers.get('accept-language') || '').toLowerCase();
+     const locale = accLang.startsWith('fr') ? 'fr' : 'en';
 
   try {
     const url = new URL(req.url);
@@ -115,7 +117,7 @@ export async function GET(req: Request) {
 
       // email
       try {
-        const publicUrl = `${base}/m/${encodeURIComponent(ts)}`;
+        const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
         const certUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
         const { sendClaimReceiptEmail } = await import('@/lib/email');
         await sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl })
@@ -127,7 +129,7 @@ export async function GET(req: Request) {
       throw e;
     } finally { client.release(); }
 
-    return NextResponse.redirect(`${base}/m/${encodeURIComponent(ts)}`, { status: 303 });
+    return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(ts)}`, { status: 303 });
   } catch (e:any) {
     console.error('confirm_error:', e?.message, e?.stack);
     return new Response('Payment captured, but we hit a server error finalizing your certificate (minute).', { status: 500 });
