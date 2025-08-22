@@ -9,7 +9,6 @@ type CertStyle =
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
 
 const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
-  // ✅ Custom en premier (ordre d’affichage)
   { id: 'custom',     label: 'Custom',      hint: 'Importer image 2480×3508 (A4) ou 1024×1536' },
   { id: 'neutral',    label: 'Neutral',     hint: 'sobre & élégant' },
   { id: 'romantic',   label: 'Romantic',    hint: 'hearts & lace' },
@@ -114,7 +113,7 @@ export default function ClientClaim() {
   const initialGift = giftParam === '1' || giftParam === 'true'
 
   const allowed = STYLES.map(s => s.id)
-  // ⬅️ Neutral par défaut (sauf si un style valide est passé en query)
+  // Neutral par défaut (sauf si un style valide est passé en query)
   const initialStyle: CertStyle = (allowed as readonly string[]).includes(styleParam as CertStyle)
     ? (styleParam as CertStyle) : 'neutral'
 
@@ -144,7 +143,6 @@ export default function ClientClaim() {
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
     local_date_only: false,
     text_color: '#1A1F2A',
-    // ✅ Drapeaux registre public (opt-in)
     title_public: false,
     message_public: false,
   })
@@ -208,11 +206,30 @@ export default function ClientClaim() {
 
   useEffect(()=>{ if (prefillTs) setForm(f=>({...f, ts: prefillTs})) }, []) // eslint-disable-line
 
-  // Custom BG
+  // -------- Custom BG handling --------
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [customBg, setCustomBg] = useState<{ url:string; dataUrl:string; w:number; h:number } | null>(null)
   const [customErr, setCustomErr] = useState('')
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [imgLoading, setImgLoading] = useState(false)
+  const didAutoOpen = useRef(false)
+
   const openFileDialog = () => fileInputRef.current?.click()
+
+  // Ouvre automatiquement le picker quand on passe sur "custom" et qu’aucune image n’est chargée
+  useEffect(() => {
+    if (form.cert_style === 'custom' && !customBg && !didAutoOpen.current) {
+      didAutoOpen.current = true
+      openFileDialog()
+    }
+    if (form.cert_style !== 'custom') {
+      didAutoOpen.current = false
+    }
+  }, [form.cert_style, customBg])
+
+  // Nettoie l’ancienne URL si on remplace l’image
+  useEffect(() => {
+    return () => { if (customBg?.url) URL.revokeObjectURL(customBg.url) }
+  }, [customBg?.url])
 
   async function fileToDataUrl(f: File): Promise<string> {
     return new Promise((res, rej) => {
@@ -221,21 +238,30 @@ export default function ClientClaim() {
   }
   async function onPickCustomBg(file?: File | null) {
     setCustomErr('')
-    if (!file) { setCustomBg(null); return }
-    if (!/^image\/(png|jpeg)$/.test(file.type)) { setCustomErr('Format invalide. Utilisez PNG ou JPG.'); return }
-    const dataUrl = await fileToDataUrl(file)
-    const img = new Image()
-    img.onload = () => {
-      const w = img.naturalWidth, h = img.naturalHeight
-      const ratio = w/h
-      const okExact = ALLOWED_EXACT_SIZES.some(s => s.w===w && s.h===h)
-      const okRatio = Math.abs(ratio-A4_RATIO) < RATIO_TOL || Math.abs(ratio-RATIO_2x3) < RATIO_TOL
-      if (!okExact && !okRatio) setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
-      const url = URL.createObjectURL(file)
-      setCustomBg({ url, dataUrl, w, h })
+    if (!file) return
+    const mime = file.type.toLowerCase()
+    if (!/^image\/(png|jpeg|jpg)$/.test(mime)) { setCustomErr('Format invalide. Utilisez PNG ou JPG.'); return }
+
+    setImgLoading(true)
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      const img = new Image()
+      img.onload = () => {
+        const w = img.naturalWidth, h = img.naturalHeight
+        const ratio = w/h
+        const okExact = ALLOWED_EXACT_SIZES.some(s => s.w===w && s.h===h)
+        const okRatio = Math.abs(ratio-A4_RATIO) < RATIO_TOL || Math.abs(ratio-RATIO_2x3) < RATIO_TOL
+        if (!okExact && !okRatio) setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
+        const url = URL.createObjectURL(file)
+        setCustomBg(prev => { if (prev?.url) URL.revokeObjectURL(prev.url); return { url, dataUrl, w, h } })
+        // Sécurise : si l’utilisateur a importé sans avoir cliqué la radio, on bascule sur custom
+        setForm(f => ({ ...f, cert_style: 'custom' }))
+      }
+      img.onerror = () => setCustomErr('Impossible de lire l’image.')
+      img.src = dataUrl
+    } finally {
+      setImgLoading(false)
     }
-    img.onerror = () => setCustomErr('Impossible de lire l’image.')
-    img.src = dataUrl
   }
 
   // Couleurs pour l’aperçu
@@ -262,7 +288,6 @@ export default function ClientClaim() {
       time_display: form.time_display,
       local_date_only: form.local_date_only ? '1' : '0',
       text_color: mainColor,
-      // ✅ publier ou non dans le registre
       title_public: form.title_public ? '1' : '0',
       message_public: form.message_public ? '1' : '0',
     }
@@ -562,18 +587,9 @@ export default function ClientClaim() {
               </div>
             </div>
 
-            {/* Step 3 — Style (ouverture directe du picker pour Custom) */}
+            {/* Step 3 — Style (Custom ouvre directement le picker) */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE</div>
-
-              {/* input caché pour Custom */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg"
-                style={{display:'none'}}
-                onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
-              />
 
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
                 {STYLES.map(s => {
@@ -582,29 +598,60 @@ export default function ClientClaim() {
                   const full = `/cert_bg/${s.id}.png`
                   const isCustom = s.id === 'custom'
                   return (
-                    <label key={s.id} style={{
-                      cursor:'pointer',
-                      border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                      borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
-                      boxShadow: selected ? 'var(--shadow-elev1)' : undefined, position:'relative'
-                    }}
-                      onClick={()=>{
-                        // si on clique la carte Custom, on ouvre directement le file picker
-                        if (isCustom) openFileDialog()
-                      }}
-                    >
-                      <input
-                        type="radio" name="cert_style" value={s.id}
-                        checked={selected}
-                        onChange={()=>setForm(f=>({...f, cert_style:s.id}))}
-                        style={{display:'none'}}
-                      />
-                      <div style={{
-                        height:110, borderRadius:12, border:'1px solid var(--color-border)',
-                        backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
-                      }} aria-hidden />
+                    <div key={s.id} style={{position:'relative'}}>
+                      <label
+                        style={{
+                          cursor:'pointer',
+                          border:selected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          borderRadius:16, background:'var(--color-surface)', padding:12, display:'grid', gap:8,
+                          boxShadow: selected ? 'var(--shadow-elev1)' : undefined
+                        }}
+                        onClick={()=>{
+                          setForm(f=>({...f, cert_style: s.id}))
+                          if (isCustom) openFileDialog()
+                        }}
+                        onKeyDown={(e)=>{
+                          if ((e.key==='Enter' || e.key===' ') && isCustom) {
+                            e.preventDefault()
+                            setForm(f=>({...f, cert_style: s.id}))
+                            openFileDialog()
+                          }
+                        }}
+                        aria-label={`Style ${s.label}`}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <input
+                          type="radio" name="cert_style" value={s.id}
+                          checked={selected}
+                          onChange={()=>setForm(f=>({...f, cert_style:s.id}))}
+                          style={{display:'none'}}
+                        />
+                        <div style={{
+                          height:110, borderRadius:12, border:'1px solid var(--color-border)',
+                          backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
+                        }} aria-hidden />
+                        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                          <div>
+                            <div style={{fontWeight:700}}>{s.label}</div>
+                            {s.hint && <div style={{opacity:.6, fontSize:12}}>{s.hint}</div>}
+                          </div>
+                          <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
+                        </div>
+                      </label>
 
-                      {/* Badge discret quand un fond custom est chargé */}
+                      {/* input file caché – uniquement pour Custom */}
+                      {isCustom && (
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg"
+                          style={{display:'none'}}
+                          onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
+                        />
+                      )}
+
+                      {/* Badges */}
                       {isCustom && customBg && (
                         <div style={{
                           position:'absolute', top:10, right:10,
@@ -614,15 +661,19 @@ export default function ClientClaim() {
                           Image chargée ✓
                         </div>
                       )}
-
-                      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-                        <div>
-                          <div style={{fontWeight:700}}>{s.label}</div>
-                          {s.hint && <div style={{opacity:.6, fontSize:12}}>{s.hint}</div>}
+                      {isCustom && imgLoading && (
+                        <div style={{
+                          position:'absolute', top:10, left:10,
+                          fontSize:11, padding:'4px 8px', borderRadius:999,
+                          background:'rgba(255,255,255,.08)', border:'1px solid var(--color-border)'
+                        }}>
+                          Chargement…
                         </div>
-                        <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
-                      </div>
-                    </label>
+                      )}
+                      {isCustom && customErr && (
+                        <div style={{marginTop:6, fontSize:12, color:'#ff8a8a'}}>{customErr}</div>
+                      )}
+                    </div>
                   )
                 })}
               </div>
@@ -650,7 +701,10 @@ export default function ClientClaim() {
             style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
             <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
               <img
-                src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png') : `/cert_bg/${form.cert_style}.png`}
+                key={customBg?.url || form.cert_style} // force le refresh si nouvelle image
+                src={form.cert_style==='custom'
+                      ? (customBg?.url || '/cert_bg/neutral.png')
+                      : `/cert_bg/${form.cert_style}.png`}
                 alt={`Aperçu fond certificat — ${form.cert_style}`}
                 width={840} height={1188}
                 style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
@@ -683,7 +737,6 @@ export default function ClientClaim() {
                       {/* Zone centrale — horodatages */}
                       <div style={{display:'grid', placeItems:'center'}}>
                         <div style={{maxWidth:520}}>
-                          {/* main + sub times */}
                           <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
                             {showLocalFirst ? (localStr ? `${localStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)')
                                             : (utcReadable || 'YYYY-MM-DD HH:MM UTC')}
