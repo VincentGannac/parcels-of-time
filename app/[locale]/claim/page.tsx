@@ -1,4 +1,4 @@
-// app/claim/page.tsx 
+// app/[locale]/claim/page.tsx
 import { Suspense } from 'react' 
 import ClientClaim from './ClientClaim' 
 export const dynamic = 'force-dynamic' // opt-out SSG pour cette page 
