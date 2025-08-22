@@ -22,29 +22,39 @@ async function countOf(table: string) {
   } catch { return -1 }
 }
 
+
 async function testMinuteRead(tsISO: string) {
-  const h = await headers()
-  const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
-  const host  = (h.get('host') || '').split(',')[0].trim()
+  // headers() is async in Next 15
+  let proto = 'https'
+  let host = ''
+
+  try {
+    const h = await headers()
+    proto = (h.get('x-forwarded-proto') ?? 'https').split(',')[0].trim() || 'https'
+    host  = (h.get('host') ?? '').split(',')[0].trim()
+  } catch {
+    // ok if unavailable; we'll skip absolute fetch
+  }
+
   const absUrl = host ? `${proto}://${host}/api/minutes/${encodeURIComponent(tsISO)}` : null
 
   const out: any = { tsISO }
 
-  // abs fetch
+  // 1) absolute fetch (if host computed)
   if (absUrl) {
     try {
-      const r = await fetch(absUrl, { cache:'no-store' })
+      const r = await fetch(absUrl, { cache: 'no-store' })
       out.abs = { ok: r.ok, status: r.status, body: r.ok ? await r.json() : null }
     } catch (e:any) { out.abs = { ok:false, error: e?.message || 'fetch_err' } }
   }
 
-  // rel fetch
+  // 2) relative fetch
   try {
-    const r = await fetch(`/api/minutes/${encodeURIComponent(tsISO)}`, { cache:'no-store' })
+    const r = await fetch(`/api/minutes/${encodeURIComponent(tsISO)}`, { cache: 'no-store' })
     out.rel = { ok: r.ok, status: r.status, body: r.ok ? await r.json() : null }
   } catch (e:any) { out.rel = { ok:false, error: e?.message || 'fetch_err' } }
 
-  // db
+  // 3) direct DB probe
   try {
     const { rows } = await pool.query(
       `select id, ts, title, message from minute_public where ts=$1::timestamptz`,
@@ -59,7 +69,7 @@ async function testMinuteRead(tsISO: string) {
                 case when c.title_public   then c.title   else null end as title,
                 case when c.message_public then c.message else null end as message
            from claims c
-          where c.ts=$1::timestamptz`,
+          where c.ts = $1::timestamptz`,
         [tsISO]
       )
       if (q2.rows.length) out.db = { ok:true, source:'claims', id:String(q2.rows[0].id) }
@@ -72,10 +82,17 @@ async function testMinuteRead(tsISO: string) {
   return out
 }
 
-export default async function Health(
-  { params, searchParams }: { params: Promise<{ locale:'fr'|'en' }>, searchParams?: { ts?: string } }
-) {
-  await params
+
+export default async function Health(props: {
+  params: Promise<{ locale: 'fr' | 'en' }>
+  // ✅ Next 15 : searchParams est aussi un Promise
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  await props.params // on n'a pas besoin de la valeur ici
+  const sp = await props.searchParams
+  const tsParam = sp?.ts
+  const tsISO = Array.isArray(tsParam) ? tsParam[0] : (tsParam || '')
+
   const checks: Record<string, Row> = {}
 
   // Env (ne pas exposer les valeurs)
@@ -109,7 +126,7 @@ export default async function Health(
     checks.trigger_trg_sync_minute_public = { ok: rows.length > 0 }
   } catch (e:any) { checks.trigger_trg_sync_minute_public = { ok:false, detail:e?.message } }
 
-  // Policy lecture minute_public (optionnelle si tu n’actives pas RLS)
+  // Policy lecture minute_public (optionnelle si RLS activée)
   try {
     const { rows } = await pool.query(`
       select 1
@@ -119,35 +136,31 @@ export default async function Health(
     checks.policy_minute_public_read = { ok: rows.length > 0 }
   } catch (e:any) { checks.policy_minute_public_read = { ok:false, detail:e?.message } }
 
-  // Compteurs rapides
+  // Compteurs
   const claimsCount = await countOf('claims')
   const publicCount = await countOf('minute_public')
 
-  // Minute testable : ?ts=ISO sinon on prend la plus récente claim si dispo
-  let tsISO = searchParams?.ts || ''
-  if (!tsISO) {
+  // Minute test
+  let probeTs = tsISO
+  if (!probeTs) {
     try {
       const { rows } = await pool.query(`select ts from claims order by ts desc limit 1`)
-      tsISO = rows[0]?.ts ? new Date(rows[0].ts).toISOString() : ''
+      probeTs = rows[0]?.ts ? new Date(rows[0].ts).toISOString() : ''
     } catch {}
   }
-  const minuteProbe = tsISO ? await testMinuteRead(tsISO) : { note: 'Aucune ts trouvée' }
+  const minuteProbe = probeTs ? await testMinuteRead(probeTs) : { note: 'Aucune ts trouvée' }
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui, Segoe UI, Roboto, Inter, sans-serif' }}>
       <h1>Health (locale)</h1>
-      <p>Diag de l’app (env/DB/tables/trigger/policies) + test lecture minute via API et DB.</p>
+      <p>Diag env/DB/tables/trigger/policies + test lecture minute via API et DB.</p>
 
       <h2>Environment</h2>
       <ul>
-        {Object.entries({
-          DATABASE_URL: checks.env_DATABASE_URL,
-          STRIPE_SECRET_KEY: checks.env_STRIPE_SECRET_KEY,
-          RESEND_API_KEY: checks.env_RESEND_API_KEY,
-          'NEXT_PUBLIC_BASE_URL|SITE_URL': checks.env_PUBLIC_BASE,
-        }).map(([k,v]) => (
-          <li key={k}><strong>{k}</strong>: {v.ok ? 'OK' : `FAIL${v.detail ? ' — '+v.detail : ''}`}</li>
-        ))}
+        <li><strong>DATABASE_URL</strong>: {checks.env_DATABASE_URL.ok ? 'OK' : 'FAIL'}</li>
+        <li><strong>STRIPE_SECRET_KEY</strong>: {checks.env_STRIPE_SECRET_KEY.ok ? 'OK' : 'FAIL'}</li>
+        <li><strong>RESEND_API_KEY</strong>: {checks.env_RESEND_API_KEY.ok ? 'OK' : 'FAIL'}</li>
+        <li><strong>NEXT_PUBLIC_BASE_URL|SITE_URL</strong>: {checks.env_PUBLIC_BASE.ok ? 'OK' : 'FAIL'}</li>
       </ul>
 
       <h2>Database</h2>
@@ -164,7 +177,7 @@ export default async function Health(
       </ul>
 
       <h2>Minute probe</h2>
-      <p>Utilise <code>?ts=YYYY-MM-DDTHH:MM:00.000Z</code> pour tester une minute précise.</p>
+      <p>Ajoute <code>?ts=YYYY-MM-DDTHH:MM:00.000Z</code> à l’URL pour tester une minute précise.</p>
       <pre style={{ background:'#0b0e14', color:'#e6eaf2', padding:12, borderRadius:8 }}>
         {JSON.stringify(minuteProbe, null, 2)}
       </pre>
