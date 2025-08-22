@@ -1,4 +1,4 @@
-// app/explore/page.tsx
+// app/[locale]/explore/page.tsx
 import RegistryClient from './RegistryClient'
 import { absoluteUrl } from '@/lib/url'
 
