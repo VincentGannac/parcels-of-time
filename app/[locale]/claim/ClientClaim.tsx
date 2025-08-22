@@ -198,22 +198,56 @@ export default function ClientClaim() {
     return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
   }
 
+  // Conversion HEIC/HEIF -> PNG (via heic2any), chargée dynamiquement
+  async function maybeConvertHeicToPng(original: File, setErr: (s:string)=>void, logFn:(...a:any[])=>void): Promise<File> {
+    const type = (original.type || '').toLowerCase()
+    const looksHeic =
+      /^image\/(heic|heif|heic-sequence|heif-sequence)$/.test(type) ||
+      /\.(heic|heif)$/i.test(original.name)
+
+    if (!looksHeic) return original
+
+    logFn('HEIC/HEIF détecté — conversion → PNG via heic2any…', { name: original.name, type: original.type, size: original.size })
+    try {
+      const heic2any = (await import('heic2any')).default as (opts: any) => Promise<Blob>
+      const outBlob = await heic2any({ blob: original, toType: 'image/png', quality: 0.92 })
+      const pngFile = new File([outBlob], original.name.replace(/\.(heic|heif)\b/i, '.png'), { type: 'image/png' })
+      logFn('Conversion HEIC->PNG OK', { outSize: outBlob.size })
+      return pngFile
+    } catch (e) {
+      console.error('[Claim/CustomBG] Conversion HEIC/HEIF échouée', e)
+      setErr('Impossible de convertir votre HEIC/HEIF. Essayez avec un PNG/JPG, ou réessayez.')
+      throw e
+    }
+  }
+
+
+
   async function onPickCustomBg(file?: File | null) {
     try {
       setCustomErr('')
       if (!file) { log('Aucun fichier sélectionné'); return }
 
-      const mime = (file.type || '').toLowerCase()
-      if (!/^image\/(png|jpeg|jpg)$/.test(mime)) {
-        setCustomErr('Format invalide. Utilisez PNG ou JPG.')
-        console.error('[Claim/CustomBG] MIME non supporté:', mime)
-        return
-      }
+       // 👉 Si HEIC/HEIF, on convertit en PNG (sinon on garde tel quel)
+       let workingFile = file
+       try {
+         workingFile = await maybeConvertHeicToPng(file, setCustomErr, log)
+       } catch {
+         // erreur déjà affichée par maybeConvertHeicToPng
+         return
+       }
+ 
+       const mime = (workingFile.type || '').toLowerCase()
+       if (!/^image\/(png|jpeg|jpg)$/.test(mime)) {
+         setCustomErr('Format invalide. Utilisez PNG ou JPG (HEIC/HEIF sont convertis automatiquement).')
+         console.error('[Claim/CustomBG] MIME non supporté après conversion éventuelle:', mime)
+         return
+       }
 
       setImgLoading(true)
-      log('Fichier choisi:', { name:file.name, size:file.size, type:file.type })
+      log('Fichier prêt pour traitement:', { name: workingFile.name, size: workingFile.size, type: workingFile.type })
 
-      const dataUrl = await fileToDataUrl(file)
+      const dataUrl = await fileToDataUrl(workingFile)
       const probe = new Image()
       probe.onload = () => {
         const w = probe.naturalWidth, h = probe.naturalHeight
@@ -224,7 +258,7 @@ export default function ClientClaim() {
           setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
           console.error('[Claim/CustomBG] Dimensions non supportées:', {w,h,ratio})
         }
-        const url = URL.createObjectURL(file)
+        const url = URL.createObjectURL(workingFile)
 
         // nettoie l’ancienne URL si existante
         if (lastObjectUrl.current) {
@@ -345,7 +379,7 @@ export default function ClientClaim() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/jpg"
+        accept="image/png,image/jpeg,image/jpg,image/heic,image/heif,.heic,.heif"
         style={{display:'none'}}
         onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
       />
