@@ -26,9 +26,9 @@ const TOKENS = {
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
-export default async function Page({ params }: { params: Promise<{ locale: string; ts: string }> }) {
-  const { locale, ts } = await params
-  const decodedTs = decodeURIComponent(ts)
+export default async function Page({ params }: { params: { locale: string; ts: string } }) {
+  const { locale, ts } = params;
+  const decodedTs = decodeURIComponent(ts);
 
   // Registre public minimal (optionnel)
   const pub = await getPublicMinute(decodedTs)

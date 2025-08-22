@@ -6,9 +6,8 @@ import { pool } from '@/lib/db';
 import { generateCertificatePDF } from '@/lib/cert';
 import { Buffer } from 'node:buffer';
 
-export async function GET(req: Request, ctx: { params: Promise<{ ts: string }> }) {
-  const { ts } = await ctx.params
-  const decodedTs = decodeURIComponent(ts)
+export async function GET(req: Request, { params }: { params: { ts: string } }) {
+  const decodedTs = decodeURIComponent(params.ts);
 
   const accLang = (req.headers.get('accept-language') || '').toLowerCase()
   const locale = accLang.startsWith('fr') ? 'fr' : 'en'
