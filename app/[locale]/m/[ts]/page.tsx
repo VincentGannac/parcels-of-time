@@ -26,8 +26,8 @@ const TOKENS = {
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
-export default async function Page({ params }: { params: Promise<Params> }) {
-  const { ts } = await params
+export default async function Page({ params }: { params: { locale: string; ts: string } }) {
+  const { locale, ts } = params
   const decodedTs = decodeURIComponent(ts)
 
   // Registre public minimal (optionnel)
@@ -35,7 +35,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
 
   const pdfHref = `/api/cert/${encodeURIComponent(decodedTs)}`
   const homeHref = `/`
-  const exploreHref = `/explore` // page d’exploration du registre (adapter si nécessaire)
+  const exploreHref = `/${locale}/explore`
 
   return (
     <main
