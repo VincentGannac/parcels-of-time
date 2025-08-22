@@ -1,5 +1,5 @@
 // lib/cert.ts
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib'
 import QRCode from 'qrcode'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -27,6 +27,28 @@ async function loadBgFromPublic(style: CertStyle){
     } catch {}
   }
   return null
+}
+
+function drawBgPortraitAware(page: any, img: any) {
+  const { width: pw, height: ph } = page.getSize()
+  // pdf-lib expose généralement width/height sur l'image embarquée
+  const iw = (img.width  ?? img.scale(1).width)
+  const ih = (img.height ?? img.scale(1).height)
+
+  if (iw > ih) {
+    // Pixels paysage → on pivote de 90° pour coller au A4 portrait.
+    // Astuce: translation sur x=pageWidth avant la rotation CCW pour rester dans la page.
+    page.drawImage(img, {
+      x: pw,
+      y: 0,
+      width: ph,
+      height: pw,
+      rotate: degrees(90),
+    })
+  } else {
+    // Pixels déjà portrait
+    page.drawImage(img, { x: 0, y: 0, width: pw, height: ph })
+  }
 }
 
 function getSafeArea(style: CertStyle){
@@ -132,7 +154,7 @@ export async function generateCertificatePDF(opts: {
       const parsed = parseDataImage(opts.customBgDataUrl)
       if (parsed) {
         const img = parsed.kind === 'png' ? await pdf.embedPng(parsed.bytes) : await pdf.embedJpg(parsed.bytes)
-        page.drawImage(img, { x: 0, y: 0, width, height })
+        drawBgPortraitAware(page, img)   // ✅ corrige l'orientation
         embedded = true
       }
     }
@@ -140,7 +162,7 @@ export async function generateCertificatePDF(opts: {
       const bg = await loadBgFromPublic(style)
       if (bg) {
         const img = bg.kind === 'png' ? await pdf.embedPng(bg.bytes) : await pdf.embedJpg(bg.bytes)
-        page.drawImage(img, { x: 0, y: 0, width, height })
+        drawBgPortraitAware(page, img)
       } else {
         page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.99, 0.98, 0.96) })
       }

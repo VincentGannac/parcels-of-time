@@ -223,69 +223,59 @@ export default function ClientClaim() {
 
 
 
+  
   async function onPickCustomBg(file?: File | null) {
     try {
       setCustomErr('')
       if (!file) { log('Aucun fichier sélectionné'); return }
 
-       // 👉 Si HEIC/HEIF, on convertit en PNG (sinon on garde tel quel)
-       let workingFile = file
-       try {
-         workingFile = await maybeConvertHeicToPng(file, setCustomErr, log)
-       } catch {
-         // erreur déjà affichée par maybeConvertHeicToPng
-         return
-       }
- 
-       const mime = (workingFile.type || '').toLowerCase()
-       if (!/^image\/(png|jpeg|jpg)$/.test(mime)) {
-         setCustomErr('Format invalide. Utilisez PNG ou JPG (HEIC/HEIF sont convertis automatiquement).')
-         console.error('[Claim/CustomBG] MIME non supporté après conversion éventuelle:', mime)
-         return
-       }
+      // Était-ce un HEIC/HEIF à l'origine ?
+      const wasHeic = /^image\/(heic|heif|heic-sequence|heif-sequence)$/.test((file.type||'').toLowerCase())
+                  || /\.(heic|heif)$/i.test(file.name)
+
+      // Conversion HEIC/HEIF → PNG (sinon on garde tel quel)
+      let workingFile = file
+      try { workingFile = await maybeConvertHeicToPng(file, setCustomErr, log) } catch { return }
+
+      const mime = (workingFile.type || '').toLowerCase()
+      if (!/^image\/(png|jpeg|jpg)$/.test(mime)) {
+        setCustomErr('Format invalide. Utilisez PNG ou JPG (HEIC/HEIF sont convertis automatiquement).')
+        return
+      }
 
       setImgLoading(true)
-      log('Fichier prêt pour traitement:', { name: workingFile.name, size: workingFile.size, type: workingFile.type })
 
       const dataUrl = await fileToDataUrl(workingFile)
       const probe = new Image()
       probe.onload = () => {
         const w = probe.naturalWidth, h = probe.naturalHeight
-        const ratio = w/h
+        const ratio = w / h
         const okExact = ALLOWED_EXACT_SIZES.some(s => s.w===w && s.h===h)
-        const okRatio = Math.abs(ratio-A4_RATIO) < RATIO_TOL || Math.abs(ratio-RATIO_2x3) < RATIO_TOL
-        if (!okExact && !okRatio) {
-          setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
-          console.error('[Claim/CustomBG] Dimensions non supportées:', {w,h,ratio})
-        }
-        const url = URL.createObjectURL(workingFile)
+        const okRatio = Math.abs(ratio - A4_RATIO) < RATIO_TOL || Math.abs(ratio - RATIO_2x3) < RATIO_TOL
 
-        // nettoie l’ancienne URL si existante
-        if (lastObjectUrl.current) {
-          log('Révocation ancienne ObjectURL')
-          URL.revokeObjectURL(lastObjectUrl.current)
+        // ⬇️ pas d'erreur de dimensions si c'était un HEIC/HEIF
+        if (!okExact && !okRatio && !wasHeic) {
+          setCustomErr('Dimensions non supportées. Utilisez 2480×3508, 1024×1536, ou un ratio proche.')
         }
+
+        const url = URL.createObjectURL(workingFile)
+        if (lastObjectUrl.current) URL.revokeObjectURL(lastObjectUrl.current)
         lastObjectUrl.current = url
 
         setCustomBg({ url, dataUrl, w, h })
-        setForm(f => ({ ...f, cert_style: 'custom' })) // au cas où on n’était pas sur custom
-        log('CustomBG mis à jour → preview', {w,h,url})
+        setForm(f => ({ ...f, cert_style: 'custom' }))
       }
-      probe.onerror = (e) => {
-        setCustomErr('Impossible de lire l’image.')
-        console.error('[Claim/CustomBG] onerror Image()', e)
-      }
+      probe.onerror = () => setCustomErr('Impossible de lire l’image.')
       probe.src = dataUrl
     } catch (e) {
       console.error('[Claim/CustomBG] Exception onPickCustomBg', e)
       setCustomErr('Erreur de lecture du fichier.')
     } finally {
-      // reset <input> pour que sélectionner à nouveau le même fichier redéclenche "change"
-      const el = fileInputRef.current
-      if (el) el.value = ''
+      const el = fileInputRef.current; if (el) el.value = ''
       setImgLoading(false)
     }
   }
+
 
   // clean objectURL on unmount
   useEffect(() => () => { if (lastObjectUrl.current) URL.revokeObjectURL(lastObjectUrl.current) }, [])
