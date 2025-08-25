@@ -14,12 +14,8 @@ const ALLOWED_STYLES: readonly CertStyle[] = [
   'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'
 ] as const;
 
-// Utils introspection schéma
 async function tableExists(client: any, table: string) {
-  const { rows } = await client.query(
-    `select to_regclass($1) as exists`,
-    [`public.${table}`]
-  );
+  const { rows } = await client.query(`select to_regclass($1) as exists`, [`public.${table}`]);
   return !!rows[0]?.exists;
 }
 async function getColumns(client: any, table: string) {
@@ -31,129 +27,131 @@ async function getColumns(client: any, table: string) {
   return new Set<string>(rows.map((r: any) => r.column_name));
 }
 
+function safeBool(v: unknown) { return String(v) === '1' || v === true }
+function safeHex(v: unknown, fallback='#1a1f2a') {
+  return /^#[0-9a-fA-F]{6}$/.test(String(v||'')) ? String(v).toLowerCase() : fallback
+}
+function safeStyle(v: unknown): CertStyle {
+  const s = String(v||'neutral').toLowerCase()
+  return (ALLOWED_STYLES as readonly string[]).includes(s as CertStyle) ? (s as CertStyle) : 'neutral'
+}
+
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
   const accLang = (req.headers.get('accept-language') || '').toLowerCase();
   const locale = accLang.startsWith('fr') ? 'fr' : 'en';
 
-  try {
-    const url = new URL(req.url);
-    const session_id = url.searchParams.get('session_id');
-    if (!session_id) return NextResponse.redirect(`${base}/`, { status: 302 });
+  const url = new URL(req.url);
+  const session_id = url.searchParams.get('session_id');
 
+  // Si pas de session_id → retour accueil
+  if (!session_id) return NextResponse.redirect(`${base}/`, { status: 302 });
+
+  let tsForRedirect = ''; // on essaie de toujours rediriger même en cas d’erreur DB
+
+  try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
     const s = await stripe.checkout.sessions.retrieve(session_id, { expand: ['payment_intent'] });
 
     if (s.payment_status !== 'paid') {
       const backTs = String(s.metadata?.ts || '');
-      return NextResponse.redirect(`${base}/claim?ts=${encodeURIComponent(backTs)}&status=unpaid`, { status: 302 });
+      const safeBack = backTs && !isNaN(Date.parse(backTs))
+        ? encodeURIComponent(new Date(backTs).toISOString())
+        : '';
+      return NextResponse.redirect(`${base}/claim?ts=${safeBack}&status=unpaid`, { status: 302 });
     }
 
     // --------- Métadonnées Stripe ---------
-    const ts = String(s.metadata?.ts || '');
-    const email = String(s.customer_details?.email || s.metadata?.email || '');
+    const tsRaw = String(s.metadata?.ts || '');
+    if (!tsRaw || isNaN(Date.parse(tsRaw))) {
+      console.error('[confirm] missing_or_bad_ts', { tsRaw });
+      // si introuvable → on sort proprement
+      return NextResponse.redirect(`${base}/`, { status: 302 });
+    }
+    const tsISO = new Date(tsRaw); tsISO.setUTCSeconds(0,0);
+    const ts = tsISO.toISOString();
+    tsForRedirect = ts; // pour la redirection finale
+
+    const email = String(s.customer_details?.email || s.metadata?.email || '').trim().toLowerCase();
     const display_name = (s.metadata?.display_name || '') || null;
     const title = (s.metadata?.title || '') || null;
     const message = (s.metadata?.message || '') || null;
     const link_url = (s.metadata?.link_url || '') || null;
 
-    const styleCandidate = String(s.metadata?.cert_style || 'neutral').toLowerCase();
-    const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate)
-      ? (styleCandidate as CertStyle)
-      : 'neutral';
-
+    const cert_style = safeStyle(s.metadata?.cert_style);
     const custom_bg_key = String(s.metadata?.custom_bg_key || '');
 
-    const time_display = (s.metadata?.time_display === 'utc' || s.metadata?.time_display === 'utc+local' || s.metadata?.time_display === 'local+utc')
-      ? s.metadata?.time_display : 'local+utc';
-    const local_date_only = String(s.metadata?.local_date_only) === '1';
-    const text_color = /^#[0-9a-fA-F]{6}$/.test(String(s.metadata?.text_color || ''))
-      ? String(s.metadata?.text_color).toLowerCase() : '#1a1f2a';
+    const td = String(s.metadata?.time_display || 'local+utc');
+    const time_display = (td === 'utc' || td === 'utc+local' || td === 'local+utc') ? td : 'local+utc';
+    const local_date_only = safeBool(s.metadata?.local_date_only);
+    const text_color = safeHex(s.metadata?.text_color);
 
-    // Compat anonymisation (peuvent ne pas être présents)
-    const title_public = String(s.metadata?.title_public) === '1';
-    const message_public = String(s.metadata?.message_public) === '1';
+    const title_public = safeBool(s.metadata?.title_public);
+    const message_public = safeBool(s.metadata?.message_public);
+    const public_registry = safeBool(s.metadata?.public_registry);
 
-    // ✅ intention de publier le PDF complet
-    const public_registry = String(s.metadata?.public_registry) === '1';
-
-    const amount_total =
+    const amount_total_raw =
       s.amount_total ??
       (typeof s.payment_intent !== 'string' && s.payment_intent
         ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
         : 0);
+    const price_cents = Math.max(0, Number(amount_total_raw) | 0);
 
+    // ====== Transaction DB (robuste) ======
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // --- owners
+      // owners
       const { rows: ownerRows } = await client.query(
         `insert into owners(email, display_name)
          values($1,$2)
          on conflict(email) do update
            set display_name = coalesce(excluded.display_name, owners.display_name)
          returning id`,
-        [email.toLowerCase(), display_name]
+        [email, display_name]
       );
       const ownerId = ownerRows[0].id;
 
-      // --- claims : introspection schéma + INSERT dynamique
+      // claims upsert dynamique
       const cols = await getColumns(client, 'claims');
+      const insertCols: string[] = ['ts','owner_id','price_cents','currency'];
+      const values: any[] = [ts, ownerId, price_cents, 'EUR'];
+      const placeholders: string[] = ['$1','$2','$3','$4'];
 
-      // Colonnes minimales supposées
-      const baseCols: Array<[name: string, value: any]> = [
-        ['ts', ts],
-        ['owner_id', ownerId],
-        ['price_cents', amount_total],
-        ['currency', 'EUR'],
-      ];
-
-      // Colonnes optionnelles (selon schéma)
-      const optional: Array<[string, any]> = [
-        ['title', title],
-        ['message', message],
-        ['link_url', link_url],
-        ['cert_style', cert_style],
-        ['time_display', time_display],
-        ['local_date_only', local_date_only],
-        ['text_color', text_color],
-        ['title_public', title_public],
-        ['message_public', message_public],
-      ];
-
-      const insertCols: string[] = [];
-      const values: any[] = [];
-      const placeholders: string[] = [];
-
-      for (const [name, value] of baseCols) {
-        insertCols.push(name);
-        values.push(value);
-        placeholders.push(`$${values.length}`);
-      }
-      for (const [name, value] of optional) {
+      const pushOpt = (name: string, value: any) => {
         if (cols.has(name)) {
           insertCols.push(name);
           values.push(value);
           placeholders.push(`$${values.length}`);
         }
-      }
+      };
+
+      pushOpt('title', title);
+      pushOpt('message', message);
+      pushOpt('link_url', link_url);
+      pushOpt('cert_style', cert_style);
+      pushOpt('time_display', time_display);
+      pushOpt('local_date_only', local_date_only);
+      pushOpt('text_color', text_color);
+      pushOpt('title_public', title_public);
+      pushOpt('message_public', message_public);
 
       const updateCols = insertCols.filter(n => !['ts','owner_id','price_cents','currency'].includes(n));
       const updateSet = updateCols.length
         ? updateCols.map(n => `${n} = excluded.${n}`).join(', ')
-        : 'ts = excluded.ts'; // no-op pour satisfaire la syntaxe
+        : 'ts = excluded.ts';
 
-      const insertSql = `
+      const sql = `
         insert into claims (${insertCols.join(', ')})
         values (${placeholders.join(', ')})
         on conflict (ts) do update set ${updateSet}
         returning id, created_at
       `;
-      const { rows: claimRows } = await client.query(insertSql, values);
+      const { rows: claimRows } = await client.query(sql, values);
       const claim = claimRows[0];
 
-      // --- custom background : optionnel & robuste
+      // custom background temp -> persist
       if (cert_style === 'custom' && custom_bg_key) {
         const hasTemp = await tableExists(client, 'custom_bg_temp');
         const hasPersist = await tableExists(client, 'claim_custom_bg');
@@ -172,69 +170,58 @@ export async function GET(req: Request) {
         }
       }
 
-      // --- hash/cert_url (si colonnes présentes ; sinon on ignore)
+      // hash + cert_url
       const createdAtISO =
-        claim.created_at instanceof Date ? claim.created_at.toISOString() : new Date(claim.created_at).toISOString();
+        claim.created_at instanceof Date ? claim.created_at.toISOString()
+        : new Date(claim.created_at).toISOString();
 
       const salt = process.env.SECRET_SALT || 'dev_salt';
-      const data = `${ts}|${ownerId}|${amount_total}|${createdAtISO}|${salt}`;
+      const data = `${ts}|${ownerId}|${price_cents}|${createdAtISO}|${salt}`;
       const hash = crypto.createHash('sha256').update(data).digest('hex');
       const cert_url = `/api/cert/${encodeURIComponent(ts)}`;
 
-      try {
-        if (cols.has('cert_hash') || cols.has('cert_url')) {
-          await client.query(
-            `update claims
-               set ${cols.has('cert_hash') ? 'cert_hash = $1' : 'cert_hash = cert_hash'},
-                   ${cols.has('cert_url')  ? 'cert_url  = $2' : 'cert_url  = cert_url'}
-             where id = $3`,
-            [hash, cert_url, claim.id]
-          );
-        }
-      } catch (e) {
-        // Non bloquant : la claim est créée, mais pas d’empreinte / url persistées
-        console.warn('confirm_hash_update_warning:', (e as any)?.message || e);
+      if (cols.has('cert_hash') || cols.has('cert_url')) {
+        await client.query(
+          `update claims
+             set ${cols.has('cert_hash') ? 'cert_hash = $1' : 'cert_hash = cert_hash'},
+                 ${cols.has('cert_url')  ? 'cert_url  = $2' : 'cert_url  = cert_url'}
+           where id = $3`,
+          [hash, cert_url, claim.id]
+        );
       }
 
       await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
 
-    // ✅ Publication dans le registre public APRES COMMIT
-    try {
+      // publication minute_public après commit (non bloquant)
       if (public_registry) {
-        await pool.query(
-          `insert into minute_public (ts)
-           values ($1::timestamptz)
-           on conflict (ts) do nothing`,
+        pool.query(
+          `insert into minute_public (ts) values ($1::timestamptz) on conflict (ts) do nothing`,
           [ts]
-        );
+        ).catch(e => console.warn('[confirm] minute_public warn:', e?.message || e));
       }
-    } catch (e) {
-      // Non bloquant pour l’utilisateur
-      console.warn('minute_public_insert_warning:', (e as any)?.message || e);
-    }
 
-    // --- email (non bloquant)
-    try {
+      // email après commit (non bloquant)
       const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
-      const certUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
-      const { sendClaimReceiptEmail } = await import('@/lib/email');
-      await sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl });
-    } catch (e) {
-      console.warn('send_email_warning:', (e as any)?.message || e);
+      const pdfUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
+      import('@/lib/email')
+        .then(({ sendClaimReceiptEmail }) =>
+          sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl: pdfUrl })
+        )
+        .catch(e => console.warn('[confirm] email warn:', e?.message || e));
+
+    } catch (e:any) {
+      try { await pool.query('ROLLBACK') } catch {}
+      console.error('[confirm] db_error:', e?.message || e);
+      // ⚠️ On NE renvoie PAS 500 : on continue vers la page de la minute.
+      // Le webhook Stripe /api/stripe/webhook complètera l’écriture côté DB si nécessaire.
     }
 
-    return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(ts)}`, { status: 303 });
-  } catch (e: any) {
-    console.error('confirm_error:', e?.message, e?.stack);
-    return new Response(
-      'Payment captured, but we hit a server error finalizing your certificate (minute).',
-      { status: 500 }
-    );
+    // Toujours rediriger côté client (même si DB a échoué ici)
+    return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect)}`, { status: 303 });
+
+  } catch (e:any) {
+    console.error('confirm_error_top:', e?.message, e?.stack);
+    // En dernier recours : retour accueil sans 500
+    return NextResponse.redirect(`${base}/`, { status: 302 });
   }
 }
