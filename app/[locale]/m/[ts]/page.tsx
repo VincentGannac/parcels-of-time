@@ -4,8 +4,11 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { headers } from 'next/headers'
-import { pool } from '@/lib/db'
+import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import { formatISOAsNice } from '@/lib/date'
+
+type Params = { locale: string; ts: string }
 
 type PublicMinute =
   | { found: false }
@@ -16,7 +19,7 @@ function safeDecode(v: string) {
 }
 
 async function getPublicMinuteSafe(tsISO: string): Promise<PublicMinute> {
-  // 1) fetch absolu
+  // 1) tentative absolue
   try {
     const h = await headers()
     const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
@@ -28,48 +31,13 @@ async function getPublicMinuteSafe(tsISO: string): Promise<PublicMinute> {
     }
   } catch {}
 
-  // 2) fetch relatif
+  // 2) tentative relative
   try {
     const rel = `/api/minutes/${encodeURIComponent(tsISO)}`
     const res = await fetch(rel, { cache: 'no-store' })
     if (res.ok) return res.json()
   } catch {}
 
-  // 3) fallback DB direct (jamais throw)
-  try {
-    const { rows } = await pool.query(
-      `select id, ts, title, message from minute_public where ts=$1::timestamptz`,
-      [tsISO]
-    )
-    if (rows.length) {
-      const r = rows[0]
-      return {
-        found: true,
-        id: String(r.id),
-        ts: new Date(r.ts).toISOString(),
-        title: r.title ?? null,
-        message: r.message ?? null,
-      }
-    }
-    const q2 = await pool.query(
-      `select c.id, c.ts,
-              case when c.title_public   then c.title   else null end as title,
-              case when c.message_public then c.message else null end as message
-         from claims c
-        where c.ts=$1::timestamptz`,
-      [tsISO]
-    )
-    if (q2.rows.length) {
-      const r = q2.rows[0]
-      return {
-        found: true,
-        id: String(r.id),
-        ts: new Date(r.ts).toISOString(),
-        title: r.title,
-        message: r.message,
-      }
-    }
-  } catch {}
   return { found: false }
 }
 
@@ -84,31 +52,49 @@ const TOKENS = {
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
-export default async function Page(
-  { params }: { params: Promise<{ locale: string; ts: string }> }
-) {
-  // ← Next 15 : params est une Promise
-  let locale = 'en'
-  let tsParam = ''
-  try {
-    const p = await params
-    locale = p.locale || 'en'
-    tsParam = p.ts || ''
-  } catch {}
-
+export default async function Page({ params }: { params: Params }) {
+  const locale = params?.locale || 'en'
+  const tsParam = params?.ts || ''
   const decodedTs = safeDecode(tsParam)
 
-  // Lis le registre public (sans jamais throw)
+  // Lecture registre public (sans throw)
   const pub = await getPublicMinuteSafe(decodedTs)
 
-  // URLs UI
+  // URLs
   const pdfHref = `/api/cert/${encodeURIComponent(decodedTs)}`
   const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
 
-  // format lisible : si ça jette, on garde l’ISO brut
+  // Format lisible
   let niceTs = decodedTs
   try { niceTs = formatISOAsNice(decodedTs) } catch {}
+
+  // -------- Server Action pour publier/retirer --------
+  const togglePublic = async (formData: FormData) => {
+    'use server'
+    const ts = String(formData.get('ts') || '')
+    const next = String(formData.get('next') || '0') === '1'
+
+    // appel absolu si possible
+    let ok = false
+    try {
+      const h = await headers()
+      const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
+      const host  = (h.get('host') || '').split(',')[0].trim()
+      const url = host ? `${proto}://${host}/api/minutes/${encodeURIComponent(ts)}/public` : `/api/minutes/${encodeURIComponent(ts)}/public`
+      const res = await fetch(url, {
+        method:'PUT',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ is_public: next }),
+        cache: 'no-store',
+      })
+      ok = res.ok
+    } catch {}
+
+    // on force un refresh de la page
+    revalidatePath(`/${locale}/m/${encodeURIComponent(ts)}`)
+    redirect(`/${locale}/m/${encodeURIComponent(ts)}?${ok ? 'ok=1' : 'ok=0'}`)
+  }
 
   return (
     <main
@@ -126,11 +112,13 @@ export default async function Page(
       }}
     >
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 24px' }}>
+        {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <a href={homeHref} style={{ textDecoration:'none', color:'var(--color-text)', opacity:.85 }}>&larr; Parcels of Time</a>
           <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>Paiement sécurisé <strong>Stripe</strong></div>
         </div>
 
+        {/* Titre + minute */}
         <header style={{ marginBottom: 16 }}>
           <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 40, lineHeight: '48px', margin: '0 0 6px' }}>
             Merci ❤ Votre minute est réservée
@@ -139,6 +127,7 @@ export default async function Page(
         </header>
 
         <div style={{ display:'grid', gridTemplateColumns:'1.1fr 0.9fr', gap:18, alignItems:'start' }}>
+          {/* -------- Colonne principale : Certificat -------- */}
           <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:18, boxShadow:'var(--shadow-elev1)' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:10 }}>
               <div>
@@ -158,6 +147,7 @@ export default async function Page(
             </p>
           </div>
 
+          {/* -------- Colonne secondaire : Registre public -------- */}
           <aside style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16 }}>
             <div style={{ fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8 }}>
               Registre public (art participatif)
@@ -189,6 +179,30 @@ export default async function Page(
               </div>
             )}
 
+            {/* Toggle publier/retirer (Server Action, pas de hooks) */}
+            <form action={togglePublic}
+                  style={{marginTop:12, padding:12, border:'1px solid var(--color-border)', borderRadius:12}}>
+              <input type="hidden" name="ts" value={decodedTs} />
+              <input type="hidden" name="next" value={pub.found ? '0' : '1'} />
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+                <div>
+                  <strong>Publier dans le Registre public</strong>
+                  <div style={{fontSize:12, color:'var(--color-muted)'}}>
+                    Anonyme, modéré. Réversible à tout moment.
+                  </div>
+                </div>
+                <button type="submit"
+                        style={{
+                          padding:'10px 12px', borderRadius:10,
+                          background: pub.found ? 'var(--color-primary)' : 'var(--color-surface)',
+                          color: pub.found ? 'var(--color-on-primary)' : 'var(--color-text)',
+                          border:'1px solid var(--color-border)', fontWeight:800, cursor:'pointer'
+                        }}>
+                  {pub.found ? 'Retirer' : 'Publier'}
+                </button>
+              </div>
+            </form>
+
             <a href={exploreHref}
                style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:12, textDecoration:'none',
                         background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)',
@@ -198,6 +212,7 @@ export default async function Page(
           </aside>
         </div>
 
+        {/* CTA bas de page */}
         <div style={{ marginTop:18, display:'flex', gap:12, flexWrap:'wrap' }}>
           <a href={pdfHref} target="_blank"
              style={{ textDecoration:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', borderRadius:12,
