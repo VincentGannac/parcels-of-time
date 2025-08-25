@@ -1,21 +1,19 @@
-// app/explore/page.tsx
-import { absoluteUrl } from '@/lib/url'
+'use client'
 
-type StyleId = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'newyear'|'graduation'|'custom'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams } from 'next/navigation'
+
+type StyleId =
+  | 'neutral' | 'romantic' | 'birthday' | 'wedding'
+  | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom'
+
 type RegistryRow = {
   ts: string
   owner: string
   title: string | null
   message: string | null
   style: StyleId
-  is_public: boolean        // sert à ignorer côté client si jamais
-}
-
-async function getRegistry(): Promise<RegistryRow[]> {
-  const url = await absoluteUrl('/api/registry')
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return []
-  return res.json()
+  is_public: boolean
 }
 
 const TOKENS = {
@@ -30,8 +28,41 @@ const TOKENS = {
   '--shadow-elev2': '0 12px 36px rgba(0,0,0,.45)',
 } as const
 
-export default async function PublicRegistryPage() {
-  const items = (await getRegistry()).filter(i => i.is_public)
+function shuffle<T>(arr: T[]): T[] {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+export default function PublicRegistryPage() {
+  const { locale } = useParams<{ locale: string }>()
+  const loc = (locale || 'en') as string
+
+  const [items, setItems] = useState<RegistryRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>('')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        setLoading(true); setError('')
+        // Appel relatif côté client → fonctionne sur Vercel sans headers
+        const res = await fetch('/api/registry', { cache: 'no-store' })
+        if (!res.ok) throw new Error('HTTP '+res.status)
+        const data: RegistryRow[] = await res.json()
+        if (!cancelled) setItems(Array.isArray(data) ? data.filter(i => i.is_public) : [])
+      } catch (e:any) {
+        if (!cancelled) setError('Impossible de charger le registre public.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <main
@@ -51,8 +82,8 @@ export default async function PublicRegistryPage() {
       <section style={{maxWidth:1280, margin:'0 auto', padding:'48px 24px'}}>
         {/* Header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
-          <a href="/" style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
-          <a href="/claim" style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>Réserver une minute →</a>
+          <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
+          <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>Réserver une minute →</a>
         </div>
 
         <header style={{marginBottom:16}}>
@@ -66,27 +97,32 @@ export default async function PublicRegistryPage() {
           </p>
         </header>
 
-        <RegistryControls />
+        <RegistryControls onShuffle={()=>setItems(s=>shuffle(s))} />
 
-        <RegistryGallery initialItems={items} />
+        {loading ? (
+          <div style={{marginTop:20, opacity:.8}}>Chargement du registre…</div>
+        ) : error ? (
+          <div style={{marginTop:20, color:'#ffb2b2', border:'1px solid #ff8a8a', background:'rgba(255,0,0,.06)', padding:12, borderRadius:12}}>
+            {error}
+          </div>
+        ) : (
+          <RegistryGallery initialItems={items} locale={loc} />
+        )}
       </section>
     </main>
   )
 }
 
-/* ---------------- Client components ---------------- */
-'use client'
-import { useMemo, useState } from 'react'
+/* ---------------- Client subcomponents ---------------- */
 
-function RegistryControls() {
-  const [_, setTick] = useState(0)
+function RegistryControls({ onShuffle }:{ onShuffle:()=>void }) {
   return (
     <div style={{display:'flex', gap:10, alignItems:'center', margin:'14px 0 10px', flexWrap:'wrap'}}>
       <span style={{fontSize:12, color:'var(--color-muted)'}}>Curations : </span>
       {['Amour','Réussite','Naissance','Mariage','Fête','Voyage','Hasard heureux'].map(t=>(
         <span key={t} style={{fontSize:12, padding:'6px 10px', border:'1px solid var(--color-border)', borderRadius:999, background:'var(--color-surface)'}}>{t}</span>
       ))}
-      <button onClick={()=>setTick(x=>x+1)}
+      <button onClick={onShuffle}
         style={{marginLeft:'auto', padding:'8px 12px', borderRadius:10, background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
         Mélanger l’ordre
       </button>
@@ -94,7 +130,7 @@ function RegistryControls() {
   )
 }
 
-function RegistryGallery({ initialItems }:{ initialItems: RegistryRow[] }) {
+function RegistryGallery({ initialItems, locale }:{ initialItems: RegistryRow[]; locale:string }) {
   const [q, setQ] = useState('')
   const [view, setView] = useState<'grid'|'flow'>('grid') // grid=cartes, flow=théâtre plein écran qui défile lentement
 
@@ -102,9 +138,9 @@ function RegistryGallery({ initialItems }:{ initialItems: RegistryRow[] }) {
     const s = q.trim().toLowerCase()
     if(!s) return initialItems
     return initialItems.filter(it =>
-      it.owner?.toLowerCase().includes(s) ||
-      it.title?.toLowerCase().includes(s) ||
-      it.message?.toLowerCase().includes(s) ||
+      (it.owner || '').toLowerCase().includes(s) ||
+      (it.title || '').toLowerCase().includes(s) ||
+      (it.message || '').toLowerCase().includes(s) ||
       it.ts.toLowerCase().includes(s)
     )
   }, [q, initialItems])
@@ -124,20 +160,16 @@ function RegistryGallery({ initialItems }:{ initialItems: RegistryRow[] }) {
       </div>
 
       {view==='grid' ? (
-        <div style={{
-          display:'grid',
-          gridTemplateColumns:'repeat(12, 1fr)',
-          gap:16
-        }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(12, 1fr)', gap:16 }}>
           {filtered.map(row => (
-            <RegistryCard key={row.ts} row={row} style={{gridColumn:'span 4'}} />
+            <RegistryCard key={row.ts} row={row} style={{gridColumn:'span 4'}} tall={false} locale={locale} />
           ))}
           {filtered.length===0 && <p style={{opacity:.7, gridColumn:'span 12'}}>Aucun résultat.</p>}
         </div>
       ) : (
         <div aria-live="polite">
           {filtered.map(row => (
-            <RegistryCard key={row.ts} row={row} style={{margin:'0 0 30px'}} tall />
+            <RegistryCard key={row.ts} row={row} style={{margin:'0 0 30px'}} tall locale={locale} />
           ))}
         </div>
       )}
@@ -145,9 +177,12 @@ function RegistryGallery({ initialItems }:{ initialItems: RegistryRow[] }) {
   )
 }
 
-function RegistryCard({ row, style, tall }:{ row:RegistryRow; style?:React.CSSProperties; tall?:boolean }) {
+function RegistryCard(
+  { row, style, tall, locale }:
+  { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; locale:string }
+) {
   const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}`
-  const pageHref = `/m/${encodeURIComponent(row.ts)}`
+  const pageHref = `/${locale}/m/${encodeURIComponent(row.ts)}`
   return (
     <article style={{
       ...style,
@@ -155,7 +190,7 @@ function RegistryCard({ row, style, tall }:{ row:RegistryRow; style?:React.CSSPr
       background:'var(--color-surface)', boxShadow:'var(--shadow-elev1)'
     }}>
       <div style={{position:'relative', width:'100%', aspectRatio: tall ? '595/842' : '420/595', background:'#0E1017'}}>
-        {/* Affichage **intégral** du PDF : */}
+        {/* Affichage **intégral** du PDF */}
         <iframe
           src={`${pdfHref}#view=FitH`}
           title={`Certificat ${row.ts}`}
@@ -188,7 +223,7 @@ function RegistryCard({ row, style, tall }:{ row:RegistryRow; style?:React.CSSPr
             style={{padding:'10px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)'}}>
             Copier le lien
           </button>
-          <a href={`/claim?ts=${encodeURIComponent(row.ts)}`} style={{marginLeft:'auto', fontSize:12, color:'var(--color-text)', opacity:.85, textDecoration:'none'}}>
+          <a href={`/${locale}/claim?ts=${encodeURIComponent(row.ts)}`} style={{marginLeft:'auto', fontSize:12, color:'var(--color-text)', opacity:.85, textDecoration:'none'}}>
             Réserver une minute →
           </a>
         </div>
