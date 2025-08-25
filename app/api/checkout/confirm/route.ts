@@ -70,8 +70,12 @@ export async function GET(req: Request) {
     const text_color = /^#[0-9a-fA-F]{6}$/.test(String(s.metadata?.text_color || ''))
       ? String(s.metadata?.text_color).toLowerCase() : '#1a1f2a';
 
+    // Compat anonymisation (peuvent ne pas être présents)
     const title_public = String(s.metadata?.title_public) === '1';
     const message_public = String(s.metadata?.message_public) === '1';
+
+    // ✅ intention de publier le PDF complet
+    const public_registry = String(s.metadata?.public_registry) === '1';
 
     const amount_total =
       s.amount_total ??
@@ -193,21 +197,36 @@ export async function GET(req: Request) {
       }
 
       await client.query('COMMIT');
-
-      // --- email (non bloquant)
-      try {
-        const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
-        const certUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
-        const { sendClaimReceiptEmail } = await import('@/lib/email');
-        await sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl });
-      } catch (e) {
-        console.warn('send_email_warning:', (e as any)?.message || e);
-      }
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
       client.release();
+    }
+
+    // ✅ Publication dans le registre public APRES COMMIT
+    try {
+      if (public_registry) {
+        await pool.query(
+          `insert into minute_public (ts)
+           values ($1::timestamptz)
+           on conflict (ts) do nothing`,
+          [ts]
+        );
+      }
+    } catch (e) {
+      // Non bloquant pour l’utilisateur
+      console.warn('minute_public_insert_warning:', (e as any)?.message || e);
+    }
+
+    // --- email (non bloquant)
+    try {
+      const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
+      const certUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
+      const { sendClaimReceiptEmail } = await import('@/lib/email');
+      await sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl });
+    } catch (e) {
+      console.warn('send_email_warning:', (e as any)?.message || e);
     }
 
     return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(ts)}`, { status: 303 });

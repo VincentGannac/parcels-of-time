@@ -49,26 +49,30 @@ async function testMinuteRead(tsISO: string) {
   }
 
   // 2) relative fetch
+ 
   try {
     const r = await fetch(`/api/minutes/${encodeURIComponent(tsISO)}`, { cache: 'no-store' })
     out.rel = { ok: r.ok, status: r.status, body: r.ok ? await r.json() : null }
-  } catch (e:any) { out.rel = { ok:false, error: e?.message || 'fetch_err' } }
+  } catch (e:any) {
+    out.rel = { ok:false, error: e?.message || 'fetch_err' }
+  }
+
 
   // 3) direct DB probe
   try {
+    // minute_public n'a que ts (+ created_at)
     const { rows } = await pool.query(
-      `select id, ts, title, message from minute_public where ts=$1::timestamptz`,
+      `select ts from minute_public where ts=$1::timestamptz`,
       [tsISO]
     )
     if (rows.length) {
-      const r = rows[0]
-      out.db = { ok:true, source:'minute_public', id:String(r.id) }
+      out.db = { ok:true, source:'minute_public', id: String(rows[0].ts) }
     } else {
       const q2 = await pool.query(
         `select c.id, c.ts,
                 case when c.title_public   then c.title   else null end as title,
                 case when c.message_public then c.message else null end as message
-           from claims c
+          from claims c
           where c.ts = $1::timestamptz`,
         [tsISO]
       )

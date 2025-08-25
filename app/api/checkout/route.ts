@@ -21,12 +21,16 @@ type Body = {
   display_name?: string
   title?: string
   message?: string
+  link_url?: string
   cert_style?: string
   custom_bg_data_url?: string
   time_display?: 'utc'|'utc+local'|'local+utc'
   local_date_only?: string | boolean
   text_color?: string
-  /** ✅ Nouveau : opt-in registre public (PDF complet) */
+  // Compat (l’UI actuelle ne les envoie plus, mais on accepte toujours):
+  title_public?: string | boolean
+  message_public?: string | boolean
+  /** ✅ nouveau : publication du PDF complet dans le registre public */
   public_registry?: string | boolean
 }
 
@@ -68,8 +72,13 @@ export async function POST(req: Request) {
     const text_color =
       /^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'
 
+    // Compat / optionnels (retombent à '0' si non fournis par l’UI)
+    const title_public   = (String(body.title_public)   === '1' || body.title_public   === true) ? '1' : '0'
+    const message_public = (String(body.message_public) === '1' || body.message_public === true) ? '1' : '0'
+
     /** ✅ opt-in “Publier le PDF complet dans le registre public” */
-    const public_registry = (String(body.public_registry) === '1' || body.public_registry === true) ? '1' : '0'
+    const public_registry =
+      (String(body.public_registry) === '1' || body.public_registry === true) ? '1' : '0'
 
     // --- Custom background temp stash
     let custom_bg_key = ''
@@ -114,12 +123,16 @@ export async function POST(req: Request) {
         display_name: body.display_name ?? '',
         title: body.title ?? '',
         message: body.message ?? '',
+        link_url: body.link_url ?? '',
         cert_style,
         custom_bg_key,
         time_display,
         local_date_only,
         text_color,
-        /** ✅ passe l’intention au webhook (Cas A) */
+        // compat anonymisation (UI actuelle ne les expose plus)
+        title_public,
+        message_public,
+        // ✅ intention de publier le PDF complet
         public_registry,
       },
       success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,

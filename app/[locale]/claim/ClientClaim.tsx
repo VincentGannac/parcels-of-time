@@ -117,11 +117,14 @@ export default function ClientClaim() {
     display_name: '',
     title: '',
     message: '',
+    link_url: '',
     ts: prefillTs,
     cert_style: initialStyle as CertStyle,
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
     local_date_only: false,
     text_color: '#1A1F2A',
+    title_public: false,
+    message_public: false,
     publish_registry: false,
   })
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
@@ -385,10 +388,13 @@ useEffect(() => () => {}, [])
       display_name: form.display_name || undefined,
       title: form.title || undefined,
       message: form.message || undefined,
+      link_url: form.link_url || undefined,
       cert_style: form.cert_style || 'neutral',
       time_display: form.time_display,
       local_date_only: form.local_date_only ? '1' : '0',
       text_color: mainColor,
+      title_public: form.title_public ? '1' : '0',
+      message_public: form.message_public ? '1' : '0',
       public_registry: form.publish_registry ? '1' : '0',
     }
     if (form.cert_style === 'custom' && customBg?.dataUrl) {
