@@ -1,16 +1,14 @@
 // app/api/minutes/[ts]/public/route.ts
-import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 
-// GET — retourne l’état public actuel
-export async function GET(
-  _req: NextRequest,
-  context: { params: { ts: string } }
-) {
-  const ts = decodeURIComponent(context.params.ts || '')
+export const dynamic = 'force-dynamic'
 
-  // Essaie de lire depuis `claims` (flags title_public/message_public)
+// GET — retourne l’état public actuel
+export async function GET(_req: Request, ctx: any) {
+  const ts = decodeURIComponent(ctx?.params?.ts ?? '')
+
+  // Essaie via flags sur `claims`
   try {
     const { rows } = await pool.query(
       `select coalesce(title_public,false) as title_public,
@@ -26,7 +24,7 @@ export async function GET(
     }
   } catch {}
 
-  // Fallback: présence dans minute_public => considéré public
+  // Fallback: présence dans minute_public
   try {
     const { rows } = await pool.query(
       `select 1 from minute_public where ts=$1::timestamptz limit 1`,
@@ -39,20 +37,17 @@ export async function GET(
 }
 
 // PUT — publie / retire du registre public
-export async function PUT(
-  req: NextRequest,
-  context: { params: { ts: string } }
-) {
-  const ts = decodeURIComponent(context.params.ts || '')
+export async function PUT(req: Request, ctx: any) {
+  const ts = decodeURIComponent(ctx?.params?.ts ?? '')
   let is_public = false
   try {
     const body = await req.json()
-    is_public = Boolean(body?.is_public)
+    is_public = !!body?.is_public
   } catch {}
 
   let ok = false
 
-  // 1) Tente de basculer les deux flags sur `claims`
+  // 1) tente via `claims`
   try {
     const r = await pool.query(
       `update claims
@@ -60,11 +55,11 @@ export async function PUT(
         where ts=$2::timestamptz`,
       [is_public, ts]
     )
-    const rc = r.rowCount // number | null selon certains types
-    ok = rc != null && rc > 0
+    const rc = r?.rowCount ?? 0
+    ok = rc > 0
   } catch {}
 
-  // 2) Fallback: upsert/suppression dans `minute_public`
+  // 2) fallback via `minute_public`
   if (!ok) {
     try {
       if (is_public) {
