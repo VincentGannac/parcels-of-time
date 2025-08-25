@@ -125,7 +125,7 @@ export default function ClientClaim() {
     text_color: '#1A1F2A',
     title_public: false,
     message_public: false,
-    publish_registry: false,
+    public_registry: false,
   })
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
@@ -395,7 +395,7 @@ useEffect(() => () => {}, [])
       text_color: mainColor,
       title_public: form.title_public ? '1' : '0',
       message_public: form.message_public ? '1' : '0',
-      public_registry: form.publish_registry ? '1' : '0',
+      public_registry: form.public_registry ? '1' : '0',
     }
     if (form.cert_style === 'custom' && customBg?.dataUrl) {
       payload.custom_bg_data_url = customBg.dataUrl
@@ -720,7 +720,7 @@ useEffect(() => () => {}, [])
               <label style={{display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer'}}>
                 <input
                   type="checkbox"
-                  checked={form.publish_registry}
+                  checked={form.public_registry}
                   onChange={e=>setForm(f=>({...f, publish_registry: e.target.checked}))}
                   style={{marginTop:2}}
                 />

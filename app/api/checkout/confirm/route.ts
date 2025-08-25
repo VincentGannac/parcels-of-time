@@ -192,15 +192,17 @@ export async function GET(req: Request) {
         );
       }
 
-      await client.query('COMMIT');
-
-      // publication minute_public après commit (non bloquant)
+      // ✅ Publication dans la même transaction que la claim
       if (public_registry) {
-        pool.query(
-          `insert into minute_public (ts) values ($1::timestamptz) on conflict (ts) do nothing`,
+        await client.query(
+          `insert into minute_public (ts)
+            values ($1::timestamptz)
+            on conflict (ts) do nothing`,
           [ts]
-        ).catch(e => console.warn('[confirm] minute_public warn:', e?.message || e));
+        );
       }
+
+      await client.query('COMMIT');
 
       // email après commit (non bloquant)
       const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
