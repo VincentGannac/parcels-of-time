@@ -1,4 +1,4 @@
-//app/[locale]/explore/page.tsx
+// app/[locale]/explore/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -26,7 +26,7 @@ const TOKENS = {
   '--color-on-primary': '#0B0E14',
   '--color-border': '#1E2A3C',
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
-  '--shadow-elev2': '0 12px 36px rgba(0,0,0,.45)',
+  '--shadow-elev2': '0 18px 60px rgba(0,0,0,.55)',
 } as const
 
 function shuffle<T>(arr: T[]): T[] {
@@ -76,37 +76,44 @@ export default function PublicRegistryPage() {
         ['--color-border' as any]: TOKENS['--color-border'],
         ['--shadow-elev1' as any]: TOKENS['--shadow-elev1'],
         ['--shadow-elev2' as any]: TOKENS['--shadow-elev2'],
-        background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh', fontFamily:'Inter, system-ui',
+        background:'radial-gradient(1200px 800px at 10% -10%, rgba(228,183,61,.06), transparent 60%), radial-gradient(1000px 700px at 90% 0%, rgba(255,255,255,.04), transparent 60%), var(--color-bg)',
+        color:'var(--color-text)',
+        minHeight:'100vh',
+        fontFamily:'Inter, system-ui',
       }}
     >
-      <section style={{maxWidth:1280, margin:'0 auto', padding:'48px 24px'}}>
+      <section style={{maxWidth:1280, margin:'0 auto', padding:'56px 24px 64px'}}>
         {/* Header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
           <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
-          <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>Réserver une minute →</a>
+          <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85, border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:12}}>
+            Contribuer une œuvre →
+          </a>
         </div>
 
-        <header style={{marginBottom:16}}>
-          <h1 style={{fontFamily:'Fraunces, serif', fontSize:42, lineHeight:'50px', margin:'0 0 8px'}}>
-            Registre public — Art de la minute
+        {/* Manifeste / Hero */}
+        <header style={{marginBottom:20}}>
+          <h1 style={{fontFamily:'Fraunces, serif', fontSize:46, lineHeight:'54px', margin:'0 0 10px', letterSpacing:.2}}>
+            Registre public — œuvres de la minute
           </h1>
-          <p style={{margin:0, maxWidth:820, opacity:.92}}>
-            Une exposition vivante et anonyme des instants qui comptent. Chaque PDF présenté ici est un
-            <strong> certificat complet</strong> — fond, prénom/initiales, titre, message — publié volontairement par son·sa propriétaire.
-            C’est de l’art : célébrer l’amour, la réussite, la famille, le courage. Merci de regarder avec bienveillance. 💛
+          <p style={{margin:'0 0 10px', maxWidth:900, opacity:.92, fontSize:16, lineHeight:'24px'}}>
+            Une exposition vivante et bienveillante des instants qui nous portent. Chaque pièce est un
+            <strong> certificat intégral</strong> publié volontairement — une nouvelle forme d’art participatif numérique pour
+            inspirer par les réussites, les liens et les bonheurs partagés.
+          </p>
+          <p style={{margin:0, maxWidth:900, opacity:.65, fontSize:13}}>
+            Les œuvres demeurent la propriété de leurs auteur·rice·s. Consultation uniquement. Pas de téléchargement ni d’export.
           </p>
         </header>
 
-        <RegistryControls onShuffle={()=>setItems(s=>shuffle(s))} />
-
         {loading ? (
-          <div style={{marginTop:20, opacity:.8}}>Chargement du registre…</div>
+          <div style={{marginTop:24, opacity:.8}}>Chargement du registre…</div>
         ) : error ? (
-          <div style={{marginTop:20, color:'#ffb2b2', border:'1px solid #ff8a8a', background:'rgba(255,0,0,.06)', padding:12, borderRadius:12}}>
+          <div style={{marginTop:24, color:'#ffb2b2', border:'1px solid #ff8a8a', background:'rgba(255,0,0,.06)', padding:12, borderRadius:12}}>
             {error}
           </div>
         ) : (
-          <RegistryGallery initialItems={items} locale={loc} />
+          <CurationBar items={items} onShuffle={()=>setItems(s=>shuffle(s))} />
         )}
       </section>
     </main>
@@ -115,119 +122,210 @@ export default function PublicRegistryPage() {
 
 /* ---------------- Client subcomponents ---------------- */
 
-function RegistryControls({ onShuffle }:{ onShuffle:()=>void }) {
+function CurationBar({ items, onShuffle }:{ items: RegistryRow[]; onShuffle:()=>void }) {
+  const [q, setQ] = useState('')
+  const [view, setView] = useState<'wall'|'salon'>('wall')
+  const total = items.length
+
   return (
-    <div style={{display:'flex', gap:10, alignItems:'center', margin:'14px 0 10px', flexWrap:'wrap'}}>
-      <span style={{fontSize:12, color:'var(--color-muted)'}}>Curations : </span>
-      {['Amour','Réussite','Naissance','Mariage','Fête','Voyage','Hasard heureux'].map(t=>(
-        <span key={t} style={{fontSize:12, padding:'6px 10px', border:'1px solid var(--color-border)', borderRadius:999, background:'var(--color-surface)'}}>{t}</span>
+    <>
+      <div style={{
+        display:'grid', gridTemplateColumns:'1fr auto auto', gap:10,
+        alignItems:'center', margin:'18px 0 16px'
+      }}>
+        <input
+          placeholder="Rechercher une émotion, un titre, un prénom, une minute…"
+          value={q} onChange={e=>setQ(e.target.value)}
+          style={{
+            padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:12,
+            background:'linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00))',
+            color:'var(--color-text)'
+          }}
+        />
+        <button onClick={onShuffle}
+          style={{padding:'10px 12px', borderRadius:10, background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
+          Inspiration aléatoire
+        </button>
+        <button onClick={()=>setView(v=>v==='wall'?'salon':'wall')}
+          style={{padding:'10px 12px', borderRadius:10, background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
+          {view==='wall' ? 'Mode Salon' : 'Mode Mur'}
+        </button>
+      </div>
+      <RegistryGalleryControls q={q} setQ={setQ} view={view} />
+      <RegistryWall key={view} view={view} q={q} items={items} total={total} />
+    </>
+  )
+}
+
+/** Petit bandeau de stats / filtres sémantiques (non-intrusif) */
+function RegistryGalleryControls({ q, setQ, view }:{
+  q:string; setQ:(s:string)=>void; view:'wall'|'salon'
+}) {
+  const chips = ['Amour','Réussite','Naissance','Mariage','Fête','Courage','Hasard heureux']
+  return (
+    <div style={{display:'flex', gap:8, alignItems:'center', margin:'6px 0 12px', flexWrap:'wrap'}}>
+      <span style={{fontSize:12, color:'var(--color-muted)'}}>Curations :</span>
+      {chips.map(t=>(
+        <button
+          key={t}
+          onClick={()=>{
+            const selected = q.toLowerCase()===t.toLowerCase()
+            setQ(selected ? '' : t)
+          }}
+          style={{
+            fontSize:12, padding:'6px 10px', border:'1px solid var(--color-border)', borderRadius:999,
+            background: q.toLowerCase()===t.toLowerCase() ? 'rgba(228,183,61,.18)' : 'var(--color-surface)',
+            color:'var(--color-text)'
+          }}>
+          {t}
+        </button>
       ))}
-      <button onClick={onShuffle}
-        style={{marginLeft:'auto', padding:'8px 12px', borderRadius:10, background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
-        Mélanger l’ordre
-      </button>
+      <span style={{marginLeft:'auto', fontSize:12, color:'var(--color-muted)'}}>
+        {view==='wall' ? 'Mur — mosaïque' : 'Salon — œuvres larges'}
+      </span>
     </div>
   )
 }
 
-function RegistryGallery({ initialItems, locale }:{ initialItems: RegistryRow[]; locale:string }) {
-  const [q, setQ] = useState('')
-  const [view, setView] = useState<'grid'|'flow'>('grid')
-
+function RegistryWall({ items, q, view, total }:{
+  items:RegistryRow[]; q:string; view:'wall'|'salon'; total:number
+}) {
   const filtered = useMemo(()=>{
     const s = q.trim().toLowerCase()
-    if(!s) return initialItems
-    return initialItems.filter(it =>
+    if(!s) return items
+    return items.filter(it =>
       (it.owner || '').toLowerCase().includes(s) ||
       (it.title || '').toLowerCase().includes(s) ||
       (it.message || '').toLowerCase().includes(s) ||
       it.ts.toLowerCase().includes(s)
     )
-  }, [q, initialItems])
+  }, [q, items])
 
+  if (view === 'salon') {
+    return (
+      <div aria-live="polite" style={{marginTop:6}}>
+        {filtered.map((row) => (
+          <RegistryCard
+            key={row.ts}
+            row={row}
+            style={{ margin:'0 0 32px', boxShadow:'var(--shadow-elev2)' }}
+            tall
+          />
+        ))}
+        {filtered.length===0 && <p style={{opacity:.7}}>Aucun résultat.</p>}
+      </div>
+    )
+  }
+
+  // Mur (mosaïque)
   return (
     <>
-      <div style={{display:'flex', gap:10, alignItems:'center', margin:'6px 0 14px', flexWrap:'wrap'}}>
-        <input
-          placeholder="Rechercher (propriétaire, titre, message, minute)…"
-          value={q} onChange={e=>setQ(e.target.value)}
-          style={{flex:'1 1 420px', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:12, background:'var(--color-surface)', color:'var(--color-text)'}}
-        />
-        <button onClick={()=>setView(v=>v==='grid'?'flow':'grid')}
-          style={{padding:'10px 12px', borderRadius:10, background:'var(--color-surface)', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
-          {view==='grid' ? 'Mode exposition' : 'Mode grille'}
-        </button>
+      <div style={{fontSize:12, color:'var(--color-muted)', margin:'2px 0 10px'}}>
+        {filtered.length} œuvre{filtered.length>1?'s':''} {filtered.length!==total && <>— <span style={{opacity:.75}}>filtrées</span></>}
       </div>
-
-      {view==='grid' ? (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(12, 1fr)', gap:16 }}>
-          {filtered.map(row => (
-            <RegistryCard key={row.ts} row={row} style={{gridColumn:'span 4'}} tall={false} locale={locale} />
-          ))}
-          {filtered.length===0 && <p style={{opacity:.7, gridColumn:'span 12'}}>Aucun résultat.</p>}
-        </div>
-      ) : (
-        <div aria-live="polite">
-          {filtered.map(row => (
-            <RegistryCard key={row.ts} row={row} style={{margin:'0 0 30px'}} tall locale={locale} />
-          ))}
-        </div>
-      )}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(12, 1fr)', gap:18 }}>
+        {filtered.map((row, idx) => {
+          const tall = idx % 7 === 0 || idx % 11 === 3
+          const span = tall ? 6 : 4
+          return (
+            <RegistryCard
+              key={row.ts}
+              row={row}
+              style={{ gridColumn:`span ${span}` }}
+              tall={tall}
+            />
+          )
+        })}
+        {filtered.length===0 && <p style={{opacity:.7, gridColumn:'span 12'}}>Aucun résultat.</p>}
+      </div>
     </>
   )
 }
 
 function RegistryCard(
-  { row, style, tall, locale }:
-  { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; locale:string }
+  { row, style, tall }:
+  { row:RegistryRow; style?:React.CSSProperties; tall?:boolean }
 ) {
-  // ✅ PDF en mode public (QR masqué)
-  const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1`
-  const pageHref = `/${locale}/m/${encodeURIComponent(row.ts)}`
+  // PDF en mode public, sans interaction ni export
+  const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+
   return (
-    <article style={{
-      ...style,
-      border:'1px solid var(--color-border)', borderRadius:16, overflow:'hidden',
-      background:'var(--color-surface)', boxShadow:'var(--shadow-elev1)'
-    }}>
-      <div style={{position:'relative', width:'100%', aspectRatio: tall ? '595/842' : '420/595', background:'#0E1017'}}>
+    <article
+      onContextMenu={(e)=>e.preventDefault()}
+      style={{
+        ...style,
+        position:'relative',
+        borderRadius:18,
+        padding:12,                       // passe-partout
+        background:'linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.00))',
+        border:'1px solid var(--color-border)',
+        boxShadow:'var(--shadow-elev1)',
+        transform:'translateY(0)',
+        transition:'transform .35s cubic-bezier(.2,.9,.2,1), box-shadow .35s',
+        willChange:'transform',
+      }}
+    >
+      {/* cadre intérieur */}
+      <div style={{
+        position:'relative',
+        width:'100%',
+        aspectRatio: tall ? '595/842' : '420/595',
+        background:'#0E1017',
+        borderRadius:12,
+        overflow:'hidden',
+        border:'1px solid rgba(255,255,255,.06)',
+        boxShadow:'inset 0 0 0 1px rgba(0,0,0,.35)',
+      }}>
         <iframe
-          src={`${pdfHref}#view=FitH`}
-          title={`Certificat ${row.ts}`}
-          style={{position:'absolute', inset:0, width:'100%', height:'100%', border:'0'}}
+          src={pdfHref}
+          title={`Œuvre ${row.ts}`}
+          style={{
+            position:'absolute', inset:0, width:'100%', height:'100%', border:'0',
+            pointerEvents:'none', // ❌ pas d’interaction
+            userSelect:'none'
+          }}
         />
+        {/* voile artistique */}
         <div style={{
-          position:'absolute', inset:0, background:'linear-gradient(180deg, transparent, transparent, rgba(0,0,0,.25) 88%)',
+          position:'absolute', inset:0,
+          background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)',
           pointerEvents:'none'
         }} />
-      </div>
-
-      <div style={{padding:12}}>
-        <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12, flexWrap:'wrap'}}>
-          <div>
-            <div style={{fontSize:12, opacity:.7}}>Owned by</div>
-            <div style={{fontWeight:800}}>{row.owner || 'Anonymous'}</div>
+        {/* légende discrète (affichée au survol) */}
+        <figcaption
+          style={{
+            position:'absolute', left:0, right:0, bottom:0,
+            padding:'12px 14px',
+            background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)',
+            color:'#fff',
+            fontSize:12,
+            opacity:.0,
+            transform:'translateY(6px)',
+            transition:'opacity .35s ease, transform .35s ease',
+            pointerEvents:'none'
+          }}
+        >
+          <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
+            <div style={{fontWeight:800, letterSpacing:.2}}>
+              {row.owner || 'Anonymous'}
+            </div>
+            <div style={{opacity:.85}}>
+              {row.ts.replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC')}
+            </div>
           </div>
-          <a href={pageHref} style={{fontSize:12, textDecoration:'none', color:'var(--color-text)', opacity:.85}}>Ouvrir la page →</a>
-        </div>
-
-        {row.title && <div style={{marginTop:8}}><strong style={{fontSize:14}}>{row.title}</strong></div>}
-        {row.message && <p style={{margin:'6px 0 0', fontStyle:'italic', opacity:.95}}>“{row.message}”</p>}
-
-        <div style={{display:'flex', gap:8, marginTop:12}}>
-          <a href={pdfHref} target="_blank"
-             style={{textDecoration:'none', padding:'10px 12px', borderRadius:10, background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
-            Ouvrir le PDF
-          </a>
-          <button onClick={()=>navigator.clipboard?.writeText(pageHref)}
-            style={{padding:'10px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)'}}>
-            Copier le lien
-          </button>
-          <a href={`/${locale}/claim?ts=${encodeURIComponent(row.ts)}`} style={{marginLeft:'auto', fontSize:12, color:'var(--color-text)', opacity:.85, textDecoration:'none'}}>
-            Réserver une minute →
-          </a>
-        </div>
+          {(row.title || row.message) && (
+            <div style={{marginTop:6, opacity:.95, fontStyle: row.message ? 'italic' : 'normal'}}>
+              {row.title || `“${row.message}”`}
+            </div>
+          )}
+        </figcaption>
       </div>
+
+      {/* hover effects */}
+      <style>{`
+        article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }
+        article:hover figcaption { opacity: 1; transform: translateY(0); }
+      `}</style>
     </article>
   )
 }
