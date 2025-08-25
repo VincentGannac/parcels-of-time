@@ -526,9 +526,7 @@ useEffect(() => () => {}, [])
                   />
                 </label>
               </div>
-              <details style={{marginTop:10}}>
-                <summary style={{cursor:'pointer'}}>Lien (optionnel)</summary>
-              </details>
+
             </div>
 
             {/* ✅ Couleur de la police */}
@@ -717,11 +715,12 @@ useEffect(() => () => {}, [])
 
             {/* Publication dans le registre — PDF complet */}
             <div style={{marginBottom:10, padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:12}}>
-              <label style={{display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer'}}>
+              <label htmlFor="publish-registry" style={{display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer'}}>
                 <input
+                  id="publish-registry"
                   type="checkbox"
                   checked={form.public_registry}
-                  onChange={e=>setForm(f=>({...f, publish_registry: e.target.checked}))}
+                  onChange={e=>setForm(f=>({...f, public_registry: e.target.checked}))}
                   style={{marginTop:2}}
                 />
                 <div>
@@ -732,7 +731,6 @@ useEffect(() => () => {}, [])
                 </div>
               </label>
             </div>
-
 
             {/* Submit */}
             <div>
