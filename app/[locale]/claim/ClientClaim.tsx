@@ -117,14 +117,11 @@ export default function ClientClaim() {
     display_name: '',
     title: '',
     message: '',
-    link_url: '',
     ts: prefillTs,
     cert_style: initialStyle as CertStyle,
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
     local_date_only: false,
     text_color: '#1A1F2A',
-    title_public: false,
-    message_public: false,
     publish_registry: false,
   })
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
@@ -388,19 +385,17 @@ useEffect(() => () => {}, [])
       display_name: form.display_name || undefined,
       title: form.title || undefined,
       message: form.message || undefined,
-      link_url: form.link_url || undefined,
       cert_style: form.cert_style || 'neutral',
       time_display: form.time_display,
       local_date_only: form.local_date_only ? '1' : '0',
       text_color: mainColor,
-      title_public: form.title_public ? '1' : '0',
-      message_public: form.message_public ? '1' : '0',
       public_registry: form.publish_registry ? '1' : '0',
     }
     if (form.cert_style === 'custom' && customBg?.dataUrl) {
       payload.custom_bg_data_url = customBg.dataUrl
     }
 
+    
     const res = await fetch('/api/checkout', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
 
     if (!res.ok) {
@@ -507,55 +502,26 @@ useEffect(() => () => {}, [])
 
               <div style={{display:'grid', gap:6, marginTop:10}}>
                 <label>
-                  <span>Titre (optionnel) — affiché sur le certificat</span>
+                  <span>Titre</span>
                   <input type="text" value={form.title}
                     onChange={e=>setForm(f=>({...f, title:e.target.value}))}
                     placeholder="Ex. “Premier baiser sous la pluie”"
                     style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                 </label>
-                <label style={{display:'inline-flex', alignItems:'center', gap:8, fontSize:13, marginTop:4}}>
-                  <input type="checkbox"
-                         checked={form.title_public}
-                         onChange={e=>setForm(f=>({...f, title_public: e.target.checked}))} />
-                  <span>Publier le <strong>titre</strong> anonymement dans le registre public</span>
-                </label>
               </div>
 
               <div style={{display:'grid', gap:6, marginTop:10}}>
                 <label>
-                  <span>Message (optionnel)</span>
+                  <span>Message</span>
                   <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} rows={3}
                     placeholder={isGift ? '“Pour la minute de notre rencontre…”' : '“La minute où tout a commencé.”'}
                     style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                 </label>
-                <label style={{display:'inline-flex', alignItems:'center', gap:8, fontSize:13, marginTop:4}}>
-                  <input type="checkbox"
-                         checked={form.message_public}
-                         onChange={e=>setForm(f=>({...f, message_public: e.target.checked}))} />
-                  <span>Publier le <strong>message</strong> anonymement dans le registre public</span>
-                </label>
-                <small style={{opacity:.6}}>Aucune autre information n’est publiée. Contenu modéré. Restez bienveillant(e) ❤️</small>
               </div>
-
-               <label style={{display:'inline-flex', alignItems:'center', gap:8, fontSize:13, marginTop:6}}>
-                <input type="checkbox"
-                        checked={form.publish_registry}
-                        onChange={e=>setForm(f=>({...f, publish_registry: e.target.checked}))} />   <span>Publier ce certificat (PDF complet) <strong>dans le registre public</strong> — anonyme & modéré</span>
-              </label>
-              <small style={{opacity:.6}}>Vous pourrez publier/supprimer plus tard depuis votre page minute.</small>
-
-
               <details style={{marginTop:10}}>
                 <summary style={{cursor:'pointer'}}>Lien (optionnel)</summary>
-                <div style={{marginTop:8}}>
-                  <input type="url" value={form.link_url} onChange={e=>setForm(f=>({...f, link_url:e.target.value}))}
-                    placeholder="https://votre-lien.exemple"
-                    style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                  />
-                  <small style={{opacity:.6}}>Le lien peut pointer vers une vidéo, une galerie, un site… (jamais publié dans le registre)</small>
-                </div>
               </details>
             </div>
 
@@ -742,6 +708,25 @@ useEffect(() => () => {}, [])
                 Les vignettes utilisent <code>/public/cert_bg/&lt;style&gt;_thumb.jpg</code> (fallback <code>&lt;style&gt;.png</code>).
               </p>
             </div>
+
+            {/* Publication dans le registre — PDF complet */}
+            <div style={{marginBottom:10, padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:12}}>
+              <label style={{display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer'}}>
+                <input
+                  type="checkbox"
+                  checked={form.publish_registry}
+                  onChange={e=>setForm(f=>({...f, publish_registry: e.target.checked}))}
+                  style={{marginTop:2}}
+                />
+                <div>
+                  <div><strong>Publier ce certificat (PDF complet) dans le registre public</strong></div>
+                  <div style={{fontSize:12, color:'var(--color-muted)'}}>
+                    Vous pourrez publier/supprimer plus tard depuis votre QR Code
+                  </div>
+                </div>
+              </label>
+            </div>
+
 
             {/* Submit */}
             <div>

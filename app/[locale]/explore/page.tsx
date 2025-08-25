@@ -1,4 +1,3 @@
-//app/[locale]/explore/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -51,12 +50,11 @@ export default function PublicRegistryPage() {
     ;(async () => {
       try {
         setLoading(true); setError('')
-        // Appel relatif côté client → fonctionne sur Vercel sans headers
         const res = await fetch('/api/registry', { cache: 'no-store' })
         if (!res.ok) throw new Error('HTTP '+res.status)
         const data: RegistryRow[] = await res.json()
         if (!cancelled) setItems(Array.isArray(data) ? data.filter(i => i.is_public) : [])
-      } catch (e:any) {
+      } catch {
         if (!cancelled) setError('Impossible de charger le registre public.')
       } finally {
         if (!cancelled) setLoading(false)
@@ -133,7 +131,7 @@ function RegistryControls({ onShuffle }:{ onShuffle:()=>void }) {
 
 function RegistryGallery({ initialItems, locale }:{ initialItems: RegistryRow[]; locale:string }) {
   const [q, setQ] = useState('')
-  const [view, setView] = useState<'grid'|'flow'>('grid') // grid=cartes, flow=théâtre plein écran qui défile lentement
+  const [view, setView] = useState<'grid'|'flow'>('grid')
 
   const filtered = useMemo(()=>{
     const s = q.trim().toLowerCase()
@@ -182,7 +180,8 @@ function RegistryCard(
   { row, style, tall, locale }:
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; locale:string }
 ) {
-  const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}`
+  // ✅ PDF en mode public (QR masqué)
+  const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1`
   const pageHref = `/${locale}/m/${encodeURIComponent(row.ts)}`
   return (
     <article style={{
@@ -191,7 +190,6 @@ function RegistryCard(
       background:'var(--color-surface)', boxShadow:'var(--shadow-elev1)'
     }}>
       <div style={{position:'relative', width:'100%', aspectRatio: tall ? '595/842' : '420/595', background:'#0E1017'}}>
-        {/* Affichage **intégral** du PDF */}
         <iframe
           src={`${pdfHref}#view=FitH`}
           title={`Certificat ${row.ts}`}

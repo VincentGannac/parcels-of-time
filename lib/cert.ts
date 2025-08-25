@@ -1,4 +1,3 @@
-// lib/cert.ts
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib'
 import QRCode from 'qrcode'
 import fs from 'node:fs/promises'
@@ -31,13 +30,10 @@ async function loadBgFromPublic(style: CertStyle){
 
 function drawBgPortraitAware(page: any, img: any) {
   const { width: pw, height: ph } = page.getSize()
-  // pdf-lib expose généralement width/height sur l'image embarquée
   const iw = (img.width  ?? img.scale(1).width)
   const ih = (img.height ?? img.scale(1).height)
 
   if (iw > ih) {
-    // Pixels paysage → on pivote de 90° pour coller au A4 portrait.
-    // Astuce: translation sur x=pageWidth avant la rotation CCW pour rester dans la page.
     page.drawImage(img, {
       x: pw,
       y: 0,
@@ -46,7 +42,6 @@ function drawBgPortraitAware(page: any, img: any) {
       rotate: degrees(90),
     })
   } else {
-    // Pixels déjà portrait
     page.drawImage(img, { x: 0, y: 0, width: pw, height: ph })
   }
 }
@@ -131,15 +126,17 @@ export async function generateCertificatePDF(opts: {
   timeLabelMode?: TimeLabelMode
   localTimeZone?: string
   customBgDataUrl?: string
-  localDateOnly?: boolean                  // ✅ NEW
-  textColorHex?: string                    // ✅ NEW
+  localDateOnly?: boolean
+  textColorHex?: string
+  /** ✅ masque le QR quand true (registre public) */
+  hideQr?: boolean,
 }) {
   const {
     ts, display_name, title, message, link_url, claim_id, hash, public_url, localTimeZone,
   } = opts
   const style: CertStyle = opts.style || 'neutral'
   const locale: Locale = opts.locale || 'en'
-  const timeLabelMode: TimeLabelMode = opts.timeLabelMode || 'local_plus_utc' // default friendly
+  const timeLabelMode: TimeLabelMode = opts.timeLabelMode || 'local_plus_utc'
   const localDateOnly = !!opts.localDateOnly
   const L = TEXTS[locale]
 
@@ -154,7 +151,7 @@ export async function generateCertificatePDF(opts: {
       const parsed = parseDataImage(opts.customBgDataUrl)
       if (parsed) {
         const img = parsed.kind === 'png' ? await pdf.embedPng(parsed.bytes) : await pdf.embedJpg(parsed.bytes)
-        drawBgPortraitAware(page, img)   // ✅ corrige l'orientation
+        drawBgPortraitAware(page, img)
         embedded = true
       }
     }
@@ -199,7 +196,7 @@ export async function generateCertificatePDF(opts: {
   const gapSection = 14, gapSmall = 8
   const lineHMsg = 16, lineHLink = 14
 
-  // Time labels (avec localDateOnly)
+  // Time labels
   const utcLabel = utcMinuteLabel(ts)
   const localFull = localMinuteLabel(ts, locale, localTimeZone)
   const localDay  = localDayOnlyLabel(ts, locale, localTimeZone)
@@ -209,8 +206,8 @@ export async function generateCertificatePDF(opts: {
   if (timeLabelMode === 'utc_plus_local') { mainTime = utcLabel; subTime = L.local(localLabel) }
   else if (timeLabelMode === 'local_plus_utc') { mainTime = localLabel; subTime = L.utcParen(utcLabel.replace(' UTC','')) }
 
-  // Footer reserved
-  const qrSizePx = 120
+  // Footer reserved (réduit si QR masqué)
+  const qrSizePx = opts.hideQr ? 0 : 120
   const metaBlockH = 76
   const footerH = Math.max(qrSizePx, metaBlockH)
   const footerMarginTop = 18
@@ -224,23 +221,20 @@ export async function generateCertificatePDF(opts: {
   const msgLinesAll = message ? wrapText('“' + message + '”', font, msgSize, COLW) : []
   const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
 
-  // Sequence heights (Owned by → Title → Message)
+  // Heights
   const fixedTop =
-    (tsSize + 6) +               // main time
+    (tsSize + 6) +
     (subTime ? 12 : 0) +
-    gapSection +                 // before Owned by
-    (labelSize + 2) + gapSmall + // owned label + gap
-    (nameSize + 4)               // name
+    gapSection +
+    (labelSize + 2) + gapSmall +
+    (nameSize + 4)
 
-  // compute how many message+link lines fit
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
-  // tentative allocation: title up to 2 lines
   const titleText = (title || '').trim()
   const titleLines = titleText ? wrapText(titleText, fontBold, nameSize, COLW).slice(0, 2) : []
   const titleBlock = titleText ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
 
-  // now remaining for message/link
   const afterTitleSpace = spaceAfterOwned - (titleBlock ? (gapSection + titleBlock) : 0)
   const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
   const msgLines = msgLinesAll.slice(0, maxMsgLines)
@@ -258,8 +252,7 @@ export async function generateCertificatePDF(opts: {
   let by = contentBottomMin + (availH - blockH) / 2 + biasUp
   let y = by + blockH
 
-  // Render
-  // time
+  // Render — time
   y -= (tsSize + 6)
   page.drawText(mainTime, { x: CX - fontBold.widthOfTextAtSize(mainTime, tsSize)/2, y, size: tsSize, font: fontBold, color: cMain })
   if (subTime) {
@@ -275,7 +268,7 @@ export async function generateCertificatePDF(opts: {
   const name = display_name || L.anon
   page.drawText(name, { x: CX - fontBold.widthOfTextAtSize(name, nameSize)/2, y: y - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
 
-  // Title (optionnel)
+  // Title
   if (titleText) {
     y -= (nameSize + 4)
     y -= gapSection
@@ -300,7 +293,7 @@ export async function generateCertificatePDF(opts: {
     }
   }
 
-  // Lien
+  // Lien (s'il existe encore dans la DB)
   if (linkLines.length) {
     y -= gapSection
     page.drawText(L.link, { x: CX - font.widthOfTextAtSize(L.link, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
@@ -311,24 +304,27 @@ export async function generateCertificatePDF(opts: {
     }
   }
 
-  // Footer
+  // Footer (QR optionnel)
   const EDGE = 16
-  const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 });
-  const pngBytes = Buffer.from(qrDataUrl.split(',')[1], 'base64');
-  const png = await pdf.embedPng(pngBytes);
-  page.drawImage(png, { x: width - EDGE - qrSizePx, y: EDGE, width: qrSizePx, height: qrSizePx });
+  if (!opts.hideQr) {
+    const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
+    const pngBytes = Buffer.from(qrDataUrl.split(',')[1], 'base64')
+    const png = await pdf.embedPng(pngBytes)
+    const qrSize = 120
+    page.drawImage(png, { x: width - EDGE - qrSize, y: EDGE, width: qrSize, height: qrSize })
+  }
 
-  let metaY = EDGE + 76;
-  page.drawText(L.certId, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub });
-  metaY -= (labelSize + 6);
-  page.drawText(claim_id, { x: EDGE, y: metaY - 12, size: 10.5, font: fontBold, color: cMain });
-  metaY -= 20;
-  page.drawText(L.integrity, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub });
-  metaY -= (labelSize + 6);
-  const h1 = hash.slice(0, 64), h2 = hash.slice(64);
-  page.drawText(h1, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain });
-  metaY -= 16;
-  page.drawText(h2, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain });
+  let metaY = EDGE + 76
+  page.drawText(L.certId, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+  metaY -= (labelSize + 6)
+  page.drawText(claim_id, { x: EDGE, y: metaY - 12, size: 10.5, font: fontBold, color: cMain })
+  metaY -= 20
+  page.drawText(L.integrity, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+  metaY -= (labelSize + 6)
+  const h1 = hash.slice(0, 64), h2 = hash.slice(64)
+  page.drawText(h1, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
+  metaY -= 16
+  page.drawText(h2, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
 
   return await pdf.save()
 }

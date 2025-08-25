@@ -1,4 +1,4 @@
-// api/checkout/route.ts
+// app/api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -7,8 +7,13 @@ import { priceFor } from '@/lib/pricing'
 import crypto from 'node:crypto'
 import { pool } from '@/lib/db'
 
-type CertStyle = 'neutral'|'romantic'|'birthday'|'wedding'|'birth'|'christmas'|'newyear'|'graduation'|'custom'
-const ALLOWED_STYLES: readonly CertStyle[] = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
+type CertStyle =
+  | 'neutral' | 'romantic' | 'birthday' | 'wedding'
+  | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom'
+
+const ALLOWED_STYLES: readonly CertStyle[] = [
+  'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'
+] as const
 
 type Body = {
   ts: string
@@ -16,15 +21,13 @@ type Body = {
   display_name?: string
   title?: string
   message?: string
-  link_url?: string
   cert_style?: string
   custom_bg_data_url?: string
   time_display?: 'utc'|'utc+local'|'local+utc'
-  local_date_only?: string | boolean // '1'/'0' ou bool
-  text_color?: string // #rrggbb
-  // ✅ nouveaux flags public
-  title_public?: string | boolean
-  message_public?: string | boolean
+  local_date_only?: string | boolean
+  text_color?: string
+  /** ✅ Nouveau : opt-in registre public (PDF complet) */
+  public_registry?: string | boolean
 }
 
 const ipBucket = new Map<string, { count:number; ts:number }>()
@@ -38,8 +41,8 @@ function rateLimit(ip: string, limit = 8, windowMs = 60_000) {
 }
 
 export async function POST(req: Request) {
-  const accLang = (req.headers.get('accept-language') || '').toLowerCase();
-  const locale = accLang.startsWith('fr') ? 'fr' : 'en';
+  const accLang = (req.headers.get('accept-language') || '').toLowerCase()
+  const locale = accLang.startsWith('fr') ? 'fr' : 'en'
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0] || 'unknown'
   if (!rateLimit(ip)) return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
@@ -53,19 +56,22 @@ export async function POST(req: Request) {
     const tsISO = d.toISOString()
 
     const styleCandidate = String(body.cert_style || 'neutral').toLowerCase()
-    const cert_style: CertStyle = (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral'
+    const cert_style: CertStyle =
+      (ALLOWED_STYLES as readonly string[]).includes(styleCandidate) ? (styleCandidate as CertStyle) : 'neutral'
 
-    // prefs
-    const time_display = (body.time_display === 'utc' || body.time_display === 'utc+local' || body.time_display === 'local+utc')
-      ? body.time_display : 'local+utc'
+    const time_display =
+      body.time_display === 'utc' || body.time_display === 'utc+local' || body.time_display === 'local+utc'
+        ? body.time_display
+        : 'local+utc'
+
     const local_date_only = (String(body.local_date_only) === '1' || body.local_date_only === true) ? '1' : '0'
-    const text_color = /^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'
+    const text_color =
+      /^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'
 
-    // ✅ registres publics (opt-in)
-    const title_public   = (String(body.title_public)   === '1' || body.title_public   === true) ? '1' : '0'
-    const message_public = (String(body.message_public) === '1' || body.message_public === true) ? '1' : '0'
+    /** ✅ opt-in “Publier le PDF complet dans le registre public” */
+    const public_registry = (String(body.public_registry) === '1' || body.public_registry === true) ? '1' : '0'
 
-    // custom BG → table temp
+    // --- Custom background temp stash
     let custom_bg_key = ''
     if (cert_style === 'custom' && body.custom_bg_data_url) {
       const m = /^data:image\/(png|jpe?g);base64,/.exec(body.custom_bg_data_url)
@@ -108,15 +114,13 @@ export async function POST(req: Request) {
         display_name: body.display_name ?? '',
         title: body.title ?? '',
         message: body.message ?? '',
-        link_url: body.link_url ?? '',
         cert_style,
         custom_bg_key,
         time_display,
         local_date_only,
         text_color,
-        // ✅ flags publics vers webhook/confirm
-        title_public,
-        message_public,
+        /** ✅ passe l’intention au webhook (Cas A) */
+        public_registry,
       },
       success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,
