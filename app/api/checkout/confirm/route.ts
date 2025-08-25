@@ -96,6 +96,7 @@ export async function GET(req: Request) {
         ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
         : 0);
     const price_cents = Math.max(0, Number(amount_total_raw) | 0);
+    const currency = String(s.currency || 'EUR').toUpperCase()
 
     // ====== Transaction DB (robuste) ======
     const client = await pool.connect();
@@ -115,8 +116,8 @@ export async function GET(req: Request) {
 
       // claims upsert dynamique
       const cols = await getColumns(client, 'claims');
-      const insertCols: string[] = ['ts','owner_id','price_cents','currency'];
-      const values: any[] = [ts, ownerId, price_cents, 'EUR'];
+      const insertCols: string[] = ['ts','owner_id','price_cents','currency']
+      const values: any[] = [ts, ownerId, price_cents, currency]
       const placeholders: string[] = ['$1','$2','$3','$4'];
 
       const pushOpt = (name: string, value: any) => {
@@ -177,6 +178,7 @@ export async function GET(req: Request) {
 
       const salt = process.env.SECRET_SALT || 'dev_salt';
       const data = `${ts}|${ownerId}|${price_cents}|${createdAtISO}|${salt}`;
+
       const hash = crypto.createHash('sha256').update(data).digest('hex');
       const cert_url = `/api/cert/${encodeURIComponent(ts)}`;
 

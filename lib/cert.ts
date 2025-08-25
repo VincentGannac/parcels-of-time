@@ -1,3 +1,4 @@
+//app/lib/cert.ts
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib'
 import QRCode from 'qrcode'
 import fs from 'node:fs/promises'

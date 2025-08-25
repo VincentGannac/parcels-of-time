@@ -1,3 +1,4 @@
+// app/api/cert/[ts]/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -61,7 +62,7 @@ export async function GET(req: Request, ctx: any) {
     timeLabelMode: timeLabelMode as any,
     localDateOnly: !!row.local_date_only,
     textColorHex: (row.text_color || '#1a1f2a'),
-    hideQr, // ✅ masque le QR en mode public
+    hideQr,
   })
 
   const buf = Buffer.from(pdfBytes)
