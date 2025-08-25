@@ -52,9 +52,9 @@ const TOKENS = {
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
-export default async function Page({ params }: { params: Params }) {
-  const locale = params?.locale || 'en'
-  const tsParam = params?.ts || ''
+export default async function Page({ params }: { params: Promise<Params> }) {
+  // Next 15: params est une Promise
+  const { locale = 'en', ts: tsParam = '' } = await params
   const decodedTs = safeDecode(tsParam)
 
   // Lecture registre public (sans throw)
@@ -75,13 +75,15 @@ export default async function Page({ params }: { params: Params }) {
     const ts = String(formData.get('ts') || '')
     const next = String(formData.get('next') || '0') === '1'
 
-    // appel absolu si possible
+    // Appel absolu si possible
     let ok = false
     try {
       const h = await headers()
       const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
       const host  = (h.get('host') || '').split(',')[0].trim()
-      const url = host ? `${proto}://${host}/api/minutes/${encodeURIComponent(ts)}/public` : `/api/minutes/${encodeURIComponent(ts)}/public`
+      const url = host
+        ? `${proto}://${host}/api/minutes/${encodeURIComponent(ts)}/public`
+        : `/api/minutes/${encodeURIComponent(ts)}/public`
       const res = await fetch(url, {
         method:'PUT',
         headers:{ 'Content-Type':'application/json' },
@@ -91,7 +93,7 @@ export default async function Page({ params }: { params: Params }) {
       ok = res.ok
     } catch {}
 
-    // on force un refresh de la page
+    // Force un refresh de la page
     revalidatePath(`/${locale}/m/${encodeURIComponent(ts)}`)
     redirect(`/${locale}/m/${encodeURIComponent(ts)}?${ok ? 'ok=1' : 'ok=0'}`)
   }
@@ -136,7 +138,7 @@ export default async function Page({ params }: { params: Params }) {
               </div>
             </div>
 
-            <a href={pdfHref} target="_blank"
+            <a href={pdfHref} target="_blank" rel="noreferrer"
                style={{ display:'inline-flex', alignItems:'center', gap:10, background:'var(--color-primary)', color:'var(--color-on-primary)',
                         padding:'14px 18px', borderRadius:12, fontWeight:800, textDecoration:'none', border:'1px solid transparent' }}>
               Télécharger le certificat (PDF)
@@ -179,7 +181,7 @@ export default async function Page({ params }: { params: Params }) {
               </div>
             )}
 
-            {/* Toggle publier/retirer (Server Action, pas de hooks) */}
+            {/* Toggle publier/retirer (Server Action) */}
             <form action={togglePublic}
                   style={{marginTop:12, padding:12, border:'1px solid var(--color-border)', borderRadius:12}}>
               <input type="hidden" name="ts" value={decodedTs} />
@@ -214,7 +216,7 @@ export default async function Page({ params }: { params: Params }) {
 
         {/* CTA bas de page */}
         <div style={{ marginTop:18, display:'flex', gap:12, flexWrap:'wrap' }}>
-          <a href={pdfHref} target="_blank"
+          <a href={pdfHref} target="_blank" rel="noreferrer"
              style={{ textDecoration:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', borderRadius:12,
                       padding:'12px 16px', fontWeight:800, border:'1px solid transparent' }}>
             Ouvrir le PDF
