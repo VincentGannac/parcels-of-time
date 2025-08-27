@@ -228,8 +228,8 @@ return (
     <div
       style={{
         display:'grid',
-        gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))',
-        gap:18,
+        gridTemplateColumns:'repeat(auto-fill, minmax(360px, 1fr))',
+        gap:22,
         alignItems:'stretch'
       }}
     >
@@ -275,7 +275,7 @@ function RegistryCard(
       <div style={{
         position:'relative',
         width:'100%',
-        aspectRatio: tall ? '595/842' : '420/595',
+        aspectRatio:'595/842',
         background:'#0E1017',
         borderRadius:12,
         overflow:'hidden',
