@@ -217,30 +217,36 @@ function RegistryWall({ items, q, view, total }:{
     )
   }
 
-  // Mur (mosaïque)
-  return (
-    <>
-      <div style={{fontSize:12, color:'var(--color-muted)', margin:'2px 0 10px'}}>
-        {filtered.length} œuvre{filtered.length>1?'s':''} {filtered.length!==total && <>— <span style={{opacity:.75}}>filtrées</span></>}
-      </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(12, 1fr)', gap:18 }}>
-        {filtered.map((row, idx) => {
-          const tall = idx % 7 === 0 || idx % 11 === 3
-          const span = tall ? 6 : 4
-          return (
-            <RegistryCard
-              key={row.ts}
-              row={row}
-              style={{ gridColumn:`span ${span}` }}
-              tall={tall}
-            />
-          )
-        })}
-        {filtered.length===0 && <p style={{opacity:.7, gridColumn:'span 12'}}>Aucun résultat.</p>}
-      </div>
-    </>
-  )
+  // --- dans RegistryWall, branche "Mur (mosaïque)" ---
+return (
+  <>
+    <div style={{fontSize:12, color:'var(--color-muted)', margin:'2px 0 10px'}}>
+      {filtered.length} œuvre{filtered.length>1?'s':''} {filtered.length!==total && <>— <span style={{opacity:.75}}>filtrées</span></>}
+    </div>
+
+    {/* Grille à tuiles uniformes */}
+    <div
+      style={{
+        display:'grid',
+        gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))',
+        gap:18,
+        alignItems:'stretch'
+      }}
+    >
+      {filtered.map((row) => (
+        <RegistryCard
+          key={row.ts}
+          row={row}
+          /* ✅ toutes les tuiles même aspect-ratio */
+          tall={false}
+        />
+      ))}
+      {filtered.length===0 && <p style={{opacity:.7, gridColumn:'1 / -1'}}>Aucun résultat.</p>}
+    </div>
+  </>
+)
 }
+
 
 function RegistryCard(
   { row, style, tall }:
