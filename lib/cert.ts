@@ -131,6 +131,7 @@ export async function generateCertificatePDF(opts: {
   textColorHex?: string
   /** ✅ masque le QR quand true (registre public) */
   hideQr?: boolean,
+  hideMeta?: boolean,
 }) {
   const {
     ts, display_name, title, message, link_url, claim_id, hash, public_url, localTimeZone,
@@ -207,9 +208,9 @@ export async function generateCertificatePDF(opts: {
   if (timeLabelMode === 'utc_plus_local') { mainTime = utcLabel; subTime = L.local(localLabel) }
   else if (timeLabelMode === 'local_plus_utc') { mainTime = localLabel; subTime = L.utcParen(utcLabel.replace(' UTC','')) }
 
-  // Footer reserved (réduit si QR masqué)
+  // Footer reserved (réduction si QR ou méta masqués)
   const qrSizePx = opts.hideQr ? 0 : 120
-  const metaBlockH = 76
+  const metaBlockH = opts.hideMeta ? 0 : 76
   const footerH = Math.max(qrSizePx, metaBlockH)
   const footerMarginTop = 18
 
@@ -315,17 +316,19 @@ export async function generateCertificatePDF(opts: {
     page.drawImage(png, { x: width - EDGE - qrSize, y: EDGE, width: qrSize, height: qrSize })
   }
 
-  let metaY = EDGE + 76
-  page.drawText(L.certId, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
-  metaY -= (labelSize + 6)
-  page.drawText(claim_id, { x: EDGE, y: metaY - 12, size: 10.5, font: fontBold, color: cMain })
-  metaY -= 20
-  page.drawText(L.integrity, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
-  metaY -= (labelSize + 6)
-  const h1 = hash.slice(0, 64), h2 = hash.slice(64)
-  page.drawText(h1, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
-  metaY -= 16
-  page.drawText(h2, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
-
+  if (!opts.hideMeta) {
+     let metaY = EDGE + 76
+     page.drawText(L.certId, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+     metaY -= (labelSize + 6)
+     page.drawText(claim_id, { x: EDGE, y: metaY - 12, size: 10.5, font: fontBold, color: cMain })
+     metaY -= 20
+     page.drawText(L.integrity, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+     metaY -= (labelSize + 6)
+     const h1 = hash.slice(0, 64), h2 = hash.slice(64)
+     page.drawText(h1, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
+     metaY -= 16
+     page.drawText(h2, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
+    }
+  
   return await pdf.save()
 }

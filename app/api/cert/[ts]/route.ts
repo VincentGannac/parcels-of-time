@@ -15,6 +15,9 @@ export async function GET(req: Request, ctx: any) {
     url.searchParams.has('public') ||
     url.searchParams.get('public') === '1' ||
     url.searchParams.get('hide_qr') === '1'
+    const hideMeta =
+    url.searchParams.get('hide_meta') === '1' ||
+    url.searchParams.has('hide_meta')
 
   const accLang = (req.headers.get('accept-language') || '').toLowerCase()
   const locale = accLang.startsWith('fr') ? 'fr' : 'en'
@@ -63,6 +66,7 @@ export async function GET(req: Request, ctx: any) {
     localDateOnly: !!row.local_date_only,
     textColorHex: (row.text_color || '#1a1f2a'),
     hideQr,
+    hideMeta,
   })
 
   const buf = Buffer.from(pdfBytes)

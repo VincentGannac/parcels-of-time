@@ -253,7 +253,7 @@ function RegistryCard(
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean }
 ) {
   // PDF en mode public, sans interaction ni export
-  const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+  const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
   return (
     <article
