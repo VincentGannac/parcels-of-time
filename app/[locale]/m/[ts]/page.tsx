@@ -7,6 +7,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { formatISOAsNice } from '@/lib/date'
+import { pool } from '@/lib/db'
 
 type Params = { locale: string; ts: string }
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
@@ -41,9 +42,22 @@ export default async function Page({ params }: { params: Promise<Params> }) {
   const decodedTs = safeDecode(tsParam)
   const isPublic = await getPublicState(decodedTs)
 
+  async function getClaimMeta(tsISO: string) {
+    try {
+      const { rows } = await pool.query(
+        `select id as claim_id, cert_hash from claims where ts=$1::timestamptz`,
+        [tsISO]
+      )
+      if (!rows.length) return null
+      return { claimId: String(rows[0].claim_id), hash: String(rows[0].cert_hash || '') }
+    } catch { return null }
+  }
+
+  const meta = await getClaimMeta(decodedTs)
   const pdfHref = `/api/cert/${encodeURIComponent(decodedTs)}`
   const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
+  const verifyHref = `/api/verify?ts=${encodeURIComponent(decodedTs)}` // ✅
 
   let niceTs = decodedTs
   try { niceTs = formatISOAsNice(decodedTs) } catch {}
@@ -147,6 +161,60 @@ export default async function Page({ params }: { params: Promise<Params> }) {
             </form>
           </aside>
         </div>
+
+        {/* ✅ Nouveau panneau Preuve & intégrité */}
+        <aside
+          style={{
+            marginTop:18,
+            background:'var(--color-surface)',
+            border:'1px solid var(--color-border)',
+            borderRadius:16, padding:16
+          }}
+        >
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+            <div style={{ fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)' }}>
+              Preuve & intégrité
+            </div>
+            <a href={verifyHref}
+               style={{fontSize:12, textDecoration:'none', border:'1px solid var(--color-border)', borderRadius:999, padding:'6px 10px', color:'var(--color-text)'}}>
+              API : vérifier →
+            </a>
+          </div>
+
+          {meta ? (
+            <div style={{ display:'grid', gap:10 }}>
+              <div style={{display:'grid', gridTemplateColumns:'140px 1fr auto', gap:10, alignItems:'center'}}>
+                <div style={{color:'var(--color-muted)', fontSize:13}}>ID du certificat</div>
+                <code style={{fontSize:13, wordBreak:'break-all'}}>{meta.claimId}</code>
+                <button
+                  data-copy={meta.claimId}
+                  type="button"
+                  style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', cursor:'pointer'}}
+                >
+                  Copier
+                </button>
+              </div>
+
+              <div style={{display:'grid', gridTemplateColumns:'140px 1fr auto', gap:10, alignItems:'center'}}>
+                <div style={{color:'var(--color-muted)', fontSize:13}}>SHA-256</div>
+                <code style={{fontSize:13, wordBreak:'break-all'}}>{meta.hash}</code>
+                <button
+                  data-copy={meta.hash}
+                  type="button"
+                  style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', cursor:'pointer'}}
+                >
+                  Copier
+                </button>
+              </div>
+
+              <p style={{margin:'6px 0 0', fontSize:12, color:'var(--color-muted)'}}>
+                Comparez ce hash avec celui imprimé dans le PDF, ou utilisez l’API ci-dessus.
+              </p>
+            </div>
+          ) : (
+            <div style={{fontSize:13, color:'var(--color-muted)'}}>Métadonnées non disponibles.</div>
+          )}
+        </aside>
 
         <div style={{ marginTop:18, display:'flex', gap:12, flexWrap:'wrap' }}>
           <a href={pdfHref} target="_blank" rel="noreferrer"

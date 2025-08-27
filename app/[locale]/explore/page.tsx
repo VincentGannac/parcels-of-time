@@ -297,6 +297,23 @@ function RegistryCard(
           background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)',
           pointerEvents:'none'
         }} />
+
+        {/* ✅ Badge Authentifié */}
+        <div
+          aria-label="Certificat authentifié"
+          style={{
+            position:'absolute', left:8, bottom:8,
+            display:'inline-flex', alignItems:'center', gap:6,
+            padding:'6px 8px', borderRadius:999,
+            background:'rgba(14,170,80,.18)',
+            border:'1px solid rgba(14,170,80,.45)',
+            color:'#D9FBE3', fontSize:12, fontWeight:700,
+            pointerEvents:'none'
+          }}
+        >
+          <span>Authentifié</span><span aria-hidden>✓</span>
+        </div>
+        
         {/* légende discrète (affichée au survol) */}
         <figcaption
           style={{
