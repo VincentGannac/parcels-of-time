@@ -46,6 +46,9 @@ function drawBgPortraitAware(page: any, img: any) {
     page.drawImage(img, { x: 0, y: 0, width: pw, height: ph })
   }
 }
+const PT_PER_CM = 28.3465
+const SHIFT_UP_CM = 2
+const SHIFT_UP_PT = Math.round(PT_PER_CM * SHIFT_UP_CM)
 
 function getSafeArea(style: CertStyle){
   const base = { top: 140, right: 96, bottom: 156, left: 96 }
@@ -193,6 +196,8 @@ export async function generateCertificatePDF(opts: {
   yHeader -= 18
   page.drawText(L.title, { x: CX - font.widthOfTextAtSize(L.title, subSize)/2, y: yHeader, size: subSize, font, color: cSub })
 
+  
+
   // Typo sizes
   const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5, linkSize = 10.5
   const gapSection = 14, gapSmall = 8
@@ -212,10 +217,10 @@ export async function generateCertificatePDF(opts: {
   const qrSizePx = opts.hideQr ? 0 : 120
   const metaBlockH = opts.hideMeta ? 0 : 76
   const footerH = Math.max(qrSizePx, metaBlockH)
-  const footerMarginTop = 18
+  const footerMarginTop = 8
 
   // Content box
-  const contentTopMax = yHeader - 38
+  const contentTopMax = yHeader - 38+ SHIFT_UP_PT
   const contentBottomMin = BOT_Y + footerH + footerMarginTop
   const availH = contentTopMax - contentBottomMin
 
@@ -250,7 +255,7 @@ export async function generateCertificatePDF(opts: {
     + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
     + (linkLines.length ? (gapSection + linkLines.length * lineHLink) : 0)
 
-  const biasUp = 10
+  const biasUp = 22
   let by = contentBottomMin + (availH - blockH) / 2 + biasUp
   let y = by + blockH
 

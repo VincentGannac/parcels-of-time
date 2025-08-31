@@ -768,55 +768,117 @@ useEffect(() => () => {}, [])
                 const EDGE_PX = 12
                 const localStr = localReadableStr
                 const showLocalFirst = form.time_display === 'local+utc'
+
                 return (
-                  <>
-                    <div style={{position:'absolute', top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`, display:'grid', gridTemplateRows:'auto 1fr', color:mainColor, textAlign:'center'}}>
-                      <div style={{textAlign:'left', color:subtleColor}}>
-                        <div style={{fontWeight:900, fontSize:'min(3.8vw, 20px)'}}>Parcels of Time</div>
-                        <div style={{opacity:.9, fontSize:'min(3.2vw, 14px)'}}>Certificate of Claim</div>
+                  <div aria-hidden style={{ position:'absolute', inset:0 }}>
+                    {/* zone sûre + contenu remonté */}
+                    <div
+                      style={{
+                        position:'absolute',
+                        top:`${ins.top}%`,
+                        right:`${ins.right}%`,
+                        bottom:`${ins.bottom}%`,
+                        left:`${ins.left}%`,
+                        display:'grid',
+                        gridTemplateRows:'auto 1fr',
+                        color:mainColor,
+                        textAlign:'center'
+                      }}
+                    >
+                      <div style={{ textAlign:'left', color:subtleColor }}>
+                        <div style={{ fontWeight:900, fontSize:'min(3.8vw, 20px)' }}>Parcels of Time</div>
+                        <div style={{ opacity:.9, fontSize:'min(3.2vw, 14px)' }}>Certificate of Claim</div>
                       </div>
 
-                      <div style={{display:'grid', placeItems:'center'}}>
-                        <div style={{maxWidth:520}}>
-                          <div style={{fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6}}>
-                            {showLocalFirst ? (localStr ? `${localStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)')
-                                            : (utcReadable || 'YYYY-MM-DD HH:MM UTC')}
-                          </div>
-                          {form.time_display !== 'utc' && (
-                            <div style={{color:subtleColor, fontSize:'min(3.6vw, 13px)', marginTop:4}}>
-                              {showLocalFirst ? (utcReadable || 'YYYY-MM-DD HH:MM UTC') : (localStr ? `${localStr} (${tzLabel})` : '')}
-                            </div>
-                          )}
-
-                          <div style={{opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Owned by</div>
-                          <div style={{fontWeight:800, fontSize:'min(6.4vw, 18px)'}}>
-                            {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
-                          </div>
-
-                          {form.title && (
-                            <>
-                              <div style={{opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Title</div>
-                              <div style={{fontWeight:800, fontSize:'min(6.0vw, 17px)'}}>{form.title}</div>
-                            </>
-                          )}
-
-                          {form.message && (
-                            <>
-                              <div style={{opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10}}>Message</div>
-                              <div style={{marginTop:6, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)'}}>“{form.message}”</div>
-                            </>
-                          )}
+                      <div
+                        style={{
+                          display:'grid',
+                          alignItems:'start',
+                          justifyItems:'center',
+                          rowGap:8,
+                          paddingTop:8
+                        }}
+                      >
+                        {/* Timestamp principal */}
+                        <div style={{ fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6 }}>
+                          {showLocalFirst
+                            ? (localStr ? `${localStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)')
+                            : (utcReadable || 'YYYY-MM-DD HH:MM UTC')}
                         </div>
+
+                        {form.time_display !== 'utc' && (
+                          <div style={{ color:subtleColor, fontSize:'min(3.6vw, 13px)' }}>
+                            {showLocalFirst
+                              ? (utcReadable || 'YYYY-MM-DD HH:MM UTC')
+                              : (localStr ? `${localStr} (${tzLabel})` : '')}
+                          </div>
+                        )}
+
+                        <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
+                          Owned by
+                        </div>
+                        <div style={{ fontWeight:800, fontSize:'min(6.4vw, 18px)' }}>
+                          {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
+                        </div>
+
+                        {form.title && (
+                          <>
+                            <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
+                              Title
+                            </div>
+                            <div style={{ fontWeight:800, fontSize:'min(6.0vw, 17px)' }}>{form.title}</div>
+                          </>
+                        )}
+
+                        {form.message && (
+                          <>
+                            <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
+                              Message
+                            </div>
+                            <div style={{ marginTop:6, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)' }}>
+                              “{form.message}”
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
 
-                    <div style={{position:'absolute', left: EDGE_PX, bottom: EDGE_PX, fontSize:'min(3.2vw,12px)', color: subtleColor, textAlign:'left', pointerEvents:'none'}}>
+                    {/* éléments bas gauche / bas droite */}
+                    <div
+                      style={{
+                        position:'absolute',
+                        left:EDGE_PX,
+                        bottom:EDGE_PX,
+                        fontSize:'min(3.2vw,12px)',
+                        color:subtleColor,
+                        textAlign:'left',
+                        pointerEvents:'none'
+                      }}
+                    >
                       Certificate ID • Integrity hash (aperçu)
                     </div>
-                    <div style={{position:'absolute', right: EDGE_PX, bottom: EDGE_PX, width:'min(18vw,110px)', height:'min(18vw,110px)', border:'1px dashed rgba(26,31,42,.45)', borderRadius:8, display:'grid', placeItems:'center', fontSize:'min(6vw,12px)', opacity:.85, pointerEvents:'none'}}>QR</div>
-                  </>
+                    <div
+                      style={{
+                        position:'absolute',
+                        right:EDGE_PX,
+                        bottom:EDGE_PX,
+                        width:'min(18vw,110px)',
+                        height:'min(18vw,110px)',
+                        border:'1px dashed rgba(26,31,42,.45)',
+                        borderRadius:8,
+                        display:'grid',
+                        placeItems:'center',
+                        fontSize:'min(6vw,12px)',
+                        opacity:.85,
+                        pointerEvents:'none'
+                      }}
+                    >
+                      QR
+                    </div>
+                  </div>
                 )
               })()}
+
             </div>
 
             <div style={{marginTop:10, fontSize:12, color:'var(--color-muted)'}}>

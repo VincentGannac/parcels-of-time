@@ -203,12 +203,17 @@ function CertificatePreview({
                 <div style={{opacity:.9, fontSize:12}}>Certificate of Claim</div>
               </div>
 
-              {/* Zone centrale */}
-              <div style={{display:'grid', placeItems:'center', gap:8}}>
-                {/* Timestamp */}
+
+              {/* ⬆️ Contenu aligné en haut (plus de place sous "Message") */}
+              <div style={{
+                display:'grid',
+                alignItems:'start',     // ⬅️ était placeItems:'center'
+                justifyItems:'center',  // ⬅️ centrage horizontal conservé
+                rowGap:8,               // spacing doux
+                paddingTop:8            // petite respiration
+              }}>
                 <div style={{fontWeight:800, fontSize:24, letterSpacing:.2}}>{tsText}</div>
 
-                {/* ✅ Owned by AVANT Title */}
                 <div style={{opacity:.7, fontSize:12, marginTop:8}}>Owned by</div>
                 <div style={{fontWeight:800, fontSize:16}}>{owner || 'Anonymous'}</div>
 
@@ -222,7 +227,9 @@ function CertificatePreview({
                 {message && (
                   <>
                     <div style={{opacity:.7, fontSize:12, marginTop:6}}>Message</div>
-                    <div style={{ maxWidth:'72%', lineHeight:'1.35', fontSize:13 }}>“{message}”</div>
+                    <div style={{ maxWidth:'72%', lineHeight:1.35, fontSize:13 }}>
+                      “{message}”
+                    </div>
                   </>
                 )}
               </div>
