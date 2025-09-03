@@ -86,21 +86,23 @@ function wrapText(text: string, font: any, size: number, maxWidth: number) {
   if (line) lines.push(line)
   return lines
 }
-function utcMinuteLabel(iso: string){
+function utcDayLabel(iso: string){
   const d = new Date(iso); if (isNaN(d.getTime())) return iso
-  d.setUTCSeconds(0,0)
-  return d.toISOString().replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC')
+  d.setUTCHours(0,0,0,0)
+  return d.toISOString().slice(0,10) + ' UTC'
 }
-function localMinuteLabel(iso: string, locale: Locale, timeZone?: string){
-  const d = new Date(iso); if (isNaN(d.getTime())) return iso; d.setSeconds(0,0)
+function localDayLabel(iso: string, locale: Locale, timeZone?: string){
+  const d = new Date(iso); if (isNaN(d.getTime())) return iso
+  d.setHours(0,0,0,0)
   try {
-    const fmt = new Intl.DateTimeFormat(locale==='fr'?'fr-FR':'en-GB', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZone })
+    const fmt = new Intl.DateTimeFormat(locale==='fr'?'fr-FR':'en-GB', { year:'numeric', month:'2-digit', day:'2-digit', timeZone })
     return fmt.format(d)
   } catch {
-    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'), hh=String(d.getHours()).padStart(2,'0'), mm=String(d.getMinutes()).padStart(2,'0')
-    return `${y}-${m}-${day} ${hh}:${mm}`
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0')
+    return `${y}-${m}-${day}`
   }
 }
+
 function localDayOnlyLabel(iso: string, locale: Locale, timeZone?: string){
   const d = new Date(iso); if (isNaN(d.getTime())) return iso; d.setSeconds(0,0)
   try {
@@ -203,12 +205,9 @@ export async function generateCertificatePDF(opts: {
   const gapSection = 14, gapSmall = 8
   const lineHMsg = 16, lineHLink = 14
 
-  // Time labels
-  const utcLabel = utcMinuteLabel(ts)
-  const localFull = localMinuteLabel(ts, locale, localTimeZone)
-  const localDay  = localDayOnlyLabel(ts, locale, localTimeZone)
-  const localLabel = localDateOnly ? localDay : localFull
-
+  // Date labels (jour)
+  const utcLabel = utcDayLabel(ts)
+  const localLabel = localDayLabel(ts, locale, localTimeZone)
   let mainTime = utcLabel, subTime = ''
   if (timeLabelMode === 'utc_plus_local') { mainTime = utcLabel; subTime = L.local(localLabel) }
   else if (timeLabelMode === 'local_plus_utc') { mainTime = localLabel; subTime = L.utcParen(utcLabel.replace(' UTC','')) }

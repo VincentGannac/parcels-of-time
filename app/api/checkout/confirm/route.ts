@@ -68,7 +68,7 @@ export async function GET(req: Request) {
       // si introuvable → on sort proprement
       return NextResponse.redirect(`${base}/`, { status: 302 });
     }
-    const tsISO = new Date(tsRaw); tsISO.setUTCSeconds(0,0);
+    const tsISO = new Date(tsRaw); tsISO.setUTCHours(0,0,0,0);
     const ts = tsISO.toISOString();
     tsForRedirect = ts; // pour la redirection finale
 

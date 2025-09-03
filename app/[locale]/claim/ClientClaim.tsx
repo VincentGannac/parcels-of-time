@@ -1,4 +1,4 @@
-// app/claim/ClientClaim.tsx
+// app/[locale]/claim/ClientClaim.tsx
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -36,13 +36,7 @@ const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;
   custom:     { top:16.6, right:16.1, bottom:18.5, left:16.1 },
 }
 
-const A4_RATIO = 2480 / 3508
-const RATIO_2x3 = 1024 / 1536
-const RATIO_TOL = 0.01
-const ALLOWED_EXACT_SIZES = [
-  { w: 2480, h: 3508, label: 'A4' },
-  { w: 1024, h: 1536, label: '1024×1536' },
-]
+const CERT_BG_HEX = '#F4F1EC'
 
 /** ------- Utils ------- **/
 const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
@@ -51,20 +45,11 @@ function safeDecode(value: string): string {
   try { for (let i=0;i<3;i++){ const dec=decodeURIComponent(out); if(dec===out) break; out=dec } } catch {}
   return out
 }
-function isoMinuteString(d: Date) { const c = new Date(d.getTime()); c.setUTCSeconds(0,0); return c.toISOString() }
+function isoDayString(d: Date) { const c = new Date(d.getTime()); c.setUTCHours(0,0,0,0); return c.toISOString() }
 function parseToDateOrNull(input: string): Date | null {
   const s = (input || '').trim(); if (!s) return null
   const d = new Date(s); if (isNaN(d.getTime())) return null
-  d.setUTCSeconds(0,0); return d
-}
-function localReadable(d: Date | null) {
-  if (!d) return ''
-  try {
-    return d.toLocaleString(undefined, {
-      year:'numeric', month:'2-digit', day:'2-digit',
-      hour:'2-digit', minute:'2-digit', hour12:false
-    })
-  } catch { return '' }
+  d.setUTCHours(0,0,0,0); return d
 }
 function localDayOnly(d: Date | null) {
   if (!d) return ''
@@ -80,10 +65,18 @@ function hexToRgb(hex:string){
 }
 function mix(a:number,b:number,t:number){ return Math.round(a*(1-t)+b*t)}
 function lighten(hex:string, t=0.55){ const {r,g,b} = hexToRgb(hex); return `rgba(${mix(r,255,t)}, ${mix(g,255,t)}, ${mix(b,255,t)}, 0.9)` }
-const CERT_BG_HEX = '#F4F1EC'
 function relLum({r,g,b}:{r:number,g:number,b:number}){ const srgb=(c:number)=>{ c/=255; return c<=0.03928? c/12.92 : Math.pow((c+0.055)/1.055, 2.4) }; const R=srgb(r),G=srgb(g),B=srgb(b); return 0.2126*R+0.7152*G+0.0722*B }
 function contrastRatio(fgHex:string, bgHex=CERT_BG_HEX){ const L1=relLum(hexToRgb(fgHex)), L2=relLum(hexToRgb(bgHex)); const light=Math.max(L1,L2), dark=Math.min(L1,L2); return (light+0.05)/(dark+0.05) }
 function ratioLabel(r:number){ if(r>=7) return {label:'AAA', color:'#0BBF6A'}; if(r>=4.5) return {label:'AA', color:'#E4B73D'}; return {label:'⚠︎ Low', color:'#FF7A7A'} }
+
+// format d’affichage choisi par l’utilisateur
+type DateFormat = 'DMY' | 'MDY'
+function fmtDate(d: Date, fmt: DateFormat){
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth()+1).padStart(2,'0')
+  const day = String(d.getUTCDate()).padStart(2,'0')
+  return fmt==='DMY' ? `${day}/${m}/${y}` : `${m}/${day}/${y}`
+}
 
 export default function ClientClaim() {
   const params = useSearchParams()
@@ -95,21 +88,29 @@ export default function ClientClaim() {
 
   const allowed = STYLES.map(s => s.id)
   const initialStyle: CertStyle = (allowed as readonly string[]).includes(styleParam as CertStyle)
-    ? (styleParam as CertStyle) : 'neutral' // Neutral par défaut
+    ? (styleParam as CertStyle) : 'neutral'
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
-  // Sélecteur local/UTC
+  // Date par défaut (aujourd’hui, mais arrondie à 00:00:00 UTC)
   const now = new Date()
   const prefillDate = parseToDateOrNull(prefillTs) || now
-  const [pickMode, setPickMode] = useState<'local'|'utc'>(prefillTs ? 'utc' : 'local')
-  const [Y, setY]   = useState<number>(prefillDate.getFullYear())
-  const [M, setM]   = useState<number>(prefillDate.getMonth()+1)
-  const [D, setD]   = useState<number>(prefillDate.getDate())
-  const [h, setH]   = useState<number>(prefillDate.getHours())
-  const [m, setMin] = useState<number>(prefillDate.getMinutes())
+  const [Y, setY] = useState<number>(prefillDate.getFullYear())
+  const [M, setM] = useState<number>(prefillDate.getMonth()+1)
+  const [D, setD] = useState<number>(prefillDate.getDate())
 
   useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M]) // clamp
+
+  // Sélecteur de format (par défaut : FR → DMY, sinon → MDY)
+  const defaultFmt: DateFormat = (() => {
+    try {
+      const lang = (navigator.language || '').toLowerCase()
+      if (lang.startsWith('fr')) return 'DMY'
+      // NB: en-GB est DMY, mais la consigne parle grosso modo de fr vs en.
+      return 'MDY'
+    } catch { return 'MDY' }
+  })()
+  const [dateFormat, setDateFormat] = useState<DateFormat>(defaultFmt)
 
   /** Form principal */
   const [form, setForm] = useState({
@@ -118,10 +119,11 @@ export default function ClientClaim() {
     title: '',
     message: '',
     link_url: '',
-    ts: prefillTs,
+    ts: prefillTs, // sera recalculé juste en-dessous
     cert_style: initialStyle as CertStyle,
+    // on garde time_display pour compat serveur, mais on ne l’expose plus
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
-    local_date_only: false,
+    local_date_only: true, // journée => toujours true
     text_color: '#1A1F2A',
     title_public: false,
     message_public: false,
@@ -130,257 +132,155 @@ export default function ClientClaim() {
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
-  // resync quand on bascule local/utc
-  const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
+  // Recalcule `ts` (minuit UTC) à chaque changement Y/M/D
   useEffect(()=>{
-    if(!parsedDate) return
-    if(pickMode==='utc'){
-      setY(parsedDate.getUTCFullYear()); setM(parsedDate.getUTCMonth()+1); setD(parsedDate.getUTCDate())
-      setH(parsedDate.getUTCHours()); setMin(parsedDate.getUTCMinutes())
-    } else {
-      setY(parsedDate.getFullYear()); setM(parsedDate.getMonth()+1); setD(parsedDate.getDate())
-      setH(parsedDate.getHours()); setMin(parsedDate.getMinutes())
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickMode])
-
-  // recalcule ts quand on modifie le sélecteur local/utc
-  useEffect(()=>{
-    let d: Date
-    if (pickMode==='local') d = new Date(Y, M-1, D, h, m, 0, 0)
-    else d = new Date(Date.UTC(Y, M-1, D, h, m, 0, 0))
-    setForm(f=>({ ...f, ts: isoMinuteString(d) }))
-  }, [pickMode, Y, M, D, h, m])
+    const d = new Date(Date.UTC(Y, M-1, D, 0, 0, 0, 0))
+    setForm(f=>({ ...f, ts: isoDayString(d) }))
+  }, [Y, M, D])
 
   // readouts
-  const utcReadable = useMemo(
-    () => parsedDate ? parsedDate.toISOString().replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC') : '',
-    [parsedDate]
-  )
-  const localReadableStr = useMemo(
-    () => parsedDate ? (form.local_date_only ? localDayOnly(parsedDate) : localReadable(parsedDate)) : '',
-    [parsedDate, form.local_date_only]
-  )
-  const tzLabel = useMemo(()=> { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local' } catch { return 'Local' } }, [])
+  const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
 
-  // hint édition
-  const edition = useMemo(() => {
-    if (!parsedDate) return null
-    const y = parsedDate.getUTCFullYear(), mm = parsedDate.getUTCMonth(), dd = parsedDate.getUTCDate()
-    const H = parsedDate.getUTCHours().toString().padStart(2,'0'), Mi = parsedDate.getUTCMinutes().toString().padStart(2,'0')
-    const t = `${H}:${Mi}`
-    const isLeap = ((y%4===0 && y%100!==0) || y%400===0) && mm===1 && dd===29
-    const pretty = (t==='11:11' || t==='12:34' || t==='22:22' || (/^([0-9])\1:([0-9])\2$/).test(t))
-    return (isLeap || pretty) ? 'premium' : 'standard'
+  const utcReadable = useMemo(() => {
+    if (!parsedDate) return ''
+    const y = parsedDate.getUTCFullYear()
+    const m = String(parsedDate.getUTCMonth()+1).padStart(2,'0')
+    const d = String(parsedDate.getUTCDate()).padStart(2,'0')
+    return `${y}-${m}-${d} UTC`
   }, [parsedDate])
 
-  useEffect(()=>{ if (prefillTs) setForm(f=>({...f, ts: prefillTs})) }, []) // pré-remplissage
+  const localReadableStr = useMemo(() => parsedDate ? localDayOnly(parsedDate) : '', [parsedDate])
 
-
-/** --------- Custom background --------- */
-const fileInputRef = useRef<HTMLInputElement | null>(null)
-const [customBg, setCustomBg] = useState<{ url:string; dataUrl:string; w:number; h:number } | null>(null)
-const [customErr, setCustomErr] = useState('')
-const [imgLoading, setImgLoading] = useState(false)
-
-function log(...args:any[]){ console.debug('[Claim/CustomBG]', ...args) }
-const openFileDialog = () => { fileInputRef.current?.click() }
-
-const onSelectStyle = (id: CertStyle) => {
-  setForm(f => ({ ...f, cert_style: id }));
-  if (id === 'custom') openFileDialog();
-};
-
-// util
-async function fileToDataUrl(f: File): Promise<string> {
-  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
-}
-
-// HEIC/HEIF -> PNG si besoin
-async function heicToPngIfNeeded(original: File): Promise<{file: File, wasHeic:boolean}> {
-  const type = (original.type || '').toLowerCase()
-  const looksHeic = /^image\/(heic|heif|heic-sequence|heif-sequence)$/.test(type) || /\.(heic|heif)$/i.test(original.name)
-  if (!looksHeic) return { file: original, wasHeic:false }
-  const heic2any = (await import('heic2any')).default as (opts:any)=>Promise<Blob>
-  const out = await heic2any({ blob: original, toType: 'image/png', quality: 0.92 })
-  return { file: new File([out], original.name.replace(/\.(heic|heif)\b/i, '.png'), { type:'image/png' }), wasHeic:true }
-}
-
-// EXIF Orientation (1..8). Si indispo → 1
-async function getExifOrientation(file: File): Promise<number> {
-  try {
-    const { parse } = (await import('exifr')) as any;
-    const meta = await parse(file, { pick: ['Orientation'] });
-    return meta?.Orientation || 1;
-  } catch {
-    return 1;
-  }
-}
-
-
-// Dessin sur canvas avec orientation EXIF appliquée
-function drawNormalized(img: HTMLImageElement, orientation: number) {
-  const w = img.naturalWidth, h = img.naturalHeight
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')!
-  const swap = (o:number) => o >= 5 && o <= 8
-
-  canvas.width  = swap(orientation) ? h : w
-  canvas.height = swap(orientation) ? w : h
-
-  switch (orientation) {
-    case 2: ctx.transform(-1, 0, 0, 1, canvas.width, 0); break;                       // miroir H
-    case 3: ctx.transform(-1, 0, 0, -1, canvas.width, canvas.height); break;          // 180°
-    case 4: ctx.transform(1, 0, 0, -1, 0, canvas.height); break;                      // miroir V
-    case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;                                   // transpose
-    case 6: ctx.transform(0, 1, -1, 0, canvas.height, 0); break;                      // 90° CW
-    case 7: ctx.transform(0, -1, -1, 0, canvas.height, canvas.width); break;          // transverse
-    case 8: ctx.transform(0, -1, 1, 0, 0, canvas.width); break;                       // 90° CCW
-    default: /* 1 */ break;
-  }
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(img, 0, 0, w, h)
-  return { dataUrl: canvas.toDataURL('image/png', 0.92), w: canvas.width, h: canvas.height }
-}
-
-// Pipeline complet : conversion éventuelle + orientation normalisée
-async function normalizeToPng(original: File) {
-  const { file: afterHeic, wasHeic } = await heicToPngIfNeeded(original)
-  const orientation = await getExifOrientation(original) // lire l'EXIF du fichier d'origine
-  const tmpUrl = URL.createObjectURL(afterHeic)
-  try {
-    const img = new Image()
-    const done = new Promise<{dataUrl:string; w:number; h:number}>((resolve, reject) => {
-      img.onload = () => resolve(drawNormalized(img, orientation || 1))
-      img.onerror = reject
-    })
-    img.src = tmpUrl
-    const out = await done
-    return { ...out, wasHeic }
-  } finally { URL.revokeObjectURL(tmpUrl) }
-}
-
-function bytesFromDataURL(u: string) {
-  const i = u.indexOf(',');
-  const b64 = i >= 0 ? u.slice(i + 1) : u;
-  return Math.floor(b64.length * 0.75); // approx bytes
-}
-
-function coverToA4JPEG(dataUrl: string, srcW: number, srcH: number) {
-  const TARGET_W = 2480, TARGET_H = 3508;           // A4@300dpi
-  const MAX_BYTES = 3.5 * 1024 * 1024;              // < 3.5 MB pour passer le POST
-
-  return new Promise<{ dataUrl: string; w: number; h: number }>((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = TARGET_W; c.height = TARGET_H;
-      const ctx = c.getContext('2d')!;
-      ctx.imageSmoothingQuality = 'high';
-
-      // cover (centré, recadré) pour respecter le ratio A4
-      const scale = Math.max(TARGET_W / srcW, TARGET_H / srcH);
-      const dw = srcW * scale, dh = srcH * scale;
-      const dx = (TARGET_W - dw) / 2, dy = (TARGET_H - dh) / 2;
-      ctx.drawImage(img, dx, dy, dw, dh);
-
-      // export en JPEG et réduit la qualité si > MAX_BYTES
-      let q = 0.82;
-      let out = c.toDataURL('image/jpeg', q);
-      while (bytesFromDataURL(out) > MAX_BYTES && q > 0.5) {
-        q -= 0.06;
-        out = c.toDataURL('image/jpeg', q);
-      }
-      resolve({ dataUrl: out, w: TARGET_W, h: TARGET_H });
-    };
-    img.src = dataUrl;
-  });
-}
-
-
-async function onPickCustomBg(file?: File | null) {
-  try {
-    setCustomErr('');
-    if (!file) { log('Aucun fichier sélectionné'); return; }
-    setImgLoading(true);
-
-    // 1) Normalise (HEIC->PNG si besoin + orientation EXIF corrigée)
-    const { dataUrl: normalizedUrl, w, h } = await normalizeToPng(file);
-
-    // Helpers locaux
-    const bytesFromDataURL = (u: string) => {
-      const i = u.indexOf(',');
-      const b64 = i >= 0 ? u.slice(i + 1) : u;
-      return Math.floor(b64.length * 0.75); // ~octets
-    };
-
-    const coverToA4JPEG = (srcDataUrl: string, srcW: number, srcH: number) =>
-      new Promise<{ dataUrl: string; w: number; h: number }>((resolve) => {
-        const TARGET_W = 2480, TARGET_H = 3508;
-        const MAX_BYTES = 3.5 * 1024 * 1024; // borne pour le POST
-        const img = new Image();
-        img.onload = () => {
-          const c = document.createElement('canvas');
-          c.width = TARGET_W; c.height = TARGET_H;
-          const ctx = c.getContext('2d')!;
-          ctx.imageSmoothingQuality = 'high';
-
-          // cover centré pour respecter le ratio A4
-          const scale = Math.max(TARGET_W / srcW, TARGET_H / srcH);
-          const dw = srcW * scale, dh = srcH * scale;
-          const dx = (TARGET_W - dw) / 2, dy = (TARGET_H - dh) / 2;
-          ctx.drawImage(img, dx, dy, dw, dh);
-
-          // export JPEG et compression adaptative
-          let q = 0.82;
-          let out = c.toDataURL('image/jpeg', q);
-          while (bytesFromDataURL(out) > MAX_BYTES && q > 0.5) {
-            q -= 0.06;
-            out = c.toDataURL('image/jpeg', q);
-          }
-          resolve({ dataUrl: out, w: TARGET_W, h: TARGET_H });
-        };
-        img.src = srcDataUrl;
-      });
-
-    // 2) Recadre/scale vers A4 et compresse
-    const { dataUrl: a4Url, w: tw, h: th } = await coverToA4JPEG(normalizedUrl, w, h);
-
-    // 3) Sécurité taille finale
-    if (bytesFromDataURL(a4Url) > 4 * 1024 * 1024) {
-      setCustomErr('Image trop lourde après préparation. Réessayez avec une photo plus légère.');
-      return;
-    }
-
-    // 4) Aperçu = exactement ce qui sera envoyé au serveur
-    setCustomBg({ url: a4Url, dataUrl: a4Url, w: tw, h: th });
-    setForm(f => ({ ...f, cert_style: 'custom' }));
-    log('CustomBG prêt (A4 JPEG)', { w: tw, h: th, approxKB: Math.round(bytesFromDataURL(a4Url) / 1024) });
-  } catch (e) {
-    console.error('[Claim/CustomBG] onPickCustomBg', e);
-    setCustomErr('Erreur de lecture ou de conversion de l’image.');
-  } finally {
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    setImgLoading(false);
-  }
-}
-
-// clean: plus besoin d’ObjectURL persistant
-useEffect(() => () => {}, [])
-
-
-  // Couleurs
+  // Étiquettes contraste
   const mainColor = form.text_color || '#1A1F2A'
   const subtleColor = lighten(mainColor, 0.55)
   const ratio = contrastRatio(mainColor)
   const ratioMeta = ratioLabel(ratio)
 
+  /** --------- Custom background --------- */
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [customBg, setCustomBg] = useState<{ url:string; dataUrl:string; w:number; h:number } | null>(null)
+  const [customErr, setCustomErr] = useState('')
+  const [imgLoading, setImgLoading] = useState(false)
+
+  function log(...args:any[]){ console.debug('[Claim/CustomBG]', ...args) }
+  const openFileDialog = () => { fileInputRef.current?.click() }
+
+  const onSelectStyle = (id: CertStyle) => {
+    setForm(f => ({ ...f, cert_style: id }))
+    if (id === 'custom') openFileDialog()
+  }
+
+  async function heicToPngIfNeeded(original: File): Promise<{file: File, wasHeic:boolean}> {
+    const type = (original.type || '').toLowerCase()
+    const looksHeic = /^image\/(heic|heif|heic-sequence|heif-sequence)$/.test(type) || /\.(heic|heif)$/i.test(original.name)
+    if (!looksHeic) return { file: original, wasHeic:false }
+    const heic2any = (await import('heic2any')).default as (opts:any)=>Promise<Blob>
+    const out = await heic2any({ blob: original, toType: 'image/png', quality: 0.92 })
+    return { file: new File([out], original.name.replace(/\.(heic|heif)\b/i, '.png'), { type:'image/png' }), wasHeic:true }
+  }
+  async function getExifOrientation(file: File): Promise<number> {
+    try {
+      const { parse } = (await import('exifr')) as any;
+      const meta = await parse(file, { pick: ['Orientation'] });
+      return meta?.Orientation || 1;
+    } catch { return 1 }
+  }
+  function drawNormalized(img: HTMLImageElement, orientation: number) {
+    const w = img.naturalWidth, h = img.naturalHeight
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')!
+    const swap = (o:number) => o >= 5 && o <= 8
+    canvas.width  = swap(orientation) ? h : w
+    canvas.height = swap(orientation) ? w : h
+    switch (orientation) {
+      case 2: ctx.transform(-1, 0, 0, 1, canvas.width, 0); break
+      case 3: ctx.transform(-1, 0, 0, -1, canvas.width, canvas.height); break
+      case 4: ctx.transform(1, 0, 0, -1, 0, canvas.height); break
+      case 5: ctx.transform(0, 1, 1, 0, 0, 0); break
+      case 6: ctx.transform(0, 1, -1, 0, canvas.height, 0); break
+      case 7: ctx.transform(0, -1, -1, 0, canvas.height, canvas.width); break
+      case 8: ctx.transform(0, -1, 1, 0, 0, canvas.width); break
+      default: break
+    }
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(img, 0, 0, w, h)
+    return { dataUrl: canvas.toDataURL('image/png', 0.92), w: canvas.width, h: canvas.height }
+  }
+  async function normalizeToPng(original: File) {
+    const { file: afterHeic } = await heicToPngIfNeeded(original)
+    const orientation = await getExifOrientation(original)
+    const tmpUrl = URL.createObjectURL(afterHeic)
+    try {
+      const img = new Image()
+      const done = new Promise<{dataUrl:string; w:number; h:number}>((resolve, reject) => {
+        img.onload = () => resolve(drawNormalized(img, orientation || 1))
+        img.onerror = reject
+      })
+      img.src = tmpUrl
+      const out = await done
+      return out
+    } finally { URL.revokeObjectURL(tmpUrl) }
+  }
+  function bytesFromDataURL(u: string) {
+    const i = u.indexOf(',')
+    const b64 = i >= 0 ? u.slice(i + 1) : u
+    return Math.floor(b64.length * 0.75)
+  }
+  function coverToA4JPEG(dataUrl: string, srcW: number, srcH: number) {
+    const TARGET_W = 2480, TARGET_H = 3508
+    const MAX_BYTES = 3.5 * 1024 * 1024
+    return new Promise<{ dataUrl: string; w: number; h: number }>((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const c = document.createElement('canvas')
+        c.width = TARGET_W; c.height = TARGET_H
+        const ctx = c.getContext('2d')!
+        ctx.imageSmoothingQuality = 'high'
+        const scale = Math.max(TARGET_W / srcW, TARGET_H / srcH)
+        const dw = srcW * scale, dh = srcH * scale
+        const dx = (TARGET_W - dw) / 2, dy = (TARGET_H - dh) / 2
+        ctx.drawImage(img, dx, dy, dw, dh)
+        let q = 0.82
+        let out = c.toDataURL('image/jpeg', q)
+        while (bytesFromDataURL(out) > MAX_BYTES && q > 0.5) {
+          q -= 0.06
+          out = c.toDataURL('image/jpeg', q)
+        }
+        resolve({ dataUrl: out, w: TARGET_W, h: TARGET_H })
+      }
+      img.src = dataUrl
+    })
+  }
+  async function onPickCustomBg(file?: File | null) {
+    try {
+      setCustomErr('')
+      if (!file) { log('Aucun fichier sélectionné'); return }
+      setImgLoading(true)
+      const { dataUrl: normalizedUrl, w, h } = await normalizeToPng(file)
+      const { dataUrl: a4Url, w: tw, h: th } = await coverToA4JPEG(normalizedUrl, w, h)
+      if (bytesFromDataURL(a4Url) > 4 * 1024 * 1024) {
+        setCustomErr('Image trop lourde après préparation. Réessayez avec une photo plus légère.')
+        return
+      }
+      setCustomBg({ url: a4Url, dataUrl: a4Url, w: tw, h: th })
+      setForm(f => ({ ...f, cert_style: 'custom' }))
+      log('CustomBG prêt (A4 JPEG)', { w: tw, h: th, approxKB: Math.round(bytesFromDataURL(a4Url) / 1024) })
+    } catch (e) {
+      console.error('[Claim/CustomBG] onPickCustomBg', e)
+      setCustomErr('Erreur de lecture ou de conversion de l’image.')
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      setImgLoading(false)
+    }
+  }
+  useEffect(() => () => {}, [])
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
-
     const d = parseToDateOrNull(form.ts)
-    if (!d) { setStatus('error'); setError('Merci de saisir une minute valide.'); return }
+    if (!d) { setStatus('error'); setError('Merci de saisir une date valide.'); return }
 
     const payload:any = {
       ts: d.toISOString(),
@@ -390,9 +290,9 @@ useEffect(() => () => {}, [])
       message: form.message || undefined,
       link_url: form.link_url || undefined,
       cert_style: form.cert_style || 'neutral',
-      time_display: form.time_display,
-      local_date_only: form.local_date_only ? '1' : '0',
-      text_color: mainColor,
+      time_display: form.time_display,           // conservé pour compat
+      local_date_only: '1',                      // journée => toujours '1'
+      text_color: form.text_color || '#1A1F2A',
       title_public: form.title_public ? '1' : '0',
       message_public: form.message_public ? '1' : '0',
       public_registry: form.public_registry ? '1' : '0',
@@ -401,20 +301,18 @@ useEffect(() => () => {}, [])
       payload.custom_bg_data_url = customBg.dataUrl
     }
 
-    
     const res = await fetch('/api/checkout', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
-
     if (!res.ok) {
       setStatus('error')
       try {
         const j = await res.json()
         const map: Record<string,string> = {
           rate_limited: 'Trop de tentatives. Réessaye dans ~1 minute.',
-          invalid_ts: 'Horodatage invalide. Utilise un ISO comme 2100-01-01T00:00Z.',
-          missing_fields: 'Merci de renseigner au minimum l’e-mail et la minute.',
+          invalid_ts: 'Horodatage invalide. Utilise un ISO comme 2100-01-01.',
+          missing_fields: 'Merci de renseigner au minimum l’e-mail et la date.',
           custom_bg_invalid: 'Image personnalisée invalide (doit être PNG/JPG en data URL).',
           stripe_key_missing: 'Configuration Stripe absente côté serveur.',
-          bad_price: 'Prix invalide pour cette minute.',
+          bad_price: 'Prix invalide pour cette journée.',
           stripe_error: 'Erreur Stripe côté serveur.',
         }
         setError(map[j.error] || j.error || 'Unknown error')
@@ -425,7 +323,6 @@ useEffect(() => () => {}, [])
       }
       return
     }
-
     const data = await res.json()
     window.location.href = data.url
   }
@@ -454,9 +351,19 @@ useEffect(() => () => {}, [])
     '#FFFFFF','#E6EAF2',
   ]
 
+  // “édition” (jour bissextile = premium)
+  const edition = useMemo(() => {
+    if (!parsedDate) return null
+    const y = parsedDate.getUTCFullYear(), mm = parsedDate.getUTCMonth(), dd = parsedDate.getUTCDate()
+    const isLeap = ((y%4===0 && y%100!==0) || y%400===0) && mm===1 && dd===29
+    return isLeap ? 'premium' : 'standard'
+  }, [parsedDate])
+
+  const chosenDateStr = parsedDate ? fmtDate(parsedDate, dateFormat) : ''
+
   return (
     <main style={containerStyle}>
-      {/* input fichier global, persistant dans le DOM (évite unmount/remount) */}
+      {/* input fichier global */}
       <input
         ref={fileInputRef}
         type="file"
@@ -474,7 +381,7 @@ useEffect(() => () => {}, [])
 
         <header style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:16, marginBottom:14}}>
           <h1 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:0}}>
-            {isGift ? 'Offrir une minute' : 'Réserver votre minute'}
+            {isGift ? 'Offrir une journée' : 'Réserver votre journée'}
           </h1>
           <button onClick={()=>setIsGift(v=>!v)} style={{background:'var(--color-surface)', color:'var(--color-text)', border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:10, cursor:'pointer'}} aria-pressed={isGift}>
             {isGift ? '🎁 Mode cadeau activé' : '🎁 Activer le mode cadeau'}
@@ -511,7 +418,7 @@ useEffect(() => () => {}, [])
                   <span>Titre</span>
                   <input type="text" value={form.title}
                     onChange={e=>setForm(f=>({...f, title:e.target.value}))}
-                    placeholder="Ex. “Premier baiser sous la pluie”"
+                    placeholder="Ex. “Notre journée sous la pluie”"
                     style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                 </label>
@@ -521,15 +428,14 @@ useEffect(() => () => {}, [])
                 <label>
                   <span>Message</span>
                   <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} rows={3}
-                    placeholder={isGift ? '“Pour la minute de notre rencontre…”' : '“La minute où tout a commencé.”'}
+                    placeholder={isGift ? '“Le jour de notre rencontre…”' : '“Le jour où tout a commencé.”'}
                     style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                 </label>
               </div>
-
             </div>
 
-            {/* ✅ Couleur de la police */}
+            {/* Couleur de la police */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>COULEUR DE LA POLICE</div>
@@ -544,7 +450,7 @@ useEffect(() => () => {}, [])
                   Aa
                 </div>
                 <div style={{flex:1, height:12, borderRadius:99, background: CERT_BG_HEX, position:'relative', border:'1px solid var(--color-border)'}}>
-                  <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', padding:'0 10px', color:mainColor, fontSize:12}}>“Owned by — 11:11 — 2024-12-31 UTC”</div>
+                  <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', padding:'0 10px', color:mainColor, fontSize:12}}>“Owned by — 2024-12-31 UTC”</div>
                 </div>
               </div>
 
@@ -573,18 +479,24 @@ useEffect(() => () => {}, [])
               </div>
             </div>
 
-            {/* Step 2 — Minute */}
+            {/* Step 2 — Journée */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE MINUTE</div>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE JOUR</div>
 
+              {/* Format d’affichage de la date */}
               <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
-                <button type="button" onClick={()=>setPickMode('local')} aria-pressed={pickMode==='local'}
-                  style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: pickMode==='local' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>Sélection locale (recommandé)</button>
-                <button type="button" onClick={()=>setPickMode('utc')} aria-pressed={pickMode==='utc'}
-                  style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: pickMode==='utc' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>Saisie UTC</button>
+                <label style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: dateFormat==='DMY' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'}}>
+                  <input type="radio" name="date_fmt" value="DMY" checked={dateFormat==='DMY'} onChange={()=>setDateFormat('DMY')} style={{display:'none'}}/>
+                  Format JJ/MM/AAAA
+                </label>
+                <label style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: dateFormat==='MDY' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'}}>
+                  <input type="radio" name="date_fmt" value="MDY" checked={dateFormat==='MDY'} onChange={()=>setDateFormat('MDY')} style={{display:'none'}}/>
+                  Format MM/JJ/AAAA
+                </label>
               </div>
 
-              <div style={{display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8}}>
+              {/* Sélecteurs date (jour complet) */}
+              <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
                 <label style={{display:'grid', gap:6}}>
                   <span>Année</span>
                   <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
@@ -606,59 +518,17 @@ useEffect(() => () => {}, [])
                     {range(1, daysInMonth(Y,M)).map(d=> <option key={d} value={d} style={{color:'#000'}}>{d.toString().padStart(2,'0')}</option>)}
                   </select>
                 </label>
-                <label style={{display:'grid', gap:6}}>
-                  <span>Heure</span>
-                  <select value={h} onChange={e=>setH(parseInt(e.target.value))}
-                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                    {range(0,23).map(H=> <option key={H} value={H} style={{color:'#000'}}>{H.toString().padStart(2,'0')}</option>)}
-                  </select>
-                </label>
-                <label style={{display:'grid', gap:6}}>
-                  <span>Minute</span>
-                  <select value={m} onChange={e=>setMin(parseInt(e.target.value))}
-                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                    {range(0,59).map(Mi=> <option key={Mi} value={Mi} style={{color:'#000'}}>{Mi.toString().padStart(2,'0')}</option>)}
-                  </select>
-                </label>
               </div>
-
-              <small style={{opacity:.7, display:'block', marginTop:8}}>
-                {pickMode==='local'
-                  ? <>Fuseau local détecté : <strong>{tzLabel}</strong>. L’horodatage final est enregistré en <strong>UTC</strong>.</>
-                  : <>Mode <strong>UTC</strong> : vos sélections sont interprétées directement en UTC.</>}
-              </small>
 
               <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Affichage choisi&nbsp;:</strong> {chosenDateStr || '—'}</div>
                 <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>UTC&nbsp;:</strong> {utcReadable || '—'}</div>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Heure locale&nbsp;:</strong> {localReadableStr || '—'}</div>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Date locale&nbsp;:</strong> {localReadableStr || '—'}</div>
                 <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}</div>
-              </div>
-
-              <div style={{marginTop:12}}>
-                <div style={{fontSize:14, color:'var(--color-muted)', marginBottom:8}}>Affichage sur le certificat</div>
-                <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
-                  {(['utc','utc+local','local+utc'] as const).map(option => (
-                    <label key={option} style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: form.time_display===option ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'}}>
-                      <input type="radio" name="time_display" value={option}
-                        checked={form.time_display===option}
-                        onChange={()=>setForm(f=>({...f, time_display: option}))}
-                        style={{display:'none'}}/>
-                      {{ 'utc':'UTC seulement', 'utc+local':'UTC + local discret', 'local+utc':'Local + UTC discret' }[option]}
-                    </label>
-                  ))}
-
-                  {(form.time_display==='local+utc' || form.time_display==='utc+local') && (
-                    <label style={{marginLeft:6, display:'inline-flex', alignItems:'center', gap:8, fontSize:14}}>
-                      <input type="checkbox" checked={form.local_date_only}
-                        onChange={e=>setForm(f=>({...f, local_date_only: e.target.checked}))}/>
-                      Afficher <em>la date locale seulement</em> (JJ/MM/AAAA)
-                    </label>
-                  )}
-                </div>
               </div>
             </div>
 
-            {/* Step 3 — Style (Custom ouvre directement le picker, pas de bloc “Importer…”) */}
+            {/* Step 3 — Style */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 3 — STYLE</div>
 
@@ -736,7 +606,7 @@ useEffect(() => () => {}, [])
             <div>
               <button disabled={status==='loading'} type="submit"
                 style={{background:'var(--color-primary)', color:'var(--color-on-primary)', padding:'14px 18px', borderRadius:12, fontWeight:800, border:'none', boxShadow: status==='loading' ? '0 0 0 6px rgba(228,183,61,.12)' : 'none', cursor: status==='loading' ? 'progress' : 'pointer'}}>
-                {status==='loading' ? 'Redirection…' : (isGift ? 'Offrir cette minute' : 'Payer & réserver cette minute')}
+                {status==='loading' ? 'Redirection…' : (isGift ? 'Offrir cette journée' : 'Payer & réserver cette journée')}
               </button>
               {status==='error' && error && <p style={{color:'#ff8a8a', marginTop:8}}>{error}</p>}
               <p style={{marginTop:8, fontSize:12, color:'var(--color-muted)'}}>
@@ -750,7 +620,7 @@ useEffect(() => () => {}, [])
             style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
             <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
               <img
-                key={(form.cert_style==='custom' ? customBg?.url : form.cert_style) || 'none'} // force refresh
+                key={(form.cert_style==='custom' ? customBg?.url : form.cert_style) || 'none'}
                 src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png') : `/cert_bg/${form.cert_style}.png`}
                 alt={`Aperçu fond certificat — ${form.cert_style}`}
                 width={840} height={1188}
@@ -766,12 +636,9 @@ useEffect(() => () => {}, [])
               {(() => {
                 const ins = SAFE_INSETS_PCT[form.cert_style]
                 const EDGE_PX = 12
-                const localStr = localReadableStr
-                const showLocalFirst = form.time_display === 'local+utc'
-
                 return (
                   <div aria-hidden style={{ position:'absolute', inset:0 }}>
-                    {/* zone sûre + contenu remonté */}
+                    {/* zone sûre + contenu */}
                     <div
                       style={{
                         position:'absolute',
@@ -799,18 +666,15 @@ useEffect(() => () => {}, [])
                           paddingTop:8
                         }}
                       >
-                        {/* Timestamp principal */}
+                        {/* Date principale (format choisi) */}
                         <div style={{ fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6 }}>
-                          {showLocalFirst
-                            ? (localStr ? `${localStr} (${tzLabel})` : 'JJ/MM/AAAA HH:MM (Local)')
-                            : (utcReadable || 'YYYY-MM-DD HH:MM UTC')}
+                          {chosenDateStr || (dateFormat==='DMY' ? 'JJ/MM/AAAA' : 'MM/JJ/AAAA')}
                         </div>
 
-                        {form.time_display !== 'utc' && (
+                        {/* Ligne secondaire = UTC ISO jour */}
+                        {utcReadable && (
                           <div style={{ color:subtleColor, fontSize:'min(3.6vw, 13px)' }}>
-                            {showLocalFirst
-                              ? (utcReadable || 'YYYY-MM-DD HH:MM UTC')
-                              : (localStr ? `${localStr} (${tzLabel})` : '')}
+                            {utcReadable}
                           </div>
                         )}
 

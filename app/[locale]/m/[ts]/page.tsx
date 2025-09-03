@@ -105,7 +105,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
 
         <header style={{ marginBottom:16 }}>
           <h1 style={{ fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 6px' }}>
-            Merci ❤ Votre minute est réservée
+            Merci ❤ Votre journée est réservée
           </h1>
           <p style={{ fontSize:16, opacity:.9, margin:0 }}>{niceTs}</p>
         </header>

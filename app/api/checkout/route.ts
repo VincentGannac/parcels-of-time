@@ -56,7 +56,7 @@ export async function POST(req: Request) {
 
     const d = new Date(body.ts)
     if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
-    d.setUTCSeconds(0,0)
+    d.setUTCHours(0,0,0,0)
     const tsISO = d.toISOString()
 
     const styleCandidate = String(body.cert_style || 'neutral').toLowerCase()
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
           unit_amount: price_cents,
           product_data: {
             name: `Parcels of Time — ${tsISO}`,
-            description: 'Exclusive symbolic claim to a unique minute (UTC).',
+            description: 'Exclusive symbolic claim to a unique day (UTC).',
           },
         },
       }],

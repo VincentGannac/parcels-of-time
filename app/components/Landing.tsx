@@ -123,20 +123,22 @@ function Header({onToggleTheme, href}:{onToggleTheme:()=>void; href:(p:string)=>
 }
 
 /* -------------------- Live UTC minute -------------------- */
-function LiveUTCMinute() {
+function LiveUTCDate() {
   const [now, setNow] = useState(new Date())
   useEffect(()=>{ const t = setInterval(()=>setNow(new Date()), 1000); return ()=>clearInterval(t) },[])
-  const isoMinute = useMemo(()=>{
-    const d = new Date(now); d.setSeconds(0,0)
-    return d.toISOString().replace('T',' ').replace('Z',' UTC')
-  },[now])
+  const isoDate = useMemo(()=>{
+        const d = new Date(Date.UTC(
+          now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0,0,0,0
+        ))
+        return d.toISOString().slice(0,10) + ' UTC'
+      },[now])
   return (
     <div style={{display:'flex', gap:12, alignItems:'center'}}>
-      <input aria-label="Minute UTC actuelle" value={isoMinute} readOnly
+      <input aria-label="Date UTC actuelle" value={isoDate} readOnly
         style={{flex:1, padding:'14px 16px', border:'1px solid var(--color-border)', borderRadius:12, background:'var(--color-surface)', color:'var(--color-text)', opacity:.9}}/>
-      <button onClick={()=>{ navigator.clipboard?.writeText(isoMinute) }}
+      <button onClick={()=>{ navigator.clipboard?.writeText(isoDate) }}
         style={{padding:'12px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)'}}
-        aria-label="Copier la minute">
+        aria-label="Copier la date">
         Copier
       </button>
     </div>
@@ -169,7 +171,13 @@ function CertificatePreview({
   ts: string
   href: string
 }) {
-  const tsText = ts.includes('UTC') ? ts : ts.replace('T', ' ').replace('Z', ' UTC')
+// Affiche uniquement la date UTC
+const tsText = useMemo(() => {
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ts
+  const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0,0,0,0))
+  return utc.toISOString().slice(0,10) + ' UTC'
+}, [ts])
   const previewTextColor = 'rgba(26, 31, 42, 0.92)'
   const previewSubtle = 'rgba(26, 31, 42, 0.70)'
 
@@ -286,7 +294,7 @@ function UsagesCarousel() {
     { title:'Réussite', text:'Diplôme, CDI, première vente, lancement de projet.', icon:'🏆' },
     { title:'Culture & fête', text:'Concert, finale, feu d’artifice, Nouvel An.', icon:'🎆' },
     { title:'Voyages', text:'Décollage, arrivée, lever de soleil, boussole vers ailleurs.', icon:'🧭' },
-    { title:'Cadeaux', text:'Une minute à offrir, personnelle et mémorable.', icon:'🎁' },
+    { title:'Cadeaux', text:'Une journée à offrir, personnelle et mémorable.', icon:'🎁' },
   ]
   const [i, setI] = useState(0)
   useEffect(()=>{ const t = setInterval(()=>setI(v=>(v+1)%items.length), 3200); return ()=>clearInterval(t) },[])
@@ -328,19 +336,19 @@ function Pricing() {
   return (
     <section id="prix" style={{maxWidth:1280, margin:'0 auto', padding:'40px 24px 72px'}}>
       <SectionLabel>Prix & offres</SectionLabel>
-      <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 18px'}}>Des minutes pour chaque histoire</h3>
+      <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 18px'}}>Des journées pour chaque histoire</h3>
       <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
         <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
           <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Standard</div>
           <div style={{fontSize:32, fontWeight:800}}>9–19 €</div>
-          <p style={{opacity:.9}}>Une minute unique. Certificat, QR code, page dédiée.</p>
-          <Button href={href('/claim')} variant="primary">Réserver ma minute</Button>
+          <p style={{opacity:.9}}>Une journée unique. Certificat, QR code, page dédiée.</p>
+          <Button href={href('/claim')} variant="primary">Réserver ma journée</Button>
         </div>
         <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
-          <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Minutes iconiques</div>
+          <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Journées iconiques</div>
           <div style={{fontSize:32, fontWeight:800}}>Prix selon rareté</div>
           <p style={{opacity:.9}}>Séries spéciales (Nouvel An, éclipses, finales, records).</p>
-          <Link href="#iconiques" style={{textDecoration:'none', color:'var(--color-text)'}}>Voir les minutes rares →</Link>
+          <Link href="#iconiques" style={{textDecoration:'none', color:'var(--color-text)'}}>Voir les journées rares →</Link>
         </div>
       </div>
     </section>
@@ -350,9 +358,9 @@ function Pricing() {
 /* -------------------- Témoignages (identique) -------------------- */
 function Testimonials() {
   const items = [
-    { q:'“Nous avons revendiqué la minute de la naissance d’Aïcha… frissons à chaque fois !”', a:'Camille' },
-    { q:'“Mon cadeau préféré : la minute de notre rencontre.”', a:'Thomas' },
-    { q:'“La minute du diplôme de ma sœur. Simple, mémorable, classe.”', a:'Mina' },
+    { q:'“Nous avons revendiqué la journée de la naissance d’Aïcha… frissons à chaque fois !”', a:'Camille' },
+    { q:'“Mon cadeau préféré : la journée de notre rencontre.”', a:'Thomas' },
+    { q:'“La journée du diplôme de ma sœur. Simple, mémorable, classe.”', a:'Mina' },
   ]
   return (
     <section style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
@@ -375,7 +383,7 @@ function Testimonials() {
 /* -------------------- FAQ (identique) -------------------- */
 function FAQ() {
   const rows = [
-    { q:'Ma minute m’appartient-elle vraiment ?', a:'Oui. Chaque minute est vendue une seule fois. Votre certificat numérique agit comme preuve d’authenticité.' },
+    { q:'Ma journée m’appartient-elle vraiment ?', a:'Oui. Chaque journée est vendue une seule fois. Votre certificat numérique agit comme preuve d’authenticité.' },
     { q:'Puis-je changer le message ?', a:'Oui, via votre page dédiée, tant que le contenu respecte nos règles de modération.' },
     { q:'Fuseaux horaires ?', a:'Horodatage en UTC, avec affichage de l’heure locale sur votre page.' },
     { q:'Impression ?', a:'Certificat haute définition prêt à imprimer (PDF/JPG).' },
@@ -426,7 +434,7 @@ function HeroPhotos({href}:{href:(p:string)=>string}) {
             {t('hero.rarity')}
           </div>
           <div style={{marginTop:18}}>
-            <LiveUTCMinute />
+          <LiveUTCDate />
           </div>
         </div>
 
@@ -454,8 +462,8 @@ export default function Landing() {
   useEffect(()=>{ applyTheme(theme === 'dark' ? TOKENS_DARK : TOKENS_LIGHT) },[theme])
 
   const whyText = useMemo(()=>(
-    'Nous accumulons des photos et des vidéos… mais l’instant se perd dans la masse. Parcels of Time vous permet de posséder la minute qui a changé votre histoire.'
-  ),[])
+        'Nous accumulons des photos et des vidéos… mais l’instant se perd dans la masse. Parcels of Time vous permet de posséder la journée qui a changé votre histoire.'
+    ),[])
 
   return (
     <main style={{background:'var(--color-bg)', color:'var(--color-text)'}}>
@@ -476,7 +484,7 @@ export default function Landing() {
       <section aria-labelledby="possedez" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
         <SectionLabel id="possedez">Ce que vous possédez</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
-          <div style={{gridColumn:'span 3'}}><FeatureCard title="Une minute unique" text="Jamais vendue deux fois. Votre instant, pour toujours." /></div>
+          <div style={{gridColumn:'span 3'}}><FeatureCard title="Une journée unique" text="Jamais vendue deux fois. Votre instant, pour toujours." /></div>
           <div style={{gridColumn:'span 3'}}><FeatureCard title="Certificat de Claim" text="PDF/JPG signé, prêt à imprimer et encadrer." /></div>
           <div style={{gridColumn:'span 3'}}><FeatureCard title="QR code scannable" text="Accès direct à votre page souvenir et partage facile." /></div>
           <div style={{gridColumn:'span 3'}}><FeatureCard title="Page dédiée" text="Message + lien (modérés), horodatage UTC & heure locale." /></div>
@@ -492,8 +500,8 @@ export default function Landing() {
               styleId="romantic"
               owner="Clara & Sam"
               title="Notre premier baiser"
-              ts="2018-07-19T21:30:00Z"
-              message="Te souviens-tu ? Ce 19 juillet 2028, on s’était abrités de l’averse. On riait comme des idiots, trempés jusqu’aux os. Puis, là, tu m’as embrassé."
+              ts="2018-07-19"
+              message="Te souviens-tu ? Ce 19 juillet 2018, on s’était abrités de l’averse. On riait comme des idiots, trempés jusqu’aux os. Puis, là, tu m’as embrassé."
               href={href('/claim?style=romantic')}
             />
           </div>
@@ -503,8 +511,8 @@ export default function Landing() {
               styleId="birth"
               owner="Nora & Mehdi"
               title="Bienvenue, Aïcha"
-              ts="2023-03-02T06:12:00Z"
-              message="À 06:12, le 2 mars 2023, tu as crié. Puis le silence d’après s’est rempli d’une nouvelle lumière : tu étais née. Le temps s’est figé. On a acheté cette minute pour ne jamais oublier ce moment."
+              ts="2023-03-02"
+              message="À 06:12, le 2 mars 2023, tu as crié. Puis le silence d’après s’est rempli d’une nouvelle lumière : tu étais née. Le temps s’est figé. On a acheté cette journée pour ne jamais oublier ce moment."
               href={href('/claim?style=birth')}
             />
           </div>
@@ -514,8 +522,8 @@ export default function Landing() {
               styleId="wedding"
               owner="Inès & Hugo"
               title="À 17:31, plus que nous deux"
-              ts="2024-07-20T17:31:00Z"
-              message="Les amis criaient. Les confettis volaient. Mais je ne voyais que toi. À 17:31, nos deux « oui » ont effacé le reste. On garde cette minute pour entendre encore nos deux « oui » quand les mots manqueront."
+              ts="2024-07-20"
+              message="Les amis criaient. Les confettis volaient. Mais je ne voyais que toi. À 17:31, nos deux « oui » ont effacé le reste. On garde cette journée pour entendre encore nos deux « oui » quand les mots manqueront."
               href={href('/claim?style=wedding')}
             />
           </div>
@@ -531,8 +539,8 @@ export default function Landing() {
             </ul>
           </div>
           <div style={{display:'flex', gap:10, alignItems:'center'}}>
-            <Button href={href('/claim')} variant="primary">Réserver ma minute</Button>
-            <Button href={href('/claim?gift=1')} variant="secondary">Offrir une minute</Button>
+            <Button href={href('/claim')} variant="primary">Réserver un jour</Button>
+            <Button href={href('/claim?gift=1')} variant="secondary">Offrir un jour</Button>
           </div>
         </div>
       </section>
@@ -559,7 +567,7 @@ export default function Landing() {
       </section>
 
       <section id="iconiques" style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px 40px'}}>
-        <SectionLabel>Éditions limitées & minutes iconiques</SectionLabel>
+        <SectionLabel>Éditions limitées & jours iconiques</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
           {['newyear','wedding','birth','graduation'].map((style)=>(
             <a key={style} href={href(`/claim?style=${style}`)} style={{ gridColumn:'span 3', textDecoration:'none', color:'var(--color-text)' }}>
@@ -588,10 +596,10 @@ export default function Landing() {
           <h3 id="cta-final" style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 8px'}}>
             Transformez un instant en héritage.
           </h3>
-          <p style={{margin:'0 0 16px'}}>Réservez la minute qui compte — aujourd’hui.</p>
+          <p style={{margin:'0 0 16px'}}>Réservez le jour qui compte — aujourd’hui.</p>
           <div style={{display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap'}}>
-            <Button href={href('/claim')} variant="primary">Réserver ma minute</Button>
-            <Button href={href('/claim?gift=1')} variant="secondary">Offrir une minute</Button>
+            <Button href={href('/claim')} variant="primary">Réserver mon jour</Button>
+            <Button href={href('/claim?gift=1')} variant="secondary">Offrir un jour</Button>
           </div>
           <div style={{marginTop:12, fontSize:12, color:'var(--color-muted)'}}>Paiement sécurisé Stripe • Certificat haute définition • Jamais vendue deux fois</div>
         </div>

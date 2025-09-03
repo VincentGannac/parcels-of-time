@@ -11,11 +11,11 @@ async function tableExists(client: any, table: string) {
   const { rows } = await client.query(`select to_regclass($1) as exists`, [`public.${table}`])
   return !!rows[0]?.exists
 }
-function normIsoMinute(s: string): string | null {
+function normIsoDay(s: string): string | null {
   if (!s) return null
   const d = new Date(s)
   if (isNaN(d.getTime())) return null
-  d.setUTCSeconds(0, 0)
+  d.setUTCHours(0, 0, 0, 0)
   return d.toISOString()
 }
 function asBool1(v: unknown) {
@@ -43,7 +43,7 @@ function asTimeDisplay(v: unknown) {
  * - publication minute_public si demandé (FK ok)
  */
 async function writeClaimFromSession(session: Stripe.Checkout.Session) {
-  const tsISO = normIsoMinute(String(session.metadata?.ts || ''))
+  const tsISO = normIsoDay(String(session.metadata?.ts || ''))
   if (!tsISO) throw new Error('bad_ts')
 
   const email = String(session.customer_details?.email || session.metadata?.email || '').trim().toLowerCase()
