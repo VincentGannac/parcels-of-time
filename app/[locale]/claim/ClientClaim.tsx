@@ -24,19 +24,24 @@ const STYLES: { id: CertStyle; label: string; hint?: string }[] = [
   { id: 'custom',     label: 'Custom',      hint: 'A4 2480×3508 ou 1024×1536' },
 ] as const
 
-const SAFE_INSETS_PCT: Record<CertStyle, {top:number;right:number;bottom:number;left:number}> = {
-  neutral:    { top:16.6, right:16.1, bottom:18.5, left:16.1 },
-  romantic:   { top:19.0, right:19.5, bottom:18.5, left:19.5 },
-  birthday:   { top:17.1, right:22.2, bottom:18.5, left:22.2 },
-  birth:      { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-  wedding:    { top:19.0, right:20.8, bottom:18.5, left:20.8 },
-  christmas:  { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-  newyear:    { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-  graduation: { top:17.8, right:18.8, bottom:18.5, left:18.8 },
-  custom:     { top:16.6, right:16.1, bottom:18.5, left:16.1 },
+/** === Zones sûres en POINTS (copie des valeurs PDF dans app/lib/cert.ts) === */
+const SAFE_INSETS_PT: Record<CertStyle, {top:number;right:number;bottom:number;left:number}> = {
+  neutral:    { top:140, right:96, bottom:156, left:96 },
+  romantic:   { top:160, right:116, bottom:156, left:116 },
+  birthday:   { top:144, right:132, bottom:156, left:132 },
+  birth:      { top:150, right:112, bottom:156, left:112 },
+  wedding:    { top:160, right:124, bottom:156, left:124 },
+  christmas:  { top:150, right:112, bottom:156, left:112 },
+  newyear:    { top:150, right:112, bottom:156, left:112 },
+  graduation: { top:150, right:112, bottom:156, left:112 },
+  custom:     { top:150, right:112, bottom:156, left:112 },
 }
 
 const CERT_BG_HEX = '#F4F1EC'
+const PDF_W_PT = 595.28
+const PDF_H_PT = 841.89
+const PT_PER_CM = 28.3465
+const SHIFT_UP_PT = Math.round(PT_PER_CM * 2) // = 2 cm comme dans cert.ts
 
 /** ------- Utils ------- **/
 const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
@@ -78,6 +83,23 @@ function fmtDate(d: Date, fmt: DateFormat){
   return fmt==='DMY' ? `${day}/${m}/${y}` : `${m}/${day}/${y}`
 }
 
+/** ---- Mesure texte (wrap) identique à l’approche PDF ---- */
+function wrapTextCanvas(ctx: CanvasRenderingContext2D, text: string, font: string, sizePx: number, maxWidthPx: number) {
+  if (!text) return []
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let line = ''
+  ctx.font = `${font.includes('bold') ? 'bold ' : ''}${sizePx}px Helvetica, Arial, sans-serif`
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w
+    const wpx = ctx.measureText(test).width
+    if (wpx <= maxWidthPx) line = test
+    else { if (line) lines.push(line); line = w }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
 export default function ClientClaim() {
   const params = useSearchParams()
   const prefillRaw = params.get('ts') || ''
@@ -108,6 +130,9 @@ export default function ClientClaim() {
   const ownedByLabel = isFR ? 'Au nom de' : 'Owned by'
   const titleLabel = isFR ? 'Titre' : 'Title'
   const messageLabel = isFR ? 'Message' : 'Message'
+  const brandLabel = 'Parcels of Time'
+  const certTitleLabel = isFR ? 'Certificat de Claim' : 'Certificate of Claim'
+  const anonLabel = isFR ? 'Anonyme' : 'Anonymous'
 
   // Sélecteur de format (par défaut : FR → DMY, sinon → MDY)
   const defaultFmt: DateFormat = isFR ? 'DMY' : 'MDY'
@@ -164,6 +189,7 @@ export default function ClientClaim() {
   }, [parsedDate])
 
   const localReadableStr = useMemo(() => parsedDate ? localDayOnly(parsedDate) : '', [parsedDate])
+  const chosenDateStr = parsedDate ? fmtDate(parsedDate, dateFormat) : ''
 
   /** --------- Custom background --------- */
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -287,6 +313,7 @@ export default function ClientClaim() {
   // Étiquettes contraste
   const mainColor = form.text_color || '#1A1F2A'
   const subtleColor = lighten(mainColor, 0.55)
+  const placeholderColor = 'rgba(230,234,242,.45)'
   const ratio = contrastRatio(mainColor)
   const ratioMeta = ratioLabel(ratio)
 
@@ -298,8 +325,7 @@ export default function ClientClaim() {
     return isLeap ? 'premium' : 'standard'
   }, [parsedDate])
 
-  const chosenDateStr = parsedDate ? fmtDate(parsedDate, dateFormat) : ''
-
+  /** -------- Submit -------- */
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
@@ -310,13 +336,13 @@ export default function ClientClaim() {
     const finalDisplayName = show.ownedBy ? (form.display_name || undefined) : undefined
     const finalTitle = show.title ? (form.title || undefined) : undefined
 
-    // “Offert par” : injecté dans le message (pour rester 100% compatible serveur/PDF)
+    // “Offert par” : injecté dans le message (pour compat serveur/PDF)
     const msgParts: string[] = []
     if (show.message && form.message.trim()) msgParts.push(form.message.trim())
     if (isGift && show.giftedBy && form.gifted_by.trim()) {
       msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
     }
-  // Si "Owned by" est masqué, on place un marqueur consommé par le PDF.
+    // Si "Owned by" est masqué, on place un marqueur consommé par le PDF.
     if (!show.ownedBy) {
       msgParts.push('[[HIDE_OWNED_BY]]')
     }
@@ -330,15 +356,13 @@ export default function ClientClaim() {
       message: finalMessage,
       link_url: undefined, // non utilisé ici
       cert_style: form.cert_style || 'neutral',
-      time_display: 'local+utc',      // compat
-      local_date_only: '1',           // journée
+      time_display: 'local+utc',
+      local_date_only: '1',
       text_color: form.text_color || '#1A1F2A',
       title_public: '0',
       message_public: '0',
       public_registry: form.public_registry ? '1' : '0',
-    }
-    if (form.cert_style === 'custom' && customBg?.dataUrl) {
-      payload.custom_bg_data_url = customBg.dataUrl
+      ...(form.cert_style === 'custom' && customBg?.dataUrl ? { custom_bg_data_url: customBg.dataUrl } : {})
     }
 
     const res = await fetch('/api/checkout', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
@@ -390,6 +414,235 @@ export default function ClientClaim() {
     '#102A43','#0F2A2E','#14213D',
     '#FFFFFF','#E6EAF2',
   ]
+
+  /** ====== PREVIEW CANVAS ====== */
+  const canvasRef = useRef<HTMLCanvasElement|null>(null)
+  const PREVIEW_W = 840
+  const PREVIEW_H = 1188
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dpr = typeof window !== 'undefined' ? Math.max(1, Math.min(2, window.devicePixelRatio || 1)) : 1
+    canvas.width = Math.floor(PREVIEW_W * dpr)
+    canvas.height = Math.floor(PREVIEW_H * dpr)
+    canvas.style.width = PREVIEW_W + 'px'
+    canvas.style.height = PREVIEW_H + 'px'
+    const ctx = canvas.getContext('2d')!
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+    // Scaling points->pixels
+    const SX = PREVIEW_W / PDF_W_PT
+    const SY = PREVIEW_H / PDF_H_PT
+    const toX = (pt:number)=> pt * SX
+    const toY = (pt:number)=> pt * SY
+
+    // Colors
+    const main = form.text_color || '#1a1f2a'
+    const sub = (() => {
+      const {r,g,b} = hexToRgb(main); const mixc=(a:number)=>Math.round(a + (255-a)*0.45)
+      return `rgb(${mixc(r)},${mixc(g)},${mixc(b)})`
+    })()
+    const link = (() => {
+      const {r,g,b} = hexToRgb(main)
+      const mixc = (a:number,b:number,t:number)=>Math.round(a*(1-t)+b*t)
+      return `rgb(${mixc(r,51,0.3)},${mixc(g,51,0.3)},${mixc(b,179,0.3)})`
+    })()
+    const ghost = placeholderColor
+
+    // Fonts & sizes (convert from pt to px using SY)
+    const tsSize = toY(26) // main date
+    const labelSize = toY(11)
+    const nameSize = toY(15)
+    const msgSize = toY(12.5)
+    const linkSize = toY(10.5)
+    const lineHMsg = toY(16)
+    const lineHLink = toY(14)
+    const gapSection = toY(14)
+    const gapSmall = toY(8)
+
+    // Safe area
+    const sa = SAFE_INSETS_PT[form.cert_style]
+    const LEFT = toX(sa.left)
+    const RIGHT = PREVIEW_W - toX(sa.right)
+    const TOP_Y = PREVIEW_H - toY(sa.top)
+    const BOT_Y = toY(sa.bottom)
+    const COLW = RIGHT - LEFT
+    const CX = (LEFT + RIGHT) / 2
+
+    // Helper set font
+    const setFont = (weight:'normal'|'bold', size:number) => { ctx.font = `${weight} ${size}px Helvetica, Arial, sans-serif` }
+    const centerText = (str:string, y:number, weight:'normal'|'bold', size:number, color:string) => {
+      setFont(weight, size); ctx.fillStyle = color
+      const w = ctx.measureText(str).width
+      ctx.fillText(str, CX - w/2, y)
+    }
+
+    // Clear
+    ctx.clearRect(0,0,PREVIEW_W,PREVIEW_H)
+
+    // Header (center, comme le PDF)
+    let yHeader = TOP_Y - toY(40)
+    centerText(brandLabel, yHeader, 'bold', toY(18), main)
+    yHeader -= toY(18)
+    centerText(certTitleLabel, yHeader, 'normal', toY(12), sub)
+
+    // Time labels
+    const timeLabelMode:'local_plus_utc'|'utc_plus_local'|'utc' = 'local_plus_utc'
+    const mainTime = chosenDateStr || (isFR ? 'JJ/MM/AAAA' : 'MM/JJ/AAAA')
+    const subTime = utcReadable ? (isFR ? `(UTC : ${utcReadable.replace(' UTC','')})` : `(UTC: ${utcReadable.replace(' UTC','')})`) : ''
+
+    // Footer (space reservation)
+    const qrSizePx = toY(120) // en preview on montre toujours le carré de placement
+    const metaBlockH = toY(76)
+    const footerH = Math.max(qrSizePx, metaBlockH)
+    const footerMarginTop = toY(8)
+
+    // Content box
+    const contentTopMax = yHeader - toY(38) + toY(SHIFT_UP_PT)
+    const contentBottomMin = BOT_Y + footerH + footerMarginTop
+    const availH = contentTopMax - contentBottomMin
+
+    // Gifted section (données + “visibilité”)
+    const giftedName = (isGift && show.giftedBy && form.gifted_by.trim()) ? form.gifted_by.trim() : ''
+    const hasName = (show.ownedBy && !!form.display_name.trim())
+    const titleText = show.title ? form.title.trim() : ''
+    const messageText = show.message ? form.message.trim() : ''
+    const linkUrl = '' // pas utilisé ici (toujours absent en client)
+
+    // Wraps (identiques à PDF)
+    const msgLinesAll = messageText ? wrapTextCanvas(ctx, `“${messageText}”`, 'normal', msgSize, COLW) : []
+    const linkLinesAll = linkUrl ? wrapTextCanvas(ctx, linkUrl, 'normal', linkSize, COLW) : []
+
+    // Blocs variables (hauteurs en fonction de la présence réelle)
+    const ownedBlockH = hasName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
+    const giftedBlockH = giftedName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
+
+    const fixedTop = (tsSize + 6*SY) + (subTime ? (12*SY) : 0) + ownedBlockH
+    const spaceForText = availH
+    const spaceAfterOwned = spaceForText - fixedTop
+
+    const titleLines = titleText ? wrapTextCanvas(ctx, titleText, 'bold', nameSize, COLW).slice(0,2) : []
+    const titleBlock = titleText ? ((labelSize + 2) + 6*SY + titleLines.length * (nameSize + 6*SY)) : 0
+
+    const beforeMsgConsumed = giftedBlockH + (titleBlock ? (gapSection + titleBlock) : 0)
+    const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
+
+    const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (linkUrl ? (gapSection + lineHLink) : 0)) / lineHMsg))
+    const msgLines = msgLinesAll.slice(0, maxMsgLines)
+
+    const afterMsgSpace = afterTitleSpace - (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
+    const maxLinkLines = Math.min(2, Math.max(0, Math.floor(afterMsgSpace / lineHLink)))
+    const linkLines = linkLinesAll.slice(0, maxLinkLines)
+
+    const blockH = fixedTop
+      + (titleBlock ? (gapSection + titleBlock) : 0)
+      + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
+      + (linkLines.length ? (gapSection + linkLines.length * lineHLink) : 0)
+
+    const biasUp = toY(22)
+    let by = contentBottomMin + (availH - blockH) / 2 + biasUp
+    let y = by + blockH
+
+    // === Rendu contenu ===
+
+    // Date principale
+    y -= (tsSize + 6*SY)
+    centerText(mainTime, y, 'bold', tsSize, main)
+    if (subTime) {
+      const ySub = y - 16*SY
+      centerText(subTime, ySub, 'normal', toY(11), sub)
+      y -= 12*SY
+    }
+
+    // Owned by (vrai)
+    if (hasName) {
+      y -= gapSection
+      centerText(ownedByLabel, y - (labelSize + 2), 'normal', labelSize, sub)
+      y -= (labelSize + 2 + gapSmall)
+      centerText(form.display_name.trim(), y - (nameSize + 4) + 4, 'bold', nameSize, main)
+      y -= (nameSize + 4)
+    } else if (show.ownedBy) {
+      // Placeholder “visuel” (gris) — n’affecte pas y
+      const yStart = y - gapSection
+      centerText(ownedByLabel, yStart - (labelSize + 2), 'normal', labelSize, ghost)
+      centerText(isFR ? 'Votre nom' : 'Your name', yStart - (labelSize + 2 + gapSmall) - (nameSize + 4) + 4, 'bold', nameSize, ghost)
+    }
+
+    // Gifted by (vrai)
+    if (giftedName) {
+      y -= gapSection
+      centerText(giftLabel, y - (labelSize + 2), 'normal', labelSize, sub)
+      y -= (labelSize + 2 + gapSmall)
+      centerText(giftedName, y - (nameSize + 4) + 4, 'bold', nameSize, main)
+      y -= (nameSize + 4)
+    } else if (isGift && show.giftedBy) {
+      // Placeholder
+      const yStart = y - gapSection
+      centerText(giftLabel, yStart - (labelSize + 2), 'normal', labelSize, ghost)
+      centerText(isFR ? 'Votre nom' : 'Your name', yStart - (labelSize + 2 + gapSmall) - (nameSize + 4) + 4, 'bold', nameSize, ghost)
+    }
+
+    // Title (vrai)
+    if (titleText) {
+      y -= (nameSize + 4)
+      y -= gapSection
+      centerText(titleLabel, y - (labelSize + 2), 'normal', labelSize, sub)
+      y -= (labelSize + 6*SY)
+      for (const line of titleLines) {
+        centerText(line, y - (nameSize + 2), 'bold', nameSize, main)
+        y -= (nameSize + 6*SY)
+      }
+    } else if (show.title) {
+      // Placeholder
+      const yStart = y - (nameSize + 4) - gapSection
+      centerText(titleLabel, yStart - (labelSize + 2), 'normal', labelSize, ghost)
+      centerText(isFR ? 'Votre titre…' : 'Your title…', yStart - (labelSize + 6*SY) - (nameSize + 2), 'bold', nameSize, ghost)
+      // pas de mutation de y
+    }
+
+    // Message (vrai)
+    if (msgLines.length) {
+      y -= gapSection
+      centerText(messageLabel, y - (labelSize + 2), 'normal', labelSize, sub)
+      y -= (labelSize + 6*SY)
+      for (const line of msgLines) {
+        centerText(line, y - lineHMsg, 'normal', msgSize, main)
+        y -= lineHMsg
+      }
+    } else if (show.message) {
+      const yStart = y - gapSection
+      centerText(messageLabel, yStart - (labelSize + 2), 'normal', labelSize, ghost)
+      centerText(isFR ? '“Votre message…”' : '“Your message…”', yStart - (labelSize + 6*SY) - lineHMsg, 'normal', msgSize, ghost)
+    }
+
+    // Lien (jamais en client — placeholder facultatif si besoin)
+    // (laisser vide pour rester fidèle au PDF)
+
+    // Footer placeholders (QR & meta)
+    const EDGE = toX(16)
+    // Meta block fantôme (gauche)
+    setFont('normal', labelSize); ctx.fillStyle = sub
+    ctx.fillText(isFR ? 'ID du certificat' : 'Certificate ID', EDGE, EDGE + metaBlockH - (labelSize + 2))
+    setFont('bold', toY(10.5)); ctx.fillStyle = main
+    ctx.fillText('••••••••-••••-••••-••••', EDGE, EDGE + metaBlockH - (labelSize + 2) - 18*SY)
+    setFont('normal', labelSize); ctx.fillStyle = sub
+    ctx.fillText(isFR ? 'Intégrité (SHA-256)' : 'Integrity (SHA-256)', EDGE, EDGE + metaBlockH - (labelSize + 2) - 38*SY)
+    setFont('normal', toY(9.5)); ctx.fillStyle = main
+    ctx.fillText('—'.repeat(48), EDGE, EDGE + 12*SY)
+    // QR fantôme (droite)
+    ctx.save()
+    ctx.strokeStyle = 'rgba(26,31,42,.45)'
+    ctx.setLineDash([6,6])
+    ctx.strokeRect(PREVIEW_W - EDGE - qrSizePx, EDGE, qrSizePx, qrSizePx)
+    ctx.setLineDash([])
+    ctx.restore()
+  }, [
+    PREVIEW_W, PREVIEW_H,
+    form.cert_style, form.text_color, form.title, form.message, form.display_name, form.gifted_by,
+    isGift, show.ownedBy, show.title, show.message, show.giftedBy,
+    isFR, chosenDateStr, utcReadable
+  ])
 
   return (
     <main style={containerStyle}>
@@ -708,7 +961,8 @@ export default function ClientClaim() {
           {/* ---------- PREVIEW COLUMN ---------- */}
           <aside aria-label="Aperçu du certificat"
             style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
-            <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
+            <div style={{position:'relative', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)', width:'100%'}}>
+              {/* Fond */}
               <img
                 key={(form.cert_style==='custom' ? customBg?.url : form.cert_style) || 'none'}
                 src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png') : `/cert_bg/${form.cert_style}.png`}
@@ -716,153 +970,22 @@ export default function ClientClaim() {
                 width={840} height={1188}
                 style={{width:'100%', height:'auto', display:'block', background:'#0E1017'}}
               />
-
+              {/* Canvas overlay (moteur identique au PDF) */}
+              <canvas
+                ref={canvasRef}
+                width={840}
+                height={1188}
+                style={{position:'absolute', inset:0, width:'100%', height:'auto', display:'block'}}
+                aria-hidden
+              />
               {/* Filigrane */}
               <div aria-hidden style={{position:'absolute', inset:0, pointerEvents:'none', display:'grid', placeItems:'center', transform:'rotate(-22deg)', opacity:.14, mixBlendMode:'multiply'}}>
                 <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>PARCELS OF TIME — PREVIEW</div>
               </div>
-
-              {/* Overlay */}
-              {(() => {
-                const ins = SAFE_INSETS_PCT[form.cert_style]
-                const EDGE_PX = 12
-                const nameForPreview = form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')
-                const giftedByStr = form.gifted_by || (isGift ? (isFR ? 'Votre nom' : 'Your name') : '')
-                const showOwned = show.ownedBy && !!nameForPreview
-                const showT = show.title && !!form.title
-                const showM = show.message && !!form.message
-                const showG = isGift && show.giftedBy && !!form.gifted_by
-
-                return (
-                  <div aria-hidden style={{ position:'absolute', inset:0 }}>
-                    {/* zone sûre + contenu */}
-                    <div
-                      style={{
-                        position:'absolute',
-                        top:`${ins.top}%`,
-                        right:`${ins.right}%`,
-                        bottom:`${ins.bottom}%`,
-                        left:`${ins.left}%`,
-                        display:'grid',
-                        gridTemplateRows:'auto 1fr',
-                        color:mainColor,
-                        textAlign:'center'
-                      }}
-                    >
-                      <div style={{ textAlign:'left', color:subtleColor }}>
-                        <div style={{ fontWeight:900, fontSize:'min(3.8vw, 20px)' }}>Parcels of Time</div>
-                        <div style={{ opacity:.9, fontSize:'min(3.2vw, 14px)' }}>Certificate of Claim</div>
-                      </div>
-
-                      <div
-                        style={{
-                          display:'grid',
-                          alignItems:'start',
-                          justifyItems:'center',
-                          rowGap:8,
-                          paddingTop:8
-                        }}
-                      >
-                        {/* Date principale */}
-                        <div style={{ fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6 }}>
-                          {chosenDateStr || (dateFormat==='DMY' ? 'JJ/MM/AAAA' : 'MM/JJ/AAAA')}
-                        </div>
-
-                        {/* Ligne secondaire = UTC ISO jour */}
-                        {utcReadable && (
-                          <div style={{ color:subtleColor, fontSize:'min(3.6vw, 13px)' }}>
-                            {utcReadable}
-                          </div>
-                        )}
-
-                        {/* Owned by */}
-                        {showOwned && (
-                          <>
-                            <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
-                              {ownedByLabel}
-                            </div>
-                            <div style={{ fontWeight:800, fontSize:'min(6.4vw, 18px)' }}>
-                              {nameForPreview}
-                            </div>
-                          </>
-                        )}
-
-                        {/* Gifted by (section dédiée en preview ; dans le PDF on l’injecte dans Message pour compat) */}
-                        {showG && (
-                          <>
-                            <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
-                              {giftLabel}
-                            </div>
-                            <div style={{ fontWeight:800, fontSize:'min(6.0vw, 17px)' }}>
-                              {giftedByStr}
-                            </div>
-                          </>
-                        )}
-
-                        {/* Title */}
-                        {showT && (
-                          <>
-                            <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
-                              {titleLabel}
-                            </div>
-                            <div style={{ fontWeight:800, fontSize:'min(6.0vw, 17px)' }}>{form.title}</div>
-                          </>
-                        )}
-
-                        {/* Message */}
-                        {showM && (
-                          <>
-                            <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
-                              {messageLabel}
-                            </div>
-                            <div style={{ marginTop:6, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)' }}>
-                              “{form.message || (isFR ? 'Votre message…' : 'Your message…')}”
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* éléments bas gauche / bas droite */}
-                    <div
-                      style={{
-                        position:'absolute',
-                        left:EDGE_PX,
-                        bottom:EDGE_PX,
-                        fontSize:'min(3.2vw,12px)',
-                        color:subtleColor,
-                        textAlign:'left',
-                        pointerEvents:'none'
-                      }}
-                    >
-                      Certificate ID • Integrity hash (aperçu)
-                    </div>
-                    <div
-                      style={{
-                        position:'absolute',
-                        right:EDGE_PX,
-                        bottom:EDGE_PX,
-                        width:'min(18vw,110px)',
-                        height:'min(18vw,110px)',
-                        border:'1px dashed rgba(26,31,42,.45)',
-                        borderRadius:8,
-                        display:'grid',
-                        placeItems:'center',
-                        fontSize:'min(6vw,12px)',
-                        opacity:.85,
-                        pointerEvents:'none'
-                      }}
-                    >
-                      QR
-                    </div>
-                  </div>
-                )
-              })()}
-
             </div>
 
             <div style={{marginTop:10, fontSize:12, color:'var(--color-muted)'}}>
-              Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées.  
+              La mise en page de l’aperçu correspond à celle du PDF final (marges, tailles, interlignes, centrage).  
               Astuce : pour un <em>certificat minimaliste</em>, décochez “{ownedByLabel}”, “{titleLabel}”, “{messageLabel}”.
             </div>
           </aside>
