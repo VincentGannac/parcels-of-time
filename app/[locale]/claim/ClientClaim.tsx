@@ -92,24 +92,25 @@ export default function ClientClaim() {
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
-  // Date par défaut (aujourd’hui, mais arrondie à 00:00:00 UTC)
+  // Date par défaut (aujourd’hui, arrondie à 00:00:00 UTC)
   const now = new Date()
   const prefillDate = parseToDateOrNull(prefillTs) || now
   const [Y, setY] = useState<number>(prefillDate.getFullYear())
   const [M, setM] = useState<number>(prefillDate.getMonth()+1)
   const [D, setD] = useState<number>(prefillDate.getDate())
+  useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M])
 
-  useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M]) // clamp
+  // Langue pour labels (fr vs en très simple)
+  const isFR = useMemo(()=>{
+    try { return (navigator.language || '').toLowerCase().startsWith('fr') } catch { return false }
+  }, [])
+  const giftLabel = isFR ? 'Offert par' : 'Gifted by'
+  const ownedByLabel = isFR ? 'Au nom de' : 'Owned by'
+  const titleLabel = isFR ? 'Titre' : 'Title'
+  const messageLabel = isFR ? 'Message' : 'Message'
 
   // Sélecteur de format (par défaut : FR → DMY, sinon → MDY)
-  const defaultFmt: DateFormat = (() => {
-    try {
-      const lang = (navigator.language || '').toLowerCase()
-      if (lang.startsWith('fr')) return 'DMY'
-      // NB: en-GB est DMY, mais la consigne parle grosso modo de fr vs en.
-      return 'MDY'
-    } catch { return 'MDY' }
-  })()
+  const defaultFmt: DateFormat = isFR ? 'DMY' : 'MDY'
   const [dateFormat, setDateFormat] = useState<DateFormat>(defaultFmt)
 
   /** Form principal */
@@ -118,17 +119,30 @@ export default function ClientClaim() {
     display_name: '',
     title: '',
     message: '',
+    // cadeau
+    gifted_by: '',
+    // rendu
     link_url: '',
-    ts: prefillTs, // sera recalculé juste en-dessous
+    ts: prefillTs, // recalculé plus bas
     cert_style: initialStyle as CertStyle,
-    // on garde time_display pour compat serveur, mais on ne l’expose plus
+    // compat serveur (non exposé)
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
     local_date_only: true, // journée => toujours true
     text_color: '#1A1F2A',
+    // (anciens flags “public” conservés pour compat)
     title_public: false,
     message_public: false,
     public_registry: false,
   })
+
+  // Visibilité des sections (par défaut : tout affiché)
+  const [show, setShow] = useState({
+    ownedBy: true,
+    title: true,
+    message: true,
+    giftedBy: true, // seulement si isGift
+  })
+
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
@@ -150,12 +164,6 @@ export default function ClientClaim() {
   }, [parsedDate])
 
   const localReadableStr = useMemo(() => parsedDate ? localDayOnly(parsedDate) : '', [parsedDate])
-
-  // Étiquettes contraste
-  const mainColor = form.text_color || '#1A1F2A'
-  const subtleColor = lighten(mainColor, 0.55)
-  const ratio = contrastRatio(mainColor)
-  const ratioMeta = ratioLabel(ratio)
 
   /** --------- Custom background --------- */
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -276,25 +284,53 @@ export default function ClientClaim() {
   }
   useEffect(() => () => {}, [])
 
+  // Étiquettes contraste
+  const mainColor = form.text_color || '#1A1F2A'
+  const subtleColor = lighten(mainColor, 0.55)
+  const ratio = contrastRatio(mainColor)
+  const ratioMeta = ratioLabel(ratio)
+
+  // “édition” (jour bissextile = premium)
+  const edition = useMemo(() => {
+    if (!parsedDate) return null
+    const y = parsedDate.getUTCFullYear(), mm = parsedDate.getUTCMonth(), dd = parsedDate.getUTCDate()
+    const isLeap = ((y%4===0 && y%100!==0) || y%400===0) && mm===1 && dd===29
+    return isLeap ? 'premium' : 'standard'
+  }, [parsedDate])
+
+  const chosenDateStr = parsedDate ? fmtDate(parsedDate, dateFormat) : ''
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
     const d = parseToDateOrNull(form.ts)
     if (!d) { setStatus('error'); setError('Merci de saisir une date valide.'); return }
 
+    // 🔧 Prépare les champs selon la visibilité choisie
+    const finalDisplayName = show.ownedBy ? (form.display_name || undefined) : undefined
+    const finalTitle = show.title ? (form.title || undefined) : undefined
+
+    // “Offert par” : injecté dans le message (pour rester 100% compatible serveur/PDF)
+    const msgParts: string[] = []
+    if (show.message && form.message.trim()) msgParts.push(form.message.trim())
+    if (isGift && show.giftedBy && form.gifted_by.trim()) {
+      msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
+    }
+    const finalMessage = msgParts.length ? msgParts.join('\n') : undefined
+
     const payload:any = {
       ts: d.toISOString(),
       email: form.email,
-      display_name: form.display_name || undefined,
-      title: form.title || undefined,
-      message: form.message || undefined,
-      link_url: form.link_url || undefined,
+      display_name: finalDisplayName,
+      title: finalTitle,
+      message: finalMessage,
+      link_url: undefined, // non utilisé ici
       cert_style: form.cert_style || 'neutral',
-      time_display: form.time_display,           // conservé pour compat
-      local_date_only: '1',                      // journée => toujours '1'
+      time_display: 'local+utc',      // compat
+      local_date_only: '1',           // journée
       text_color: form.text_color || '#1A1F2A',
-      title_public: form.title_public ? '1' : '0',
-      message_public: form.message_public ? '1' : '0',
+      title_public: '0',
+      message_public: '0',
       public_registry: form.public_registry ? '1' : '0',
     }
     if (form.cert_style === 'custom' && customBg?.dataUrl) {
@@ -351,16 +387,6 @@ export default function ClientClaim() {
     '#FFFFFF','#E6EAF2',
   ]
 
-  // “édition” (jour bissextile = premium)
-  const edition = useMemo(() => {
-    if (!parsedDate) return null
-    const y = parsedDate.getUTCFullYear(), mm = parsedDate.getUTCMonth(), dd = parsedDate.getUTCDate()
-    const isLeap = ((y%4===0 && y%100!==0) || y%400===0) && mm===1 && dd===29
-    return isLeap ? 'premium' : 'standard'
-  }, [parsedDate])
-
-  const chosenDateStr = parsedDate ? fmtDate(parsedDate, dateFormat) : ''
-
   return (
     <main style={containerStyle}>
       {/* input fichier global */}
@@ -413,9 +439,23 @@ export default function ClientClaim() {
                 />
               </label>
 
+              {/* 🎁 Offert par / Gifted by */}
+              {isGift && (
+                <label style={{display:'grid', gap:6, marginTop:10}}>
+                  <span>{giftLabel}</span>
+                  <input
+                    type="text"
+                    value={form.gifted_by}
+                    onChange={e=>setForm(f=>({...f, gifted_by:e.target.value}))}
+                    placeholder={isFR ? 'Ex. “Offert par Élodie & Marc”' : 'e.g. “Gifted by Elodie & Marc”'}
+                    style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                  />
+                </label>
+              )}
+
               <div style={{display:'grid', gap:6, marginTop:10}}>
                 <label>
-                  <span>Titre</span>
+                  <span>{titleLabel}</span>
                   <input type="text" value={form.title}
                     onChange={e=>setForm(f=>({...f, title:e.target.value}))}
                     placeholder="Ex. “Notre journée sous la pluie”"
@@ -426,12 +466,58 @@ export default function ClientClaim() {
 
               <div style={{display:'grid', gap:6, marginTop:10}}>
                 <label>
-                  <span>Message</span>
+                  <span>{messageLabel}</span>
                   <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} rows={3}
                     placeholder={isGift ? '“Le jour de notre rencontre…”' : '“Le jour où tout a commencé.”'}
                     style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                 </label>
+              </div>
+
+              {/* Affichage / Masquage des sections */}
+              <div style={{marginTop:12, paddingTop:10, borderTop:'1px dashed var(--color-border)'}}>
+                <div style={{fontSize:13, color:'var(--color-muted)', marginBottom:8}}>
+                  Affichage sur le certificat (vous pouvez retirer les éléments non essentiels)
+                </div>
+                <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
+                  <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                    <input
+                      type="checkbox"
+                      checked={show.ownedBy}
+                      onChange={e=>setShow(s=>({...s, ownedBy:e.target.checked}))}
+                    />
+                    <span>{ownedByLabel}</span>
+                  </label>
+                  <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                    <input
+                      type="checkbox"
+                      checked={show.title}
+                      onChange={e=>setShow(s=>({...s, title:e.target.checked}))}
+                    />
+                    <span>{titleLabel}</span>
+                  </label>
+                  <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                    <input
+                      type="checkbox"
+                      checked={show.message}
+                      onChange={e=>setShow(s=>({...s, message:e.target.checked}))}
+                    />
+                    <span>{messageLabel}</span>
+                  </label>
+                  {isGift && (
+                    <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                      <input
+                        type="checkbox"
+                        checked={show.giftedBy}
+                        onChange={e=>setShow(s=>({...s, giftedBy:e.target.checked}))}
+                      />
+                      <span>{giftLabel}</span>
+                    </label>
+                  )}
+                </div>
+                <small style={{display:'block', marginTop:8, opacity:.7}}>
+                  <strong>Imposés :</strong> Parcels of Time, Certificate of Claim, la date.
+                </small>
               </div>
             </div>
 
@@ -636,6 +722,13 @@ export default function ClientClaim() {
               {(() => {
                 const ins = SAFE_INSETS_PCT[form.cert_style]
                 const EDGE_PX = 12
+                const nameForPreview = form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')
+                const giftedByStr = form.gifted_by || (isGift ? (isFR ? 'Votre nom' : 'Your name') : '')
+                const showOwned = show.ownedBy && !!nameForPreview
+                const showT = show.title && !!form.title
+                const showM = show.message && !!form.message
+                const showG = isGift && show.giftedBy && !!form.gifted_by
+
                 return (
                   <div aria-hidden style={{ position:'absolute', inset:0 }}>
                     {/* zone sûre + contenu */}
@@ -666,7 +759,7 @@ export default function ClientClaim() {
                           paddingTop:8
                         }}
                       >
-                        {/* Date principale (format choisi) */}
+                        {/* Date principale */}
                         <div style={{ fontWeight:800, fontSize:'min(9vw, 26px)', marginBottom:6 }}>
                           {chosenDateStr || (dateFormat==='DMY' ? 'JJ/MM/AAAA' : 'MM/JJ/AAAA')}
                         </div>
@@ -678,29 +771,48 @@ export default function ClientClaim() {
                           </div>
                         )}
 
-                        <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
-                          Owned by
-                        </div>
-                        <div style={{ fontWeight:800, fontSize:'min(6.4vw, 18px)' }}>
-                          {form.display_name || (isGift ? 'Nom du·de la destinataire' : 'Votre nom')}
-                        </div>
-
-                        {form.title && (
+                        {/* Owned by */}
+                        {showOwned && (
                           <>
                             <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
-                              Title
+                              {ownedByLabel}
+                            </div>
+                            <div style={{ fontWeight:800, fontSize:'min(6.4vw, 18px)' }}>
+                              {nameForPreview}
+                            </div>
+                          </>
+                        )}
+
+                        {/* Gifted by (section dédiée en preview ; dans le PDF on l’injecte dans Message pour compat) */}
+                        {showG && (
+                          <>
+                            <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
+                              {giftLabel}
+                            </div>
+                            <div style={{ fontWeight:800, fontSize:'min(6.0vw, 17px)' }}>
+                              {giftedByStr}
+                            </div>
+                          </>
+                        )}
+
+                        {/* Title */}
+                        {showT && (
+                          <>
+                            <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
+                              {titleLabel}
                             </div>
                             <div style={{ fontWeight:800, fontSize:'min(6.0vw, 17px)' }}>{form.title}</div>
                           </>
                         )}
 
-                        {form.message && (
+                        {/* Message */}
+                        {showM && (
                           <>
                             <div style={{ opacity:.7, color:subtleColor, fontSize:'min(3.4vw, 13px)', marginTop:10 }}>
-                              Message
+                              {messageLabel}
                             </div>
                             <div style={{ marginTop:6, fontStyle:'italic', lineHeight:1.3, fontSize:'min(3.8vw, 13px)' }}>
-                              “{form.message}”
+                              “{form.message || (isFR ? 'Votre message…' : 'Your message…')}”
                             </div>
                           </>
                         )}
@@ -746,7 +858,8 @@ export default function ClientClaim() {
             </div>
 
             <div style={{marginTop:10, fontSize:12, color:'var(--color-muted)'}}>
-              Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées. Cet aperçu est indicatif (filigrane ajouté).
+              Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées.  
+              Astuce : pour un <em>certificat minimaliste</em>, décochez “{ownedByLabel}”, “{titleLabel}”, “{messageLabel}”.
             </div>
           </aside>
         </div>
