@@ -316,6 +316,10 @@ export default function ClientClaim() {
     if (isGift && show.giftedBy && form.gifted_by.trim()) {
       msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
     }
+  // Si "Owned by" est masqué, on place un marqueur consommé par le PDF.
+    if (!show.ownedBy) {
+      msgParts.push('[[HIDE_OWNED_BY]]')
+    }
     const finalMessage = msgParts.length ? msgParts.join('\n') : undefined
 
     const payload:any = {

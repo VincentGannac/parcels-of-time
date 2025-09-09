@@ -223,20 +223,23 @@ export async function generateCertificatePDF(opts: {
   const contentBottomMin = BOT_Y + footerH + footerMarginTop
   const availH = contentTopMax - contentBottomMin
 
-    // --------- Contenu dynamique (Owned by / Gifted by / Title / Message) ---------
-   const hasName = !!(display_name && String(display_name).trim())
- 
-   // Détecte une ligne "Offert par: X" / "Gifted by: X" injectée dans `message`
-   let giftedName = ''
-   let messageClean = (message || '').trim()
-   if (messageClean) {
-     const lines = messageClean.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-     const giftLine = lines.find(l => /^(offert\s*par|gifted\s*by)\s*:/i.test(l))
-     if (giftLine) {
-       giftedName = giftLine.replace(/^(offert\s*par|gifted\s*by)\s*:/i, '').trim()
-       messageClean = lines.filter(l => l !== giftLine).join(' ')
-     }
-   }
+  // --------- Contenu dynamique (Owned by / Gifted by / Message) ---------
+  // On retire le marqueur [[HIDE_OWNED_BY]] et on capture Gifted by / Offert par
+  let giftedName = ''
+  let forceHideOwned = false
+  let messageClean = (message || '').trim()
+  if (messageClean) {
+    const raw = messageClean.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    const kept: string[] = []
+    for (const l of raw) {
+      if (/^\[\[\s*HIDE_OWNED_BY\s*\]\]$/i.test(l)) { forceHideOwned = true; continue }
+      const mGift = /^(offert\s*par|gifted\s*by)\s*:\s*(.+)$/i.exec(l)
+      if (mGift) { giftedName = mGift[2].trim(); continue }
+      kept.push(l)
+    }
+    messageClean = kept.join(' ')
+  }
+  const hasName = !forceHideOwned && !!(display_name && String(display_name).trim())  
  
    // Wraps
   const msgLinesAll = messageClean ? wrapText('“' + messageClean + '”', font, msgSize, COLW) : []
@@ -285,7 +288,7 @@ export async function generateCertificatePDF(opts: {
     y -= 12
   }
 
-   // Owned by (uniquement si nom présent)
+  // Owned by (uniquement si autorisé)
   if (hasName) {
     y -= gapSection
     page.drawText(L.ownedBy, { x: CX - font.widthOfTextAtSize(L.ownedBy, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
