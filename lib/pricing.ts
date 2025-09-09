@@ -5,6 +5,6 @@ export function priceFor(dateISO: string) {
   if (isNaN(d.getTime())) throw new Error('invalid date');
   d.setUTCSeconds(0,0); // ⬅️ minute
   const edition: Edition = detectEdition(d);
-  const price_cents = edition === 'premium' ? 79000 : 7900; // ajuste si tu veux monétiser + la rareté minute
+  const price_cents = edition === 'premium' ? 7900 : 7900; // ajuste si tu veux monétiser + la rareté minute
   return { edition, price_cents, currency: 'EUR' as const };
 }
