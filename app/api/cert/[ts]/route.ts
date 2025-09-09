@@ -52,7 +52,7 @@ export async function GET(req: Request, ctx: any) {
 
   const pdfBytes = await generateCertificatePDF({
     ts: row.ts.toISOString(),
-    display_name: row.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
+    display_name: row.display_name || '',
     title: row.title,
     message: row.message,
     link_url: row.link_url,

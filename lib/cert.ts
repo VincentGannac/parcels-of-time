@@ -13,8 +13,8 @@ export type Locale = 'fr' | 'en'
 export type TimeLabelMode = 'utc' | 'utc_plus_local' | 'local_plus_utc'
 
 const TEXTS = {
-  en: { brand:'Parcels of Time', title:'Certificate of Claim', ownedBy:'Owned by', titleLabel:'Title', message:'Message', link:'Link', certId:'Certificate ID', integrity:'Integrity (SHA-256)', anon:'Anonymous', local:(s:string)=>`(local: ${s})`, utcParen:(s:string)=>`(UTC: ${s})` },
-  fr: { brand:'Parcels of Time', title:'Certificat de Claim',  ownedBy:'Au nom de', titleLabel:'Titre',  message:'Message', link:'Lien', certId:'ID du certificat', integrity:'Intégrité (SHA-256)', anon:'Anonyme',  local:(s:string)=>`(local : ${s})`, utcParen:(s:string)=>`(UTC : ${s})` },
+    en: { brand:'Parcels of Time', title:'Certificate of Claim', ownedBy:'Owned by', giftedBy:'Gifted by', titleLabel:'Title', message:'Message', link:'Link', certId:'Certificate ID', integrity:'Integrity (SHA-256)', anon:'Anonymous', local:(s:string)=>`(local: ${s})`, utcParen:(s:string)=>`(UTC: ${s})` },
+    fr: { brand:'Parcels of Time', title:'Certificat de Claim',  ownedBy:'Au nom de', giftedBy:'Offert par', titleLabel:'Titre',  message:'Message', link:'Lien', certId:'ID du certificat', integrity:'Intégrité (SHA-256)', anon:'Anonyme',  local:(s:string)=>`(local : ${s})`, utcParen:(s:string)=>`(UTC : ${s})` },
 } as const
 
 async function loadBgFromPublic(style: CertStyle){
@@ -223,17 +223,33 @@ export async function generateCertificatePDF(opts: {
   const contentBottomMin = BOT_Y + footerH + footerMarginTop
   const availH = contentTopMax - contentBottomMin
 
-  // Wraps
-  const msgLinesAll = message ? wrapText('“' + message + '”', font, msgSize, COLW) : []
+    // --------- Contenu dynamique (Owned by / Gifted by / Title / Message) ---------
+   const hasName = !!(display_name && String(display_name).trim())
+ 
+   // Détecte une ligne "Offert par: X" / "Gifted by: X" injectée dans `message`
+   let giftedName = ''
+   let messageClean = (message || '').trim()
+   if (messageClean) {
+     const lines = messageClean.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+     const giftLine = lines.find(l => /^(offert\s*par|gifted\s*by)\s*:/i.test(l))
+     if (giftLine) {
+       giftedName = giftLine.replace(/^(offert\s*par|gifted\s*by)\s*:/i, '').trim()
+       messageClean = lines.filter(l => l !== giftLine).join(' ')
+     }
+   }
+ 
+   // Wraps
+  const msgLinesAll = messageClean ? wrapText('“' + messageClean + '”', font, msgSize, COLW) : []
   const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
 
-  // Heights
+  // Hauteurs des blocs optionnels
+  const ownedBlockH = hasName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
+  const giftedBlockH = giftedName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
+  
   const fixedTop =
     (tsSize + 6) +
     (subTime ? 12 : 0) +
-    gapSection +
-    (labelSize + 2) + gapSmall +
-    (nameSize + 4)
+  ownedBlockH
 
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
@@ -241,7 +257,9 @@ export async function generateCertificatePDF(opts: {
   const titleLines = titleText ? wrapText(titleText, fontBold, nameSize, COLW).slice(0, 2) : []
   const titleBlock = titleText ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
 
-  const afterTitleSpace = spaceAfterOwned - (titleBlock ? (gapSection + titleBlock) : 0)
+ // Consommation avant le message : GiftedBy + (éventuel) Title
+  const beforeMsgConsumed =giftedBlockH +(titleBlock ? (gapSection + titleBlock) : 0)
+  const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
   const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
   const msgLines = msgLinesAll.slice(0, maxMsgLines)
 
@@ -267,12 +285,24 @@ export async function generateCertificatePDF(opts: {
     y -= 12
   }
 
-  // Owned by
-  y -= gapSection
-  page.drawText(L.ownedBy, { x: CX - font.widthOfTextAtSize(L.ownedBy, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
-  y -= (labelSize + 2 + gapSmall)
-  const name = display_name || L.anon
-  page.drawText(name, { x: CX - fontBold.widthOfTextAtSize(name, nameSize)/2, y: y - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
+   // Owned by (uniquement si nom présent)
+  if (hasName) {
+    y -= gapSection
+    page.drawText(L.ownedBy, { x: CX - font.widthOfTextAtSize(L.ownedBy, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
+    y -= (labelSize + 2 + gapSmall)
+    const name = String(display_name).trim()
+    page.drawText(name, { x: CX - fontBold.widthOfTextAtSize(name, nameSize)/2, y: y - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
+    y -= (nameSize + 4)
+  }
+
+  // Gifted by (si détecté)
+  if (giftedName) {
+    y -= gapSection
+    page.drawText(L.giftedBy, { x: CX - font.widthOfTextAtSize(L.giftedBy, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
+    y -= (labelSize + 2 + gapSmall)
+    page.drawText(giftedName, { x: CX - fontBold.widthOfTextAtSize(giftedName, nameSize)/2, y: y - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
+    y -= (nameSize + 4)
+  }
 
   // Title
   if (titleText) {
@@ -284,8 +314,7 @@ export async function generateCertificatePDF(opts: {
       page.drawText(line, { x: CX - fontBold.widthOfTextAtSize(line, nameSize)/2, y: y - (nameSize + 2), size: nameSize, font: fontBold, color: cMain })
       y -= (nameSize + 6)
     }
-  } else {
-    y -= (nameSize + 4)
+  
   }
 
   // Message
