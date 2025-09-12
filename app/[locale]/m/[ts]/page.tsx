@@ -273,7 +273,6 @@ export default async function Page({ params }: { params: Promise<Params> }) {
                 padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between',
                 userSelect:'none'
               }}
-              onClick={(e)=>{ /* stylistic only */ }}
             >
               <span style={{ display:'flex', alignItems:'baseline', gap:10 }}>
                 <span style={{ fontFamily:'Fraunces, serif', fontSize:20 }}>Modifier votre certificat</span>
