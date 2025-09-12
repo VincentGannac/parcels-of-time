@@ -426,7 +426,7 @@ export default function ClientClaim() {
     '#FFFFFF','#E6EAF2',
   ]
 
-  /** ====== PREVIEW (identique au PDF) ====== */
+  /** ====== PREVIEW (mêmes calculs que le PDF) ====== */
   const previewWrapRef = useRef<HTMLDivElement|null>(null)
   const [scale, setScale] = useState(1) // px per pt
   useLayoutEffect(()=>{
@@ -441,7 +441,7 @@ export default function ClientClaim() {
     return ()=>ro.disconnect()
   }, [])
 
-  // données d'entrée pour la préview (placeholders visibles quand "affiché" mais vide)
+  // données d'entrée pour la préview
   const showOwned = show.ownedBy
   const showGifted = isGift && show.giftedBy
   const showT = show.title
@@ -493,26 +493,32 @@ export default function ClientClaim() {
   const contentBottomMin = BOT_Y + footerH + footerMarginTop
   const availH = contentTopMax - contentBottomMin
 
-  // wrapping exactement comme le PDF (avec canvas)
+  // wrapping (identique au PDF)
   const meas = useMemo(()=>makeMeasurer(scale), [scale])
+
   const titleLines = titleForPreview ? meas.wrap(titleForPreview, nameSize, COLW, true).slice(0, 2) : []
   const msgLinesAll = messageForPreview ? meas.wrap('“' + messageForPreview + '”', msgSize, COLW, false) : []
   const linkLinesAll = form.link_url ? meas.wrap(form.link_url, linkSize, COLW, false) : []
 
-  // hauteurs "optionnelles"
+  // Hauteurs des blocs optionnels — mêmes formules que le PDF
   const ownedBlockH = showOwned ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
   const giftedBlockH = showGifted ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
 
   const fixedTop =
-    (tsSize + 6) +
+    (tsSize + 6) + // uniquement la date
     ownedBlockH
 
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
-  const titleBlock = titleForPreview ? ((gapSection + (labelSize + 2)) + 6 + titleLines.length * (nameSize + 6)) : 0
 
-  const beforeMsgConsumed = giftedBlockH + (titleBlock ? (titleBlock) : 0)
+  // ⚠️ titleBlock SANS gapSection (comme cert.ts)
+  const titleBlockNoGap = titleForPreview
+    ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6))
+    : 0
+
+  const beforeMsgConsumed = giftedBlockH + (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
   const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
+
   const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (form.link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
   const msgLines = msgLinesAll.slice(0, maxMsgLines)
 
@@ -522,7 +528,7 @@ export default function ClientClaim() {
 
   const blockH =
     fixedTop
-    + (titleBlock ? titleBlock : 0)
+    + (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
     + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
     + (linkLines.length ? (gapSection + linkLines.length * lineHLink) : 0)
 
@@ -534,30 +540,40 @@ export default function ClientClaim() {
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
   const centerStyle: React.CSSProperties = { position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre', color: form.text_color }
 
-  // === CALCUL des y (comme dans cert.ts) ===
-  // time main
+  // === CALCUL des y (séquence STRICTEMENT identique au PDF) ===
+  // 1) Date principale
   y -= (tsSize + 6)
   const topMainTime = toTopPx(y, tsSize)
 
-  // Owned by
-  const ownedLabelTop = showOwned ? ((A4_H_PT - (y - (labelSize + 2))) * scale - (labelSize * scale)) : null
-  if (showOwned) y -= (labelSize + 2 + gapSmall)
-  const ownedNameTop = showOwned ? toTopPx(y - (nameSize + 4) + 4, nameSize) : null
-  if (showOwned) y -= (nameSize + 4)
+  // 2) Owned by (si affiché)
+  let ownedLabelTop:number|null = null
+  let ownedNameTop:number|null = null
+  if (showOwned) {
+    y -= gapSection
+    ownedLabelTop = toTopPx(y - (labelSize + 2), labelSize)
+    y -= (labelSize + 2 + gapSmall)
+    ownedNameTop = toTopPx(y - (nameSize + 4) + 4, nameSize)
+    y -= (nameSize + 4)
+  }
 
-  // Gifted by
-  const giftedLabelTop = showGifted ? ((A4_H_PT - (y - (labelSize + 2))) * scale - (labelSize * scale)) : null
-  if (showGifted) y -= (labelSize + 2 + gapSmall)
-  const giftedNameTop = showGifted ? toTopPx(y - (nameSize + 4) + 4, nameSize) : null
-  if (showGifted) y -= (nameSize + 4)
+  // 3) Gifted by (si affiché)
+  let giftedLabelTop:number|null = null
+  let giftedNameTop:number|null = null
+  if (showGifted) {
+    y -= gapSection
+    giftedLabelTop = toTopPx(y - (labelSize + 2), labelSize)
+    y -= (labelSize + 2 + gapSmall)
+    giftedNameTop = toTopPx(y - (nameSize + 4) + 4, nameSize)
+    y -= (nameSize + 4)
+  }
 
-  // Title
+  // 4) Title
   let titleLabelTop:number|null = null
   const titleLineTops:number[] = []
   if (titleForPreview) {
     y -= (nameSize + 4)
     y -= gapSection
-    titleLabelTop = ((A4_H_PT - (y - (labelSize + 2))) * scale - (labelSize * scale))
+    titleLabelTop = toTopPx(y - (labelSize + 2), labelSize)
     y -= (labelSize + 6)
     for (const _ of titleLines) {
       titleLineTops.push(toTopPx(y - (nameSize + 2), nameSize))
@@ -565,12 +581,12 @@ export default function ClientClaim() {
     }
   }
 
-  // Message
+  // 5) Message
   let msgLabelTop:number|null = null
   const msgLineTops:number[] = []
   if (msgLines.length) {
     y -= gapSection
-    msgLabelTop = ((A4_H_PT - (y - (labelSize + 2))) * scale - (labelSize * scale))
+    msgLabelTop = toTopPx(y - (labelSize + 2), labelSize)
     y -= (labelSize + 6)
     for (const _ of msgLines) {
       msgLineTops.push(toTopPx(y - lineHMsg, msgSize))
@@ -578,12 +594,12 @@ export default function ClientClaim() {
     }
   }
 
-  // Link
+  // 6) Link
   let linkLabelTop:number|null = null
   const linkLineTops:number[] = []
   if (linkLines.length) {
     y -= gapSection
-    linkLabelTop = ((A4_H_PT - (y - (labelSize + 2))) * scale - (labelSize * scale))
+    linkLabelTop = toTopPx(y - (labelSize + 2), labelSize)
     y -= (labelSize + 6)
     for (const _ of linkLines) {
       linkLineTops.push(toTopPx(y - lineHLink, linkSize))
@@ -918,21 +934,21 @@ export default function ClientClaim() {
               </div>
 
               {/* Header (brand + title) */}
-              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yBrand, 18), fontWeight:800, fontSize: 18*scale, color: form.text_color }}>{L.brand}</div>
-              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yCert, 12), fontWeight:400, fontSize: 12*scale, color: subtleColor }}>{L.title}</div>
+              <div style={{...centerStyle, top: topBrand, fontWeight:800, fontSize: brandSize*scale, color: form.text_color}}>{L.brand}</div>
+              <div style={{...centerStyle, top: topCert,  fontWeight:400, fontSize: subSize*scale, color: subtleColor}}>{L.title}</div>
 
               {/* Date principale (AAAA-MM-JJ) */}
-              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topMainTime, fontWeight:800, fontSize: tsSize*scale, color: form.text_color }}>
+              <div style={{...centerStyle, top: topMainTime, fontWeight:800, fontSize: tsSize*scale, color: form.text_color}}>
                 {mainTime}
               </div>
 
               {/* Owned by */}
               {showOwned && (
                 <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: ownedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                  <div style={{...centerStyle, top: ownedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
                     {ownedByLabel}
                   </div>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: ownedNameTop!, fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
+                  <div style={{...centerStyle, top: ownedNameTop!, fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
                     {nameForPreview}
                   </div>
                 </>
@@ -941,10 +957,10 @@ export default function ClientClaim() {
               {/* Gifted by */}
               {showGifted && (
                 <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: giftedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                  <div style={{...centerStyle, top: giftedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
                     {giftLabel}
                   </div>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: giftedNameTop!, fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
+                  <div style={{...centerStyle, top: giftedNameTop!, fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
                     {giftedByStr}
                   </div>
                 </>
@@ -953,33 +969,33 @@ export default function ClientClaim() {
               {/* Title */}
               {titleForPreview && (
                 <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: titleLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                  <div style={{...centerStyle, top: titleLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
                     {titleLabel}
                   </div>
                   {titleLines.map((line, i)=>(
-                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: titleLineTops[i], fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
+                    <div key={i} style={{...centerStyle, top: titleLineTops[i], fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
                       {line}
                     </div>
                   ))}
                 </>
               )}
 
-              {/* Message */}
+              {/* Message (Regular, pas d’italique pour coller au PDF) */}
               {msgLines.length>0 && (
                 <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: msgLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                  <div style={{...centerStyle, top: msgLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
                     {messageLabel}
                   </div>
                   {msgLines.map((line, i)=>(
-                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: msgLineTops[i], fontStyle:'italic', fontSize: 12.5*scale, color: form.text_color }}>
+                    <div key={i} style={{...centerStyle, top: msgLineTops[i], fontSize: msgSize*scale, color: form.text_color}}>
                       {line}
                     </div>
                   ))}
                 </>
               )}
 
-              {/* Footer: meta à gauche & QR à droite comme le PDF */}
-              <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: 11*scale, lineHeight: 1.2}}>
+              {/* Footer: meta à gauche & QR à droite comme le PDF (placeholder) */}
+              <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: labelSize*scale, lineHeight: 1.2}}>
                 <div style={{opacity:.9}}>{isFR?'ID du certificat':'Certificate ID'}</div>
                 <div style={{marginTop:6, fontWeight:800, color: form.text_color, fontSize: 10.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
                 <div style={{marginTop:8, opacity:.9}}>{isFR?'Intégrité (SHA-256)':'Integrity (SHA-256)'}</div>
