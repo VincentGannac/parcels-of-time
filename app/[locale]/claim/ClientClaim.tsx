@@ -471,6 +471,7 @@ export default function ClientClaim() {
           stripe_key_missing: 'Configuration Stripe absente côté serveur.',
           bad_price: 'Prix invalide pour cette journée.',
           stripe_error: 'Erreur Stripe côté serveur.',
+          date_unavailable: 'Ce jour vient d’être vendu. Merci d’en choisir un autre.',
         }
         setError(map[j.error] || j.error || 'Unknown error')
         console.error('[Checkout] Erreur côté serveur', j)
@@ -908,22 +909,27 @@ export default function ClientClaim() {
                   {(() => {
                     const dim = daysInMonth(Y, M)
                     const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
-                    const days = range(1, maxDayForThisMonth)
+                    const days = Array.from({length: maxDayForThisMonth}, (_,i)=>i+1)
                     const set = new Set(unavailableDays)
                     return (
-                      <select value={D} onChange={e=>setD(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                      <select
+                        value={D}
+                        onChange={e=>setD(parseInt(e.target.value))}
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                      >
                         {days.map(d=>{
                           const unavailable = set.has(d)
+                          const label = d.toString().padStart(2,'0') + (unavailable ? ' — indisponible' : '')
                           return (
                             <option
                               key={d}
                               value={d}
                               disabled={unavailable}
-                              style={{color: unavailable ? '#ff5a5a' : '#000'}}
-                              title={unavailable ? 'Indisponible' : undefined}
+                              aria-disabled={unavailable}
+                              // certaines plateformes grisent les options désactivées — on laisse aussi un indicateur ⛔
+                              style={{color: unavailable ? '#ff4d4d' : '#000'}}
                             >
-                              {d.toString().padStart(2,'0')}{unavailable ? ' — indisponible' : ''}
+                              {unavailable ? `⛔ ${label}` : label}
                             </option>
                           )
                         })}

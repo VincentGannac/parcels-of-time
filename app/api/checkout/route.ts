@@ -1,4 +1,3 @@
-// app/api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -27,10 +26,8 @@ type Body = {
   time_display?: 'utc'|'utc+local'|'local+utc'
   local_date_only?: string | boolean
   text_color?: string
-  // Compat : on supporte toujours ces flags s’ils arrivent (UI récente ne les affiche plus)
   title_public?: string | boolean
   message_public?: string | boolean
-  // ✅ intention de publier le PDF complet dans le registre public
   public_registry?: string | boolean
 }
 
@@ -44,6 +41,16 @@ function rateLimit(ip: string, limit = 8, windowMs = 60_000) {
   return rec.count <= limit
 }
 
+function todayUtcStart() {
+  const t = new Date()
+  return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()))
+}
+function oneYearAfter(d: Date) {
+  const x = new Date(d)
+  x.setUTCFullYear(x.getUTCFullYear() + 1)
+  return x
+}
+
 export async function POST(req: Request) {
   const accLang = (req.headers.get('accept-language') || '').toLowerCase()
   const locale = accLang.startsWith('fr') ? 'fr' : 'en'
@@ -54,10 +61,17 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body
     if (!body.ts || !body.email) return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
 
+    // Normalise à minuit UTC
     const d = new Date(body.ts)
     if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
     d.setUTCHours(0,0,0,0)
     const tsISO = d.toISOString()
+
+    // Borne max : aujourd’hui UTC + 1 an
+    const maxAllowed = oneYearAfter(todayUtcStart())
+    if (d.getTime() > maxAllowed.getTime()) {
+      return NextResponse.json({ error: 'ts_out_of_range' }, { status: 400 })
+    }
 
     const styleCandidate = String(body.cert_style || 'neutral').toLowerCase()
     const cert_style: CertStyle =
@@ -72,15 +86,12 @@ export async function POST(req: Request) {
     const text_color =
       /^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'
 
-    // Compat (retombent à '0' si non fournis par l’UI)
     const title_public   = (String(body.title_public)   === '1' || body.title_public   === true) ? '1' : '0'
     const message_public = (String(body.message_public) === '1' || body.message_public === true) ? '1' : '0'
-
-    // ✅ Registre public (PDF complet)
     const public_registry =
       (String(body.public_registry) === '1' || body.public_registry === true) ? '1' : '0'
 
-    // Stash custom BG si présent
+    // Image custom éventuelle -> stash temporaire
     let custom_bg_key = ''
     if (cert_style === 'custom' && body.custom_bg_data_url) {
       const m = /^data:image\/(png|jpe?g);base64,/.exec(body.custom_bg_data_url)
@@ -92,6 +103,17 @@ export async function POST(req: Request) {
          on conflict (key) do update set data_url = excluded.data_url, created_at = now()`,
         [custom_bg_key, body.custom_bg_data_url]
       )
+    }
+
+    // ⚠️ Vérifie que la journée n'est pas déjà vendue (unicité côté serveur)
+    {
+      const { rows } = await pool.query<{ exists: boolean }>(
+        `select exists(select 1 from claims where ts = $1::timestamptz) as exists`,
+        [tsISO]
+      )
+      if (rows[0]?.exists) {
+        return NextResponse.json({ error: 'date_unavailable' }, { status: 409 })
+      }
     }
 
     const origin = new URL(req.url).origin
@@ -132,6 +154,7 @@ export async function POST(req: Request) {
         title_public,
         message_public,
         public_registry,
+        locale, // utile pour tes mails de secours, etc.
       },
       success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,
