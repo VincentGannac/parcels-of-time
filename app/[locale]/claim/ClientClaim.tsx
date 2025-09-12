@@ -130,10 +130,40 @@ export default function ClientClaim() {
   // Date par défaut (aujourd’hui, arrondie à 00:00:00 UTC)
   const now = new Date()
   const prefillDate = parseToDateOrNull(prefillTs) || now
+
+  // ✅ bornes : aujourd’hui UTC et max = +1 an
+  const todayUtc = useMemo(() => {
+    const t = new Date()
+    return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()))
+  }, [])
+  const maxDateUtc = useMemo(() => {
+    const t = new Date(todayUtc)
+    t.setUTCFullYear(t.getUTCFullYear() + 1)
+    return t
+  }, [todayUtc])
+  const MAX_Y = maxDateUtc.getUTCFullYear()
+  const MAX_M = maxDateUtc.getUTCMonth() + 1
+  const MAX_D = maxDateUtc.getUTCDate()
+
   const [Y, setY] = useState<number>(prefillDate.getFullYear())
   const [M, setM] = useState<number>(prefillDate.getMonth()+1)
   const [D, setD] = useState<number>(prefillDate.getDate())
+
+  // Ajuste le jour si dépasse le nb de jours du mois
   useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M])
+
+  // Clamp à la borne max (J+1 an)
+  useEffect(() => {
+    let y = Y, m = M, d = D
+    if (y > MAX_Y) y = MAX_Y
+    if (y === MAX_Y && m > MAX_M) m = MAX_M
+    const dim = daysInMonth(y, m)
+    const maxDayThisMonth = (y === MAX_Y && m === MAX_M) ? Math.min(dim, MAX_D) : dim
+    if (d > maxDayThisMonth) d = maxDayThisMonth
+    if (y !== Y) setY(y)
+    if (m !== M) setM(m)
+    if (d !== D) setD(d)
+  }, [Y, M, MAX_Y, MAX_M, MAX_D, D])
 
   // Langue (pour quelques libellés)
   const isFR = useMemo(()=>{
@@ -193,6 +223,50 @@ export default function ClientClaim() {
 
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
+
+  // Jours indisponibles (du mois courant) — affichés en rouge et désactivés
+  const [unavailableDays, setUnavailableDays] = useState<number[]>([])
+  useEffect(() => {
+    const ym = `${Y}-${String(M).padStart(2,'0')}`
+    let ignore = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/unavailable?ym=${ym}`)
+        if (!res.ok) { if (!ignore) setUnavailableDays([]); return }
+        const data = await res.json()
+        const raw: any[] = Array.isArray(data) ? data : (data?.days ?? data?.unavailable ?? [])
+        const set = new Set<number>()
+        for (const v of raw) {
+          if (typeof v === 'number') {
+            if (v >= 1 && v <= 31) set.add(v)
+          } else if (typeof v === 'string') {
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v)
+            if (m && Number(m[1]) === Y && Number(m[2]) === M) set.add(Number(m[3]))
+            else {
+              const n = parseInt(v, 10)
+              if (!Number.isNaN(n) && n >= 1 && n <= 31) set.add(n)
+            }
+          }
+        }
+        if (!ignore) setUnavailableDays(Array.from(set).sort((a,b)=>a-b))
+      } catch {
+        if (!ignore) setUnavailableDays([])
+      }
+    })()
+    return () => { ignore = true }
+  }, [Y, M])
+
+  // Si le jour sélectionné devient indisponible, tente de choisir le 1er jour dispo
+  useEffect(() => {
+    const dim = daysInMonth(Y, M)
+    const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
+    const all = range(1, maxDayForThisMonth)
+    const set = new Set(unavailableDays)
+    if (set.has(D)) {
+      const firstAvailable = all.find(d => !set.has(d))
+      if (firstAvailable) setD(firstAvailable)
+    }
+  }, [unavailableDays, Y, M, MAX_Y, MAX_M, MAX_D, D])
 
   // Recalcule `ts` (minuit UTC) à chaque changement Y/M/D
   useEffect(()=>{
@@ -342,6 +416,14 @@ export default function ClientClaim() {
     setStatus('loading'); setError('')
     const d = parseToDateOrNull(form.ts)
     if (!d) { setStatus('error'); setError('Merci de saisir une date valide.'); return }
+    // Borne max
+    if (d.getTime() > maxDateUtc.getTime()) {
+      setStatus('error'); setError(`La date choisie dépasse la limite autorisée (${ymdUTC(maxDateUtc)}).`); return
+    }
+    // Interdit les jours indisponibles
+    if (unavailableDays.includes(D)) {
+      setStatus('error'); setError('Ce jour est indisponible. Merci d’en choisir un autre.'); return
+    }
 
     // 🔧 Prépare les champs selon la visibilité choisie
     const finalDisplayName = show.ownedBy ? (form.display_name || undefined) : undefined
@@ -795,28 +877,59 @@ export default function ClientClaim() {
 
               {/* Sélecteurs date (jour complet) */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
+                {/* Année (1900 -> MAX_Y) */}
                 <label style={{display:'grid', gap:6}}>
                   <span>Année</span>
                   <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
                     style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                    {range(1900, 2100).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
+                    {range(1900, MAX_Y).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
                   </select>
                 </label>
+
+                {/* Mois (borné si année max) */}
                 <label style={{display:'grid', gap:6}}>
                   <span>Mois</span>
-                  <select value={M} onChange={e=>setM(parseInt(e.target.value))}
-                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                    {Array.from({length:12},(_,i)=>i+1).map(v=>(
-                      <option key={v} value={v} style={{color:'#000'}}>{String(v).padStart(2,'0')}</option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const maxMonthForYear = (Y === MAX_Y) ? MAX_M : 12
+                    return (
+                      <select value={M} onChange={e=>setM(parseInt(e.target.value))}
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        {Array.from({length:maxMonthForYear},(_,i)=>i+1).map(v=>(
+                          <option key={v} value={v} style={{color:'#000'}}>{String(v).padStart(2,'0')}</option>
+                        ))}
+                      </select>
+                    )
+                  })()}
                 </label>
+
+                {/* Jour (borné si année/mois max) + indisponibles en rouge & désactivés */}
                 <label style={{display:'grid', gap:6}}>
                   <span>Jour</span>
-                  <select value={D} onChange={e=>setD(parseInt(e.target.value))}
-                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                    {range(1, daysInMonth(Y,M)).map(d=> <option key={d} value={d} style={{color:'#000'}}>{d.toString().padStart(2,'0')}</option>)}
-                  </select>
+                  {(() => {
+                    const dim = daysInMonth(Y, M)
+                    const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
+                    const days = range(1, maxDayForThisMonth)
+                    const set = new Set(unavailableDays)
+                    return (
+                      <select value={D} onChange={e=>setD(parseInt(e.target.value))}
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        {days.map(d=>{
+                          const unavailable = set.has(d)
+                          return (
+                            <option
+                              key={d}
+                              value={d}
+                              disabled={unavailable}
+                              style={{color: unavailable ? '#ff5a5a' : '#000'}}
+                              title={unavailable ? 'Indisponible' : undefined}
+                            >
+                              {d.toString().padStart(2,'0')}{unavailable ? ' — indisponible' : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    )
+                  })()}
                 </label>
               </div>
 
@@ -827,6 +940,9 @@ export default function ClientClaim() {
                 <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
                   <strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}
                 </div>
+              </div>
+              <div style={{marginTop:8, fontSize:12, color:'#ff8a8a'}}>
+                Les jours en rouge sont indisponibles.
               </div>
             </div>
 
@@ -934,21 +1050,21 @@ export default function ClientClaim() {
               </div>
 
               {/* Header (brand + title) */}
-              <div style={{...centerStyle, top: topBrand, fontWeight:800, fontSize: brandSize*scale, color: form.text_color}}>{L.brand}</div>
-              <div style={{...centerStyle, top: topCert,  fontWeight:400, fontSize: subSize*scale, color: subtleColor}}>{L.title}</div>
+              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yBrand, 18), fontWeight:800, fontSize: 18*scale, color: form.text_color }}>{L.brand}</div>
+              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yCert, 12), fontWeight:400, fontSize: 12*scale, color: subtleColor }}>{L.title}</div>
 
               {/* Date principale (AAAA-MM-JJ) */}
-              <div style={{...centerStyle, top: topMainTime, fontWeight:800, fontSize: tsSize*scale, color: form.text_color}}>
+              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topMainTime, fontWeight:800, fontSize: tsSize*scale, color: form.text_color }}>
                 {mainTime}
               </div>
 
               {/* Owned by */}
               {showOwned && (
                 <>
-                  <div style={{...centerStyle, top: ownedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: ownedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {ownedByLabel}
                   </div>
-                  <div style={{...centerStyle, top: ownedNameTop!, fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: ownedNameTop!, fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
                     {nameForPreview}
                   </div>
                 </>
@@ -957,10 +1073,10 @@ export default function ClientClaim() {
               {/* Gifted by */}
               {showGifted && (
                 <>
-                  <div style={{...centerStyle, top: giftedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: giftedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {giftLabel}
                   </div>
-                  <div style={{...centerStyle, top: giftedNameTop!, fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: giftedNameTop!, fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
                     {giftedByStr}
                   </div>
                 </>
@@ -969,11 +1085,11 @@ export default function ClientClaim() {
               {/* Title */}
               {titleForPreview && (
                 <>
-                  <div style={{...centerStyle, top: titleLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: titleLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {titleLabel}
                   </div>
                   {titleLines.map((line, i)=>(
-                    <div key={i} style={{...centerStyle, top: titleLineTops[i], fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
+                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: titleLineTops[i], fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
                       {line}
                     </div>
                   ))}
@@ -983,11 +1099,25 @@ export default function ClientClaim() {
               {/* Message (Regular, pas d’italique pour coller au PDF) */}
               {msgLines.length>0 && (
                 <>
-                  <div style={{...centerStyle, top: msgLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: msgLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {messageLabel}
                   </div>
                   {msgLines.map((line, i)=>(
-                    <div key={i} style={{...centerStyle, top: msgLineTops[i], fontSize: msgSize*scale, color: form.text_color}}>
+                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: msgLineTops[i], fontSize: 12.5*scale, color: form.text_color }}>
+                      {line}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Lien (si présent) */}
+              {linkLines.length>0 && (
+                <>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: linkLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                    {L.link}
+                  </div>
+                  {linkLines.map((line, i)=>(
+                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: linkLineTops[i], fontSize: 10.5*scale, color: mixColorForLink(form.text_color) }}>
                       {line}
                     </div>
                   ))}
@@ -995,7 +1125,7 @@ export default function ClientClaim() {
               )}
 
               {/* Footer: meta à gauche & QR à droite comme le PDF (placeholder) */}
-              <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: labelSize*scale, lineHeight: 1.2}}>
+              <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: 11*scale, lineHeight: 1.2}}>
                 <div style={{opacity:.9}}>{isFR?'ID du certificat':'Certificate ID'}</div>
                 <div style={{marginTop:6, fontWeight:800, color: form.text_color, fontSize: 10.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
                 <div style={{marginTop:8, opacity:.9}}>{isFR?'Intégrité (SHA-256)':'Integrity (SHA-256)'}</div>
