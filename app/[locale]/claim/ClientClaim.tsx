@@ -63,12 +63,7 @@ function parseToDateOrNull(input: string): Date | null {
   const d = new Date(s); if (isNaN(d.getTime())) return null
   d.setUTCHours(0,0,0,0); return d
 }
-function localDayOnly(d: Date | null) {
-  if (!d) return ''
-  try { return d.toLocaleDateString(undefined, { year:'numeric', month:'2-digit', day:'2-digit' }) } catch { return '' }
-}
 function daysInMonth(y:number, m:number) { return new Date(y, m, 0).getDate() }
-const MONTHS_FR = ['01 — Jan','02 — Fév','03 — Mar','04 — Avr','05 — Mai','06 — Juin','07 — Juil','08 — Août','09 — Sep','10 — Oct','11 — Nov','12 — Déc']
 
 // couleurs utils
 function hexToRgb(hex:string){
@@ -84,13 +79,12 @@ function relLum({r,g,b}:{r:number,g:number,b:number}){ const srgb=(c:number)=>{ 
 function contrastRatio(fgHex:string, bgHex=CERT_BG_HEX){ const L1=relLum(hexToRgb(fgHex)), L2=relLum(hexToRgb(bgHex)); const light=Math.max(L1,L2), dark=Math.min(L1,L2); return (light+0.05)/(dark+0.05) }
 function ratioLabel(r:number){ if(r>=7) return {label:'AAA', color:'#0BBF6A'}; if(r>=4.5) return {label:'AA', color:'#E4B73D'}; return {label:'⚠︎ Low', color:'#FF7A7A'} }
 
-// format d’affichage choisi par l’utilisateur
-type DateFormat = 'DMY' | 'MDY'
-function fmtDate(d: Date, fmt: DateFormat){
+/** AAAA-MM-JJ (UTC jour) */
+function ymdUTC(d: Date){
   const y = d.getUTCFullYear()
   const m = String(d.getUTCMonth()+1).padStart(2,'0')
   const day = String(d.getUTCDate()).padStart(2,'0')
-  return fmt==='DMY' ? `${day}/${m}/${y}` : `${m}/${day}/${y}`
+  return `${y}-${m}-${day}`
 }
 
 /** ====== Mesure & wrap en pixels équivalents aux points PDF ====== */
@@ -141,7 +135,7 @@ export default function ClientClaim() {
   const [D, setD] = useState<number>(prefillDate.getDate())
   useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M])
 
-  // Langue pour labels (fr vs en très simple)
+  // Langue (pour quelques libellés)
   const isFR = useMemo(()=>{
     try { return (navigator.language || '').toLowerCase().startsWith('fr') } catch { return false }
   }, [])
@@ -154,14 +148,11 @@ export default function ClientClaim() {
     message:isFR?'Message':'Message',
     link:isFR?'Lien':'Link',
     anon:isFR?'Anonyme':'Anonymous',
-    local:(s:string)=> isFR ? `(local : ${s})` : `(local: ${s})`,
-    utcParen:(s:string)=> isFR ? `(UTC : ${s})` : `(UTC: ${s})`,
     placeholders:{
       giftedName: isFR ? 'Votre nom' : 'Your name',
       title:      isFR ? 'Votre titre' : 'Your title',
       message:    isFR ? 'Votre message…' : 'Your message…',
-      dateDMY:    'JJ/MM/AAAA',
-      dateMDY:    'MM/JJ/AAAA',
+      dateYMD:    'AAAA-MM-JJ',
     }
   }), [isFR])
 
@@ -169,10 +160,6 @@ export default function ClientClaim() {
   const ownedByLabel = L.ownedBy
   const titleLabel = L.titleLabel
   const messageLabel = L.message
-
-  // Sélecteur de format (par défaut : FR → DMY, sinon → MDY)
-  const defaultFmt: DateFormat = isFR ? 'DMY' : 'MDY'
-  const [dateFormat, setDateFormat] = useState<DateFormat>(defaultFmt)
 
   /** Form principal */
   const [form, setForm] = useState({
@@ -188,7 +175,7 @@ export default function ClientClaim() {
     cert_style: initialStyle as CertStyle,
     // compat serveur (non exposé)
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
-    local_date_only: true, // journée => toujours true
+    local_date_only: true, // journée
     text_color: '#1A1F2A',
     // (anciens flags “public” conservés pour compat)
     title_public: false,
@@ -213,18 +200,9 @@ export default function ClientClaim() {
     setForm(f=>({ ...f, ts: isoDayString(d) }))
   }, [Y, M, D])
 
-  // readouts
+  // Date choisie
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
-
-  const utcReadable = useMemo(() => {
-    if (!parsedDate) return ''
-    const y = parsedDate.getUTCFullYear()
-    const m = String(parsedDate.getUTCMonth()+1).padStart(2,'0')
-    const d = String(parsedDate.getUTCDate()).padStart(2,'0')
-    return `${y}-${m}-${d} UTC`
-  }, [parsedDate])
-
-  const localReadableStr = useMemo(() => parsedDate ? localDayOnly(parsedDate) : '', [parsedDate])
+  const chosenDateStr = parsedDate ? ymdUTC(parsedDate) : L.placeholders.dateYMD
 
   /** --------- Custom background --------- */
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -359,8 +337,6 @@ export default function ClientClaim() {
     return isLeap ? 'premium' : 'standard'
   }, [parsedDate])
 
-  const chosenDateStr = parsedDate ? fmtDate(parsedDate, dateFormat) : ''
-
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
@@ -450,7 +426,7 @@ export default function ClientClaim() {
     '#FFFFFF','#E6EAF2',
   ]
 
-  /** ====== PREVIEW calcul identique au PDF ====== */
+  /** ====== PREVIEW (identique au PDF) ====== */
   const previewWrapRef = useRef<HTMLDivElement|null>(null)
   const [scale, setScale] = useState(1) // px per pt
   useLayoutEffect(()=>{
@@ -473,7 +449,7 @@ export default function ClientClaim() {
 
   const nameForPreview = showOwned
     ? (form.display_name.trim() || L.anon)
-    : '' // masqué => pas de bloc
+    : ''
 
   const giftedByStr = showGifted
     ? (form.gifted_by.trim() || L.placeholders.giftedName)
@@ -487,9 +463,7 @@ export default function ClientClaim() {
     ? (form.message.trim() || L.placeholders.message)
     : ''
 
-  const timeLabelMode:'local_plus_utc'|'utc_plus_local'|'utc' = 'local_plus_utc'
-  const mainTime = parsedDate ? (dateFormat==='DMY' ? fmtDate(parsedDate,'DMY') : fmtDate(parsedDate,'MDY')) : (dateFormat==='DMY'?L.placeholders.dateDMY:L.placeholders.dateMDY)
-  const subTime = utcReadable ? L.utcParen(utcReadable.replace(' UTC','')) : ''
+  const mainTime = chosenDateStr // toujours AAAA-MM-JJ
 
   // tailles PDF
   const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5, linkSize = 10.5
@@ -509,7 +483,7 @@ export default function ClientClaim() {
   yHeader -= 18
   const yCert = yHeader
 
-  // footer réservations (on montre QR + meta dans l’aperçu)
+  // footer réservations
   const qrSizePx = QR_SIZE_PT
   const metaBlockH = META_H_PT
   const footerH = Math.max(qrSizePx, metaBlockH)
@@ -531,7 +505,6 @@ export default function ClientClaim() {
 
   const fixedTop =
     (tsSize + 6) +
-    (subTime ? 12 : 0) +
     ownedBlockH
 
   const spaceForText = availH
@@ -565,12 +538,9 @@ export default function ClientClaim() {
   // time main
   y -= (tsSize + 6)
   const topMainTime = toTopPx(y, tsSize)
-  // time sub
-  const topSubTime = subTime ? toTopPx(y - 16, 11) : null
-  if (subTime) y -= 12
 
   // Owned by
-  const ownedLabelTop = showOwned ? ((A4_H_PT - (y - (labelSize + 2))) * scale - (labelSize * scale)) : null // équiv. A4_H - y + 2 (mais on reste cohérent)
+  const ownedLabelTop = showOwned ? ((A4_H_PT - (y - (labelSize + 2))) * scale - (labelSize * scale)) : null
   if (showOwned) y -= (labelSize + 2 + gapSmall)
   const ownedNameTop = showOwned ? toTopPx(y - (nameSize + 4) + 4, nameSize) : null
   if (showOwned) y -= (nameSize + 4)
@@ -774,7 +744,7 @@ export default function ClientClaim() {
                   Aa
                 </div>
                 <div style={{flex:1, height:12, borderRadius:99, background: CERT_BG_HEX, position:'relative', border:'1px solid var(--color-border)'}}>
-                  <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', padding:'0 10px', color:form.text_color, fontSize:12}}>“Owned by — 2024-12-31 UTC”</div>
+                  <div style={{position:'absolute', inset:0, display:'flex', alignItems:'center', padding:'0 10px', color:form.text_color, fontSize:12}}>“Owned by — 2024-12-31”</div>
                 </div>
               </div>
 
@@ -807,18 +777,6 @@ export default function ClientClaim() {
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE JOUR</div>
 
-              {/* Format d’affichage de la date */}
-              <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
-                <label style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: dateFormat==='DMY' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'}}>
-                  <input type="radio" name="date_fmt" value="DMY" checked={dateFormat==='DMY'} onChange={()=>setDateFormat('DMY')} style={{display:'none'}}/>
-                  Format JJ/MM/AAAA
-                </label>
-                <label style={{padding:'8px 10px', borderRadius:10, cursor:'pointer', border: dateFormat==='MDY' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)'}}>
-                  <input type="radio" name="date_fmt" value="MDY" checked={dateFormat==='MDY'} onChange={()=>setDateFormat('MDY')} style={{display:'none'}}/>
-                  Format MM/JJ/AAAA
-                </label>
-              </div>
-
               {/* Sélecteurs date (jour complet) */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
                 <label style={{display:'grid', gap:6}}>
@@ -832,7 +790,9 @@ export default function ClientClaim() {
                   <span>Mois</span>
                   <select value={M} onChange={e=>setM(parseInt(e.target.value))}
                     style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                    {MONTHS_FR.map((txt,idx)=> <option key={idx} value={idx+1} style={{color:'#000'}}>{txt}</option>)}
+                    {Array.from({length:12},(_,i)=>i+1).map(v=>(
+                      <option key={v} value={v} style={{color:'#000'}}>{String(v).padStart(2,'0')}</option>
+                    ))}
                   </select>
                 </label>
                 <label style={{display:'grid', gap:6}}>
@@ -845,10 +805,12 @@ export default function ClientClaim() {
               </div>
 
               <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Affichage choisi&nbsp;:</strong> {chosenDateStr || '—'}</div>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>UTC&nbsp;:</strong> {utcReadable || '—'}</div>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Date locale&nbsp;:</strong> {localReadableStr || '—'}</div>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}><strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}</div>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
+                  <strong>Affichage&nbsp;:</strong> {chosenDateStr || '—'}
+                </div>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
+                  <strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}
+                </div>
               </div>
             </div>
 
@@ -956,28 +918,21 @@ export default function ClientClaim() {
               </div>
 
               {/* Header (brand + title) */}
-              <div style={{...centerStyle, top: topBrand, fontWeight:800, fontSize: brandSize*scale, color: form.text_color}}>{L.brand}</div>
-              <div style={{...centerStyle, top: topCert,  fontWeight:400, fontSize: subSize*scale, color: subtleColor}}>{L.title}</div>
+              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yBrand, 18), fontWeight:800, fontSize: 18*scale, color: form.text_color }}>{L.brand}</div>
+              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yCert, 12), fontWeight:400, fontSize: 12*scale, color: subtleColor }}>{L.title}</div>
 
-              {/* Zone sûre matérialisée par positions calculées (pas de cadres visibles) */}
-              {/* Date principale */}
-              <div style={{...centerStyle, top: topMainTime, fontWeight:800, fontSize: tsSize*scale, color: form.text_color}}>
+              {/* Date principale (AAAA-MM-JJ) */}
+              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topMainTime, fontWeight:800, fontSize: tsSize*scale, color: form.text_color }}>
                 {mainTime}
               </div>
-              {/* Sous-ligne (UTC) */}
-              {subTime && (
-                <div style={{...centerStyle, top: topSubTime!, fontWeight:400, fontSize: 11*scale, color: subtleColor}}>
-                  {subTime}
-                </div>
-              )}
 
               {/* Owned by */}
               {showOwned && (
                 <>
-                  <div style={{...centerStyle, top: ownedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: ownedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {ownedByLabel}
                   </div>
-                  <div style={{...centerStyle, top: ownedNameTop!, fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: ownedNameTop!, fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
                     {nameForPreview}
                   </div>
                 </>
@@ -986,10 +941,10 @@ export default function ClientClaim() {
               {/* Gifted by */}
               {showGifted && (
                 <>
-                  <div style={{...centerStyle, top: giftedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: giftedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {giftLabel}
                   </div>
-                  <div style={{...centerStyle, top: giftedNameTop!, fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: giftedNameTop!, fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
                     {giftedByStr}
                   </div>
                 </>
@@ -998,11 +953,11 @@ export default function ClientClaim() {
               {/* Title */}
               {titleForPreview && (
                 <>
-                  <div style={{...centerStyle, top: titleLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: titleLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {titleLabel}
                   </div>
                   {titleLines.map((line, i)=>(
-                    <div key={i} style={{...centerStyle, top: titleLineTops[i], fontWeight:800, fontSize: nameSize*scale, color: form.text_color}}>
+                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: titleLineTops[i], fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
                       {line}
                     </div>
                   ))}
@@ -1012,25 +967,11 @@ export default function ClientClaim() {
               {/* Message */}
               {msgLines.length>0 && (
                 <>
-                  <div style={{...centerStyle, top: msgLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
+                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: msgLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {messageLabel}
                   </div>
                   {msgLines.map((line, i)=>(
-                    <div key={i} style={{...centerStyle, top: msgLineTops[i], fontStyle:'italic', fontSize: msgSize*scale, color: form.text_color}}>
-                      {line}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Lien (rarement utilisé côté client) */}
-              {linkLines.length>0 && (
-                <>
-                  <div style={{...centerStyle, top: linkLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>
-                    {L.link}
-                  </div>
-                  {linkLines.map((line, i)=>(
-                    <div key={i} style={{...centerStyle, top: linkLineTops[i], fontSize: linkSize*scale, color: mixColorForLink(form.text_color)}}>
+                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: msgLineTops[i], fontStyle:'italic', fontSize: 12.5*scale, color: form.text_color }}>
                       {line}
                     </div>
                   ))}
@@ -1038,7 +979,7 @@ export default function ClientClaim() {
               )}
 
               {/* Footer: meta à gauche & QR à droite comme le PDF */}
-              <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: labelSize*scale, lineHeight: 1.2}}>
+              <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: 11*scale, lineHeight: 1.2}}>
                 <div style={{opacity:.9}}>{isFR?'ID du certificat':'Certificate ID'}</div>
                 <div style={{marginTop:6, fontWeight:800, color: form.text_color, fontSize: 10.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
                 <div style={{marginTop:8, opacity:.9}}>{isFR?'Intégrité (SHA-256)':'Integrity (SHA-256)'}</div>

@@ -1,4 +1,4 @@
-//app/lib/cert.ts
+// app/lib/cert.ts
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib'
 import QRCode from 'qrcode'
 import fs from 'node:fs/promises'
@@ -10,11 +10,11 @@ export type CertStyle =
   | 'custom'
 
 export type Locale = 'fr' | 'en'
-export type TimeLabelMode = 'utc' | 'utc_plus_local' | 'local_plus_utc'
+export type TimeLabelMode = 'utc' | 'utc_plus_local' | 'local_plus_utc' // conservé pour compat, mais non utilisé
 
 const TEXTS = {
-    en: { brand:'Parcels of Time', title:'Certificate of Claim', ownedBy:'Owned by', giftedBy:'Gifted by', titleLabel:'Title', message:'Message', link:'Link', certId:'Certificate ID', integrity:'Integrity (SHA-256)', anon:'Anonymous', local:(s:string)=>`(local: ${s})`, utcParen:(s:string)=>`(UTC: ${s})` },
-    fr: { brand:'Parcels of Time', title:'Certificat de Claim',  ownedBy:'Au nom de', giftedBy:'Offert par', titleLabel:'Titre',  message:'Message', link:'Lien', certId:'ID du certificat', integrity:'Intégrité (SHA-256)', anon:'Anonyme',  local:(s:string)=>`(local : ${s})`, utcParen:(s:string)=>`(UTC : ${s})` },
+  en: { brand:'Parcels of Time', title:'Certificate of Claim', ownedBy:'Owned by', giftedBy:'Gifted by', titleLabel:'Title', message:'Message', link:'Link', certId:'Certificate ID', integrity:'Integrity (SHA-256)', anon:'Anonymous' },
+  fr: { brand:'Parcels of Time', title:'Certificat de Claim',  ownedBy:'Au nom de', giftedBy:'Offert par', titleLabel:'Titre',  message:'Message', link:'Lien', certId:'ID du certificat', integrity:'Intégrité (SHA-256)', anon:'Anonyme' },
 } as const
 
 async function loadBgFromPublic(style: CertStyle){
@@ -47,8 +47,7 @@ function drawBgPortraitAware(page: any, img: any) {
   }
 }
 const PT_PER_CM = 28.3465
-const SHIFT_UP_CM = 2
-const SHIFT_UP_PT = Math.round(PT_PER_CM * SHIFT_UP_CM)
+const SHIFT_UP_PT = Math.round(2 * PT_PER_CM)
 
 function getSafeArea(style: CertStyle){
   const base = { top: 140, right: 96, bottom: 156, left: 96 }
@@ -86,32 +85,12 @@ function wrapText(text: string, font: any, size: number, maxWidth: number) {
   if (line) lines.push(line)
   return lines
 }
-function utcDayLabel(iso: string){
+
+// AAAA-MM-JJ (UTC) pour l’affichage principal
+function ymdFromUTC(iso: string){
   const d = new Date(iso); if (isNaN(d.getTime())) return iso
   d.setUTCHours(0,0,0,0)
-  return d.toISOString().slice(0,10) + ' UTC'
-}
-function localDayLabel(iso: string, locale: Locale, timeZone?: string){
-  const d = new Date(iso); if (isNaN(d.getTime())) return iso
-  d.setHours(0,0,0,0)
-  try {
-    const fmt = new Intl.DateTimeFormat(locale==='fr'?'fr-FR':'en-GB', { year:'numeric', month:'2-digit', day:'2-digit', timeZone })
-    return fmt.format(d)
-  } catch {
-    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0')
-    return `${y}-${m}-${day}`
-  }
-}
-
-function localDayOnlyLabel(iso: string, locale: Locale, timeZone?: string){
-  const d = new Date(iso); if (isNaN(d.getTime())) return iso; d.setSeconds(0,0)
-  try {
-    const fmt = new Intl.DateTimeFormat(locale==='fr'?'fr-FR':'en-GB', { year:'numeric', month:'2-digit', day:'2-digit', timeZone })
-    return fmt.format(d)
-  } catch {
-    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0')
-    return `${y}-${m}-${day}`
-  }
+  return d.toISOString().slice(0,10)
 }
 
 // couleurs
@@ -129,7 +108,7 @@ export async function generateCertificatePDF(opts: {
   public_url: string
   style?: CertStyle
   locale?: Locale
-  timeLabelMode?: TimeLabelMode
+  timeLabelMode?: TimeLabelMode // ignoré, conservé pour compat
   localTimeZone?: string
   customBgDataUrl?: string
   localDateOnly?: boolean
@@ -139,12 +118,10 @@ export async function generateCertificatePDF(opts: {
   hideMeta?: boolean,
 }) {
   const {
-    ts, display_name, title, message, link_url, claim_id, hash, public_url, localTimeZone,
+    ts, display_name, title, message, link_url, claim_id, hash, public_url,
   } = opts
   const style: CertStyle = opts.style || 'neutral'
   const locale: Locale = opts.locale || 'en'
-  const timeLabelMode: TimeLabelMode = opts.timeLabelMode || 'local_plus_utc'
-  const localDateOnly = !!opts.localDateOnly
   const L = TEXTS[locale]
 
   const pdf = await PDFDocument.create()
@@ -198,19 +175,13 @@ export async function generateCertificatePDF(opts: {
   yHeader -= 18
   page.drawText(L.title, { x: CX - font.widthOfTextAtSize(L.title, subSize)/2, y: yHeader, size: subSize, font, color: cSub })
 
-  
-
   // Typo sizes
   const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5, linkSize = 10.5
   const gapSection = 14, gapSmall = 8
   const lineHMsg = 16, lineHLink = 14
 
-  // Date labels (jour)
-  const utcLabel = utcDayLabel(ts)
-  const localLabel = localDayLabel(ts, locale, localTimeZone)
-  let mainTime = utcLabel, subTime = ''
-  if (timeLabelMode === 'utc_plus_local') { mainTime = utcLabel; subTime = L.local(localLabel) }
-  else if (timeLabelMode === 'local_plus_utc') { mainTime = localLabel; subTime = L.utcParen(utcLabel.replace(' UTC','')) }
+  // Date label — AAAA-MM-JJ
+  const mainTime = ymdFromUTC(ts)
 
   // Footer reserved (réduction si QR ou méta masqués)
   const qrSizePx = opts.hideQr ? 0 : 120
@@ -219,7 +190,7 @@ export async function generateCertificatePDF(opts: {
   const footerMarginTop = 8
 
   // Content box
-  const contentTopMax = yHeader - 38+ SHIFT_UP_PT
+  const contentTopMax = yHeader - 38 + SHIFT_UP_PT
   const contentBottomMin = BOT_Y + footerH + footerMarginTop
   const availH = contentTopMax - contentBottomMin
 
@@ -239,20 +210,19 @@ export async function generateCertificatePDF(opts: {
     }
     messageClean = kept.join(' ')
   }
-  const hasName = !forceHideOwned && !!(display_name && String(display_name).trim())  
- 
-   // Wraps
+  const hasName = !forceHideOwned && !!(display_name && String(display_name).trim())
+
+  // Wraps
   const msgLinesAll = messageClean ? wrapText('“' + messageClean + '”', font, msgSize, COLW) : []
   const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
 
   // Hauteurs des blocs optionnels
   const ownedBlockH = hasName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
   const giftedBlockH = giftedName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
-  
+
   const fixedTop =
-    (tsSize + 6) +
-    (subTime ? 12 : 0) +
-  ownedBlockH
+    (tsSize + 6) + // uniquement la date (plus de sous-ligne)
+    ownedBlockH
 
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
@@ -260,8 +230,8 @@ export async function generateCertificatePDF(opts: {
   const titleLines = titleText ? wrapText(titleText, fontBold, nameSize, COLW).slice(0, 2) : []
   const titleBlock = titleText ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
 
- // Consommation avant le message : GiftedBy + (éventuel) Title
-  const beforeMsgConsumed =giftedBlockH +(titleBlock ? (gapSection + titleBlock) : 0)
+  // Consommation avant le message : GiftedBy + Title
+  const beforeMsgConsumed = giftedBlockH + (titleBlock ? (gapSection + titleBlock) : 0)
   const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
   const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
   const msgLines = msgLinesAll.slice(0, maxMsgLines)
@@ -282,11 +252,6 @@ export async function generateCertificatePDF(opts: {
   // Render — time
   y -= (tsSize + 6)
   page.drawText(mainTime, { x: CX - fontBold.widthOfTextAtSize(mainTime, tsSize)/2, y, size: tsSize, font: fontBold, color: cMain })
-  if (subTime) {
-    const ySub = y - 16
-    page.drawText(subTime, { x: CX - font.widthOfTextAtSize(subTime, 11)/2, y: ySub, size: 11, font, color: cSub })
-    y -= 12
-  }
 
   // Owned by (uniquement si autorisé)
   if (hasName) {
@@ -317,7 +282,6 @@ export async function generateCertificatePDF(opts: {
       page.drawText(line, { x: CX - fontBold.widthOfTextAtSize(line, nameSize)/2, y: y - (nameSize + 2), size: nameSize, font: fontBold, color: cMain })
       y -= (nameSize + 6)
     }
-  
   }
 
   // Message
@@ -331,7 +295,7 @@ export async function generateCertificatePDF(opts: {
     }
   }
 
-  // Lien (s'il existe encore dans la DB)
+  // Lien
   if (linkLines.length) {
     y -= gapSection
     page.drawText(L.link, { x: CX - font.widthOfTextAtSize(L.link, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
@@ -353,18 +317,18 @@ export async function generateCertificatePDF(opts: {
   }
 
   if (!opts.hideMeta) {
-     let metaY = EDGE + 76
-     page.drawText(L.certId, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
-     metaY -= (labelSize + 6)
-     page.drawText(claim_id, { x: EDGE, y: metaY - 12, size: 10.5, font: fontBold, color: cMain })
-     metaY -= 20
-     page.drawText(L.integrity, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
-     metaY -= (labelSize + 6)
-     const h1 = hash.slice(0, 64), h2 = hash.slice(64)
-     page.drawText(h1, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
-     metaY -= 16
-     page.drawText(h2, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
-    }
-  
+    let metaY = EDGE + 76
+    page.drawText(L.certId, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+    metaY -= (labelSize + 6)
+    page.drawText(claim_id, { x: EDGE, y: metaY - 12, size: 10.5, font: fontBold, color: cMain })
+    metaY -= 20
+    page.drawText(L.integrity, { x: EDGE, y: metaY - (labelSize + 2), size: labelSize, font, color: cSub })
+    metaY -= (labelSize + 6)
+    const h1 = hash.slice(0, 64), h2 = hash.slice(64)
+    page.drawText(h1, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
+    metaY -= 16
+    page.drawText(h2, { x: EDGE, y: metaY - 12, size: 9.5, font, color: cMain })
+  }
+
   return await pdf.save()
 }
