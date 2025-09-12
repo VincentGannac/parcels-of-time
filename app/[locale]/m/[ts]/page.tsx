@@ -1,4 +1,3 @@
-// app/[locale]/m/[ts]/page.tsx
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -8,12 +7,12 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { formatISOAsNice } from '@/lib/date'
 import { pool } from '@/lib/db'
+import EditClient from './EditClient'
 
 type Params = { locale: string; ts: string }
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
 
 async function getPublicState(tsISO: string): Promise<boolean> {
-  // GET /api/minutes/[ts]/public → { is_public: boolean }
   try {
     const h = await headers()
     const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
@@ -37,27 +36,76 @@ const TOKENS = {
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
+type ClaimForEdit = {
+  email: string | null
+  display_name: string | null
+  title: string | null
+  message: string | null
+  link_url: string | null
+  cert_style: string | null
+  time_display: 'utc'|'utc+local'|'local+utc' | null
+  local_date_only: boolean | null
+  text_color: string | null
+  title_public: boolean | null
+  message_public: boolean | null
+}
+
+async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
+  try {
+    const { rows } = await pool.query(
+      `select o.email, o.display_name,
+              c.title, c.message, c.link_url,
+              c.cert_style, c.time_display, c.local_date_only, c.text_color,
+              c.title_public, c.message_public
+         from claims c
+         left join owners o on o.id = c.owner_id
+        where c.ts = $1::timestamptz`,
+      [tsISO]
+    )
+    if (!rows.length) return null
+    const r = rows[0]
+    return {
+      email: r.email ?? null,
+      display_name: r.display_name ?? null,
+      title: r.title ?? null,
+      message: r.message ?? null,
+      link_url: r.link_url ?? null,
+      cert_style: r.cert_style ?? 'neutral',
+      time_display: (r.time_display ?? 'local+utc') as any,
+      local_date_only: !!r.local_date_only,
+      text_color: (r.text_color ?? '#1a1f2a'),
+      title_public: !!r.title_public,
+      message_public: !!r.message_public,
+    }
+  } catch (e) { console.warn('[minute] getClaimForEdit error', e); return null }
+}
+
+async function getClaimMeta(tsISO: string) {
+  try {
+    const { rows } = await pool.query(
+      `select id as claim_id, cert_hash from claims where ts=$1::timestamptz`,
+      [tsISO]
+    )
+    if (!rows.length) return null
+    return { claimId: String(rows[0].claim_id), hash: String(rows[0].cert_hash || '') }
+  } catch { return null }
+}
+
 export default async function Page({ params }: { params: Promise<Params> }) {
   const { locale = 'en', ts: tsParam = '' } = await params
   const decodedTs = safeDecode(tsParam)
+
+  // Données “public/tech”
   const isPublic = await getPublicState(decodedTs)
-
-  async function getClaimMeta(tsISO: string) {
-    try {
-      const { rows } = await pool.query(
-        `select id as claim_id, cert_hash from claims where ts=$1::timestamptz`,
-        [tsISO]
-      )
-      if (!rows.length) return null
-      return { claimId: String(rows[0].claim_id), hash: String(rows[0].cert_hash || '') }
-    } catch { return null }
-  }
-
   const meta = await getClaimMeta(decodedTs)
+
+  // Données d’édition
+  const claim = await getClaimForEdit(decodedTs)
+
   const pdfHref = `/api/cert/${encodeURIComponent(decodedTs)}`
   const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
-  const verifyHref = `/api/verify?ts=${encodeURIComponent(decodedTs)}` // ✅
+  const verifyHref = `/api/verify?ts=${encodeURIComponent(decodedTs)}`
 
   let niceTs = decodedTs
   try { niceTs = formatISOAsNice(decodedTs) } catch {}
@@ -97,7 +145,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
         background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh', fontFamily:'Inter, system-ui',
       }}
     >
-      <section style={{ maxWidth:1100, margin:'0 auto', padding:'48px 24px' }}>
+      <section style={{ maxWidth:1200, margin:'0 auto', padding:'48px 24px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:18 }}>
           <a href={homeHref} style={{ textDecoration:'none', color:'var(--color-text)', opacity:.85 }}>&larr; Parcels of Time</a>
           <div style={{ fontSize:12, color:'var(--color-muted)' }}>Paiement sécurisé <strong>Stripe</strong></div>
@@ -126,7 +174,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
             </p>
           </div>
 
-          {/* Registre public : état + action */}
+          {/* Registre public */}
           <aside style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
               <div style={{ fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)' }}>
@@ -162,7 +210,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
           </aside>
         </div>
 
-        {/* ✅ Nouveau panneau Preuve & intégrité */}
+        {/* Preuve & intégrité */}
         <aside
           style={{
             marginTop:18,
@@ -215,6 +263,37 @@ export default async function Page({ params }: { params: Promise<Params> }) {
             <div style={{fontSize:13, color:'var(--color-muted)'}}>Métadonnées non disponibles.</div>
           )}
         </aside>
+
+        {/* ======= ÉDITION (9,99 €) ======= */}
+        <section style={{ marginTop:24 }}>
+          <h2 style={{ fontFamily:'Fraunces, serif', fontSize:28, margin:'0 0 12px' }}>
+            Modifier votre certificat <small style={{fontSize:14, opacity:.7}}>(9,99 €)</small>
+          </h2>
+
+          {claim ? (
+            <EditClient
+              tsISO={decodedTs}
+              locale={locale}
+              initial={{
+                email: claim.email || '',
+                display_name: claim.display_name || '',
+                title: claim.title || '',
+                message: claim.message || '',
+                link_url: claim.link_url || '',
+                cert_style: (claim.cert_style as any) || 'neutral',
+                time_display: (claim.time_display as any) || 'local+utc',
+                local_date_only: !!claim.local_date_only,
+                text_color: claim.text_color || '#1a1f2a',
+                title_public: !!claim.title_public,
+                message_public: !!claim.message_public,
+              }}
+            />
+          ) : (
+            <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:16 }}>
+              <p style={{ margin:0 }}>Aucune donnée trouvée pour cette journée. Assurez-vous que l’URL contient bien un horodatage valide.</p>
+            </div>
+          )}
+        </section>
 
         <div style={{ marginTop:18, display:'flex', gap:12, flexWrap:'wrap' }}>
           <a href={pdfHref} target="_blank" rel="noreferrer"

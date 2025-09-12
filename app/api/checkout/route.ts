@@ -61,13 +61,13 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body
     if (!body.ts || !body.email) return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
 
-    // Normalise à minuit UTC
+ 
     const d = new Date(body.ts)
     if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
     d.setUTCHours(0,0,0,0)
     const tsISO = d.toISOString()
 
-    // Borne max : aujourd’hui UTC + 1 an
+  
     const maxAllowed = oneYearAfter(todayUtcStart())
     if (d.getTime() > maxAllowed.getTime()) {
       return NextResponse.json({ error: 'ts_out_of_range' }, { status: 400 })
