@@ -264,35 +264,50 @@ export default async function Page({ params }: { params: Promise<Params> }) {
           )}
         </aside>
 
-        {/* ======= ÉDITION (9,99 €) ======= */}
+        {/* ======= ÉDITION (9,99 €) — DÉPLIANTE ======= */}
         <section style={{ marginTop:24 }}>
-          <h2 style={{ fontFamily:'Fraunces, serif', fontSize:28, margin:'0 0 12px' }}>
-            Modifier votre certificat <small style={{fontSize:14, opacity:.7}}>(9,99 €)</small>
-          </h2>
-
-          {claim ? (
-            <EditClient
-              tsISO={decodedTs}
-              locale={locale}
-              initial={{
-                email: claim.email || '',
-                display_name: claim.display_name || '',
-                title: claim.title || '',
-                message: claim.message || '',
-                link_url: claim.link_url || '',
-                cert_style: (claim.cert_style as any) || 'neutral',
-                time_display: (claim.time_display as any) || 'local+utc',
-                local_date_only: !!claim.local_date_only,
-                text_color: claim.text_color || '#1a1f2a',
-                title_public: !!claim.title_public,
-                message_public: !!claim.message_public,
+          <details style={{border:'1px solid var(--color-border)', borderRadius:12, background:'var(--color-surface)'}}>
+            <summary
+              style={{
+                listStyle:'none', cursor:'pointer',
+                padding:'14px 16px', display:'flex', alignItems:'center', justifyContent:'space-between',
+                userSelect:'none'
               }}
-            />
-          ) : (
-            <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:16 }}>
-              <p style={{ margin:0 }}>Aucune donnée trouvée pour cette journée. Assurez-vous que l’URL contient bien un horodatage valide.</p>
+              onClick={(e)=>{ /* stylistic only */ }}
+            >
+              <span style={{ display:'flex', alignItems:'baseline', gap:10 }}>
+                <span style={{ fontFamily:'Fraunces, serif', fontSize:20 }}>Modifier votre certificat</span>
+                <small style={{fontSize:13, opacity:.75}}>(9,99 €)</small>
+              </span>
+              <span aria-hidden style={{opacity:.7}}>▼</span>
+            </summary>
+
+            <div style={{ padding:16, borderTop:'1px solid var(--color-border)' }}>
+            {claim ? (
+              <EditClient
+                tsISO={decodedTs}
+                locale={locale}
+                initial={{
+                  email: claim.email || '',
+                  display_name: claim.display_name || '',
+                  title: claim.title || '',
+                  message: claim.message || '',
+                  link_url: claim.link_url || '',
+                  cert_style: (claim.cert_style as any) || 'neutral',
+                  time_display: (claim.time_display as any) || 'local+utc',
+                  local_date_only: !!claim.local_date_only,
+                  text_color: claim.text_color || '#1a1f2a',
+                  title_public: !!claim.title_public,
+                  message_public: !!claim.message_public,
+                }}
+              />
+            ) : (
+              <div style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:16 }}>
+                <p style={{ margin:0 }}>Aucune donnée trouvée pour cette journée. Assurez-vous que l’URL contient bien un horodatage valide.</p>
+              </div>
+            )}
             </div>
-          )}
+          </details>
         </section>
 
         <div style={{ marginTop:18, display:'flex', gap:12, flexWrap:'wrap' }}>
