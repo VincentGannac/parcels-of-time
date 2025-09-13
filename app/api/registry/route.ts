@@ -1,4 +1,3 @@
-//app/api/registry/route.ts
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +15,6 @@ type Row = {
 
 export async function GET() {
   try {
-    // JOIN strict (FK minute_public.ts -> claims.ts)
     const { rows } = await pool.query(
       `select
          c.ts,

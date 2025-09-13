@@ -59,7 +59,6 @@ export default function RegistryClient({
         if (cancelled) return
         const clean = Array.isArray(data) ? data : []
         setItems(clean)
-
         if (clean.length === 0 && attempt < delays.length) {
           const t = delays[attempt++]
           setTimeout(() => { if (!cancelled) load() }, t)
@@ -95,7 +94,6 @@ export default function RegistryClient({
       }}
     >
       <section style={{maxWidth:1280, margin:'0 auto', padding:'56px 24px 64px'}}>
-        {/* Header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
           <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
           <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85, border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:12}}>
@@ -103,7 +101,6 @@ export default function RegistryClient({
           </a>
         </div>
 
-        {/* Manifeste / Hero */}
         <header style={{marginBottom:20}}>
           <h1 style={{fontFamily:'Fraunces, serif', fontSize:46, lineHeight:'54px', margin:'0 0 10px', letterSpacing:.2}}>
             Registre public — œuvres de la minute
@@ -172,7 +169,6 @@ function CurationBar({ items }: { items: RegistryRow[] }) {
   )
 }
 
-/** Petit bandeau de stats / filtres sémantiques (non-intrusif) */
 function RegistryGalleryControls({ q, setQ, view }:{
   q:string; setQ:(s:string)=>void; view:'wall'|'salon'
 }) {
@@ -216,7 +212,6 @@ function RegistryWall({ items, q, view, total }:{
     )
   }, [q, items])
 
-  // Les deux vues utilisent des PDF iframes (vrai rendu : titres + fonds custom)
   const tall = view === 'salon'
 
   return (
@@ -238,8 +233,7 @@ function RegistryWall({ items, q, view, total }:{
             key={row.ts}
             row={row}
             tall={tall}
-            // priorité aux 6 premières cartes pour une première vue rapide
-            priority={i < 6}
+            priority={i < 12} // monte immédiatement les 12 premières pour un rendu plein-viewport
           />
         ))}
         {filtered.length===0 && <p style={{opacity:.7, gridColumn:'1 / -1'}}>Aucun résultat.</p>}
@@ -252,7 +246,6 @@ function RegistryCard(
   { row, style, tall, priority }:
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
 ) {
-  // PDF public, sans métadonnées périphériques, avec contenu réel (titres/messages/fonds custom)
   const pdfHref =
     `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
@@ -284,14 +277,12 @@ function RegistryCard(
       }}>
         <LazyIframe src={pdfHref} priority={!!priority} />
 
-        {/* voile artistique */}
         <div style={{
           position:'absolute', inset:0,
           background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)',
           pointerEvents:'none'
         }} />
 
-        {/* ✅ Badge Authentifié */}
         <div
           aria-label="Certificat authentifié"
           style={{
@@ -307,7 +298,6 @@ function RegistryCard(
           <span>Authentifié</span><span aria-hidden>✓</span>
         </div>
 
-        {/* légende discrète */}
         <figcaption
           style={{
             position:'absolute', left:0, right:0, bottom:0,
@@ -337,7 +327,6 @@ function RegistryCard(
         </figcaption>
       </div>
 
-      {/* hover effects */}
       <style>{`
         article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }
         article:hover figcaption { opacity: 1; transform: translateY(0); }
@@ -346,54 +335,43 @@ function RegistryCard(
   )
 }
 
-/* --- Iframe lazy : monte quand visible, démonte quand hors écran --- */
+/** Monte l’iframe une fois quand visible. Ne démonte jamais (évite les “gris”). */
 function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null)
-  const [mount, setMount] = useState<boolean>(priority)
+  const [mounted, setMounted] = useState<boolean>(priority)
 
   useEffect(() => {
-    if (priority) return setMount(true)
-
+    if (priority) return setMounted(true)
     const el = ref.current
     if (!el) return
-
-    let hideTimer: number | undefined
+    let done = false
     const io = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          if (hideTimer) { window.clearTimeout(hideTimer); hideTimer = undefined }
-          setMount(true)
-        } else {
-          // on démonte après une petite latence pour éviter le clignotement
-          if (!hideTimer) {
-            hideTimer = window.setTimeout(() => setMount(false), 1200)
-          }
+        if (!done && entry.isIntersecting) {
+          done = true
+          setMounted(true)
+          io.disconnect()
         }
       },
-      { rootMargin: '800px', threshold: 0.01 } // pré-monte bien avant l’affichage
+      { rootMargin: '800px', threshold: 0.01 }
     )
-
     io.observe(el)
-    return () => {
-      io.disconnect()
-      if (hideTimer) window.clearTimeout(hideTimer)
-    }
+    return () => io.disconnect()
   }, [priority])
 
   return (
     <div ref={ref} style={{position:'absolute', inset:0}}>
-      {mount ? (
+      {mounted ? (
         <iframe
           src={src}
           title="Œuvre"
-          loading="lazy"
+          /* pas de loading='lazy' ici : on pilote déjà via IO */
           style={{
             position:'absolute', inset:0, width:'100%', height:'100%', border:'0',
             pointerEvents:'none', userSelect:'none'
           }}
         />
       ) : (
-        // Skeleton léger le temps du montage
         <div
           style={{
             position:'absolute', inset:0,

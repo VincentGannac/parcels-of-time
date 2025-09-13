@@ -44,7 +44,7 @@ async function getFromDB(): Promise<RegistryRow[]> {
   }
 }
 
-/** Fallback SSR via l'API (au cas où la DB SSR soit lente/cold) */
+/** Fallback SSR via l’API (au cas où la DB SSR soit lente/cold) */
 async function getFromAPI(): Promise<RegistryRow[]> {
   try {
     const h = await headers()
