@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-import { headers } from 'next/headers'
+import { pool } from '@/lib/db'
 import RegistryClient from './RegistryClient'
 
 type Params = { locale: string }
@@ -17,20 +17,28 @@ type RegistryRow = {
 
 async function getPublicItems(): Promise<RegistryRow[]> {
   try {
-    const h = await headers()
-    const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
-    const host  = (h.get('host') || '').split(',')[0].trim()
-    const base  = process.env.NEXT_PUBLIC_BASE_URL || (host ? `${proto}://${host}` : '')
-
-    // Cache-buster pour éviter un cache intermédiaire
-    const res = await fetch(`${base}/api/registry?v=${Date.now()}`, {
-      cache: 'no-store',
-      next: { revalidate: 0 },
-    })
-    if (!res.ok) return []
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
+    const { rows } = await pool.query(
+      `select
+         c.ts,
+         coalesce(o.display_name, 'Anonymous') as owner,
+         c.title,
+         c.message,
+         c.cert_style as style
+       from minute_public mp
+       join claims c on c.ts = mp.ts
+       join owners o on o.id = c.owner_id
+       order by c.ts desc
+       limit 500`
+    )
+    return rows.map((r: any) => ({
+      ts: new Date(r.ts).toISOString(),
+      owner: String(r.owner || 'Anonymous'),
+      title: r.title ?? null,
+      message: r.message ?? null,
+      style: String(r.style || 'neutral'),
+    }))
   } catch {
+    // En cas d’erreur DB côté SSR, on renvoie une liste vide — le client fera un backoff.
     return []
   }
 }

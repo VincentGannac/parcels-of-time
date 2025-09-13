@@ -99,7 +99,6 @@ export default function RegistryClient({
       }}
     >
       <section style={{maxWidth:1280, margin:'0 auto', padding:'56px 24px 64px'}}>
-        {/* Header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
           <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
           <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85, border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:12}}>
@@ -107,7 +106,6 @@ export default function RegistryClient({
           </a>
         </div>
 
-        {/* Manifeste / Hero */}
         <header style={{marginBottom:20}}>
           <h1 style={{fontFamily:'Fraunces, serif', fontSize:46, lineHeight:'54px', margin:'0 0 10px', letterSpacing:.2}}>
             Registre public — œuvres de la minute
@@ -220,7 +218,7 @@ function RegistryWall({ items, q, view, total }:{
     )
   }, [q, items])
 
-  // Les deux vues utilisent des PDF iframes (vrai rendu : titres + fonds custom)
+  // Les deux vues utilisent des PDF iframes (rendu réel : titres + fonds custom)
   const tall = view === 'salon'
 
   return (
@@ -372,7 +370,6 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
 
     const io = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
-        // pré-monte quand visible (ou proche) + gate
         tryClaim()
       }
     }, { rootMargin: '400px' })
@@ -397,7 +394,6 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
           }}
         />
       ) : (
-        // Skeleton léger (image dégradée) le temps de monter l’iframe
         <div
           style={{
             position:'absolute', inset:0,
