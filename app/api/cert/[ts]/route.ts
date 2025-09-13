@@ -1,4 +1,3 @@
-// app/api/cert/[ts]/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -15,7 +14,7 @@ export async function GET(req: Request, ctx: any) {
     url.searchParams.has('public') ||
     url.searchParams.get('public') === '1' ||
     url.searchParams.get('hide_qr') === '1'
-    const hideMeta =
+  const hideMeta =
     url.searchParams.get('hide_meta') === '1' ||
     url.searchParams.has('hide_meta')
 
@@ -74,7 +73,9 @@ export async function GET(req: Request, ctx: any) {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="cert-${encodeURIComponent(decodedTs)}.pdf"`,
-      'Cache-Control': 'no-store',
+      // ✅ cache public CDN (les certificats sont immuables)
+      'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+      'Vary': 'Accept-Language',
     },
   })
 }

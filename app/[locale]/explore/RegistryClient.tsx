@@ -35,6 +35,10 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+/* ----- Gate de lancement des iframes pour éviter la saturation serveur ----- */
+let __bootInflight = 0
+const MAX_BOOT_CONCURRENCY = 3
+
 export default function RegistryClient({
   locale,
   initialItems
@@ -44,36 +48,50 @@ export default function RegistryClient({
   const [loading, setLoading] = useState(initialItems.length === 0)
   const [error, setError] = useState<string>('')
 
-  // Backoff si SSR a renvoyé 0 (publication fraîche / cold start)
+  // Petit refresh client pour résorber les cas "0 œuvre" en SSR
   useEffect(() => {
     let cancelled = false
-    let attempt = 0
-    const delays = [800, 1600, 3200, 5000] // ~10s total
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/registry?v=${Date.now()}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const data: RegistryRow[] = await res.json()
+        if (!cancelled && Array.isArray(data) && data.length >= items.length) {
+          setItems(data)
+          setLoading(false)
+        }
+      } catch {}
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
+  // Backoff si la liste initiale est vide
+  useEffect(() => {
+    if (initialItems.length > 0) return
+    let cancelled = false, attempt = 0
+    const delays = [800, 1600, 3200, 5000]
     const load = async () => {
       try {
         setLoading(true); setError('')
         const res = await fetch(`/api/registry?v=${Date.now()}`, { cache: 'no-store' })
         if (!res.ok) throw new Error('HTTP '+res.status)
         const data: RegistryRow[] = await res.json()
-        if (cancelled) return
-        const clean = Array.isArray(data) ? data : []
-        setItems(clean)
-        if (clean.length === 0 && attempt < delays.length) {
-          const t = delays[attempt++]
-          setTimeout(() => { if (!cancelled) load() }, t)
+        if (!cancelled) {
+          const clean = Array.isArray(data) ? data : []
+          setItems(clean)
+          setLoading(false)
+          if (clean.length === 0 && attempt < delays.length) {
+            setTimeout(() => { if (!cancelled) load() }, delays[attempt++])
+          }
         }
       } catch {
-        if (!cancelled) setError('Impossible de charger le registre public.')
-      } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) { setError('Impossible de charger le registre public.'); setLoading(false) }
       }
     }
-
-    if (initialItems.length === 0) load()
+    load()
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [initialItems.length])
 
   return (
     <main
@@ -233,7 +251,8 @@ function RegistryWall({ items, q, view, total }:{
             key={row.ts}
             row={row}
             tall={tall}
-            priority={i < 12} // monte immédiatement les 12 premières pour un rendu plein-viewport
+            // on “démarre” les 12 premières très vite; le gate fait le reste
+            priority={i < 12}
           />
         ))}
         {filtered.length===0 && <p style={{opacity:.7, gridColumn:'1 / -1'}}>Aucun résultat.</p>}
@@ -246,6 +265,7 @@ function RegistryCard(
   { row, style, tall, priority }:
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
 ) {
+  // PDF réel avec fonds custom via /api/cert
   const pdfHref =
     `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
@@ -277,12 +297,14 @@ function RegistryCard(
       }}>
         <LazyIframe src={pdfHref} priority={!!priority} />
 
+        {/* voile artistique */}
         <div style={{
           position:'absolute', inset:0,
           background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)',
           pointerEvents:'none'
         }} />
 
+        {/* ✅ Badge Authentifié */}
         <div
           aria-label="Certificat authentifié"
           style={{
@@ -298,6 +320,7 @@ function RegistryCard(
           <span>Authentifié</span><span aria-hidden>✓</span>
         </div>
 
+        {/* légende discrète (affichée au survol) */}
         <figcaption
           style={{
             position:'absolute', left:0, right:0, bottom:0,
@@ -327,6 +350,7 @@ function RegistryCard(
         </figcaption>
       </div>
 
+      {/* hover effects */}
       <style>{`
         article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }
         article:hover figcaption { opacity: 1; transform: translateY(0); }
@@ -335,43 +359,81 @@ function RegistryCard(
   )
 }
 
-/** Monte l’iframe une fois quand visible. Ne démonte jamais (évite les “gris”). */
+/* --- Iframe lazy : ne démonte jamais une fois montée + gate de boot --- */
 function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
-  const ref = useRef<HTMLDivElement | null>(null)
+  const holderRef = useRef<HTMLDivElement | null>(null)
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [mounted, setMounted] = useState<boolean>(priority)
+  const bootedRef = useRef(false)
 
+  // tente de prendre un "slot" de boot
+  const tryBoot = () => {
+    if (bootedRef.current || mounted) return
+    if (__bootInflight < MAX_BOOT_CONCURRENCY) {
+      __bootInflight += 1
+      bootedRef.current = true
+      setMounted(true)
+    }
+  }
+
+  // intersection → demande de boot (slot si dispo, sinon attend)
   useEffect(() => {
-    if (priority) return setMounted(true)
-    const el = ref.current
+    if (priority) { tryBoot(); return }
+    const el = holderRef.current
     if (!el) return
-    let done = false
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (!done && entry.isIntersecting) {
-          done = true
-          setMounted(true)
-          io.disconnect()
-        }
-      },
-      { rootMargin: '800px', threshold: 0.01 }
-    )
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) tryBoot()
+    }, { rootMargin: '600px', threshold: 0.01 })
     io.observe(el)
     return () => io.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priority])
 
+  // libère le slot une fois l'iframe chargée (ou time-out fail-safe)
+  useEffect(() => {
+    if (!mounted) return
+    let released = false
+    const release = () => {
+      if (released) return
+      released = true
+      __bootInflight = Math.max(0, __bootInflight - 1)
+    }
+
+    // fail-safe si le "load" ne se déclenche pas
+    const to = window.setTimeout(release, 12000)
+
+    const ifr = iframeRef.current
+    if (ifr) {
+      const onLoad = () => release()
+      ifr.addEventListener('load', onLoad)
+      // certains viewers peuvent injecter un sous-document → double sécurité
+      const onError = () => release()
+      ifr.addEventListener('error', onError)
+      return () => {
+        window.clearTimeout(to)
+        ifr.removeEventListener('load', onLoad)
+        ifr.removeEventListener('error', onError)
+        release()
+      }
+    }
+    return () => { window.clearTimeout(to); release() }
+  }, [mounted])
+
   return (
-    <div ref={ref} style={{position:'absolute', inset:0}}>
+    <div ref={holderRef} style={{position:'absolute', inset:0}}>
       {mounted ? (
         <iframe
+          ref={iframeRef}
           src={src}
           title="Œuvre"
-          /* pas de loading='lazy' ici : on pilote déjà via IO */
+          loading="lazy"
           style={{
             position:'absolute', inset:0, width:'100%', height:'100%', border:'0',
             pointerEvents:'none', userSelect:'none'
           }}
         />
       ) : (
+        // Skeleton léger le temps de disposer d’un slot de boot
         <div
           style={{
             position:'absolute', inset:0,

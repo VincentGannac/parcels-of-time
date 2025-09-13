@@ -1,4 +1,3 @@
-// lib/db.ts
 import { Pool } from 'pg';
 
 declare global {
@@ -13,14 +12,13 @@ export const pool =
     ssl: process.env.DATABASE_URL?.includes('supabase')
       ? { rejectUnauthorized: false }
       : undefined,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000,
-    max: 5,
+    max: 10, // ← un peu plus de marge pour le rendu PDF en parallèle
   });
 
 if (process.env.NODE_ENV !== 'production') global.__pgPool = pool;
 
-// éviter un crash de Node si le pool émet 'error'
 pool.on('error', (err) => {
   console.error('PG pool error:', err.message);
 });

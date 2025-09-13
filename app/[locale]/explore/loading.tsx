@@ -19,7 +19,6 @@ export default function Loading() {
         />
         <div style={{opacity:.85}}>Chargement du registre…</div>
       </div>
-
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   )
