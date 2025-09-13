@@ -127,16 +127,20 @@ async function getClaimMeta(tsISO: string) {
   } catch { return null }
 }
 
-export default async function Page({
-  params,
-  searchParams
-}: { params: Promise<Params>, searchParams?: { autopub?: string, ok?: string } }) {
+ type SearchParams = { autopub?: string; ok?: string };
+ export default async function Page({
+   params,
+   searchParams
+ }: {
+   params: Promise<Params>;
+   searchParams?: Promise<SearchParams>;
+ }) {
   const { locale = 'en', ts: tsParam = '' } = await params;
   const decodedTs = safeDecode(tsParam);
 
+  const sp = searchParams ? await searchParams : undefined;
   const isPublic = await getPublicState(decodedTs);
-  const wantsAutopub = (searchParams?.autopub === '1');
-
+  const wantsAutopub = sp?.autopub === '1';
   // 👇 autopub au premier chargement si demandé et pas déjà public
   if (wantsAutopub && !isPublic) {
     await setPublic(decodedTs, true);
