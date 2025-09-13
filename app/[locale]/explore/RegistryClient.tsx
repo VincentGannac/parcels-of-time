@@ -44,11 +44,11 @@ export default function RegistryClient({
   const [loading, setLoading] = useState(initialItems.length === 0)
   const [error, setError] = useState<string>('')
 
-  // Backoff si liste vide (publication toute fraîche / cold start)
+  // Backoff si liste vide (publication fraîche / cold start)
   useEffect(() => {
     let cancelled = false
     let attempt = 0
-    const delays = [800, 1600, 3200, 5000] // ~10s au total
+    const delays = [800, 1600, 3200, 5000] // ~10s
 
     const load = async () => {
       try {
@@ -60,7 +60,6 @@ export default function RegistryClient({
         const clean = Array.isArray(data) ? data : []
         setItems(clean)
 
-        // Re-tente si vide
         if (clean.length === 0 && attempt < delays.length) {
           const t = delays[attempt++]
           setTimeout(() => { if (!cancelled) load() }, t)
@@ -266,7 +265,7 @@ function RegistryCard(
   // PDF public, sans interaction
   const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
-  // --- Mur : IMG rapide (visuel identique : cadre, voile, badge, légende au survol) ---
+  // --- Mur : IMG rapide (cadre/voile/badge/légende identiques) ---
   if (!tall) {
     const st = String(row.style || 'neutral')
     const thumb = bgThumbForStyle(st)
@@ -422,7 +421,7 @@ function RegistryCard(
   )
 }
 
-/* --- Utilitaire : monte l'iframe seulement quand visible --- */
+/* --- Monte l'iframe seulement quand l'élément devient visible --- */
 function LazyIframe({ src }: { src: string }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [mount, setMount] = useState(false)

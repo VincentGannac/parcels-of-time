@@ -22,7 +22,7 @@ async function getPublicItems(): Promise<RegistryRow[]> {
     const host  = (h.get('host') || '').split(',')[0].trim()
     const base  = process.env.NEXT_PUBLIC_BASE_URL || (host ? `${proto}://${host}` : '')
 
-    // Cache-buster pour éviter tout cache intermédiaire
+    // Cache-buster pour éviter un cache intermédiaire
     const res = await fetch(`${base}/api/registry?v=${Date.now()}`, {
       cache: 'no-store',
       next: { revalidate: 0 },
@@ -35,8 +35,8 @@ async function getPublicItems(): Promise<RegistryRow[]> {
   }
 }
 
-export default async function Page({ params }: { params: Params }) {
-  const { locale = 'en' } = params
+export default async function Page({ params }: { params: Promise<Params> }) {
+  const { locale = 'en' } = await params
   const items = await getPublicItems()
   return <RegistryClient locale={locale} initialItems={items} />
 }
