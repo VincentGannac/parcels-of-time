@@ -1,3 +1,4 @@
+//api/cert/[ts]
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -117,7 +118,7 @@ export async function GET(req: Request, ctx: any) {
   // Génération PDF
   const pdfBytes = await generateCertificatePDF({
     ts: tsISO, // 👈 toujours la minute UTC normalisée
-    display_name: row.display_name || '',
+    display_name: row.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
     title: row.title,
     message: row.message,
     link_url: row.link_url,
