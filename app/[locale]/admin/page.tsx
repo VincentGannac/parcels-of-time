@@ -1,3 +1,4 @@
+//app/locale/admin/page.tsx
 import { pool } from '@/lib/db'
 
 export const runtime = 'nodejs'

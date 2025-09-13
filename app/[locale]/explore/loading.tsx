@@ -1,3 +1,4 @@
+//app/[locale]/explore/loading.tsx
 export default function Loading() {
   return (
     <main

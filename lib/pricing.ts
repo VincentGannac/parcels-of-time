@@ -1,3 +1,4 @@
+//app/lib/pricing.ts
 import { detectEdition, Edition } from './labels';
 
 export function priceFor(dateISO: string) {

@@ -1,3 +1,4 @@
+//app/%5Blocale%5D/explore/RegistryClient.tsx
 'use client'
 
 import { useMemo, useState, useEffect, useRef } from 'react'

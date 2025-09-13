@@ -1,3 +1,4 @@
+//app/locale]/m/[ts]/EditClient.tsx
 'use client'
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
