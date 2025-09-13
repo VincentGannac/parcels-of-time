@@ -44,17 +44,12 @@ export default function RegistryClient({
   initialItems
 }: { locale: string; initialItems: RegistryRow[] }) {
   const loc = (locale || 'en') as string
-
   const [items, setItems] = useState<RegistryRow[]>(initialItems)
   const [loading, setLoading] = useState(initialItems.length === 0)
   const [error, setError] = useState<string>('')
-  const [finishedRetries, setFinishedRetries] = useState<boolean>(initialItems.length > 0)
 
-  // Backoff si liste vide (publication fraîche / cold start).
-  // N'affiche "Aucune œuvre" qu'après toutes les retentes.
+  // Backoff si liste vide (publication fraîche / cold start)
   useEffect(() => {
-    if (initialItems.length > 0) return
-
     let cancelled = false
     let attempt = 0
     const delays = [800, 1600, 3200, 5000] // ~10s total
@@ -72,20 +67,15 @@ export default function RegistryClient({
         if (clean.length === 0 && attempt < delays.length) {
           const t = delays[attempt++]
           setTimeout(() => { if (!cancelled) load() }, t)
-        } else {
-          setFinishedRetries(true)
         }
       } catch {
-        if (!cancelled) {
-          setError('Impossible de charger le registre public.')
-          setFinishedRetries(true)
-        }
+        if (!cancelled) setError('Impossible de charger le registre public.')
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
 
-    load()
+    if (initialItems.length === 0) load()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -138,7 +128,7 @@ export default function RegistryClient({
           <div style={{marginTop:24, color:'#ffb2b2', border:'1px solid #ff8a8a', background:'rgba(255,0,0,.06)', padding:12, borderRadius:12}}>
             {error}
           </div>
-        ) : items.length === 0 && finishedRetries ? (
+        ) : items.length === 0 ? (
           <div style={{marginTop:24, opacity:.8}}>Aucune œuvre publique pour le moment.</div>
         ) : (
           <CurationBar items={items} />
@@ -230,7 +220,7 @@ function RegistryWall({ items, q, view, total }:{
     )
   }, [q, items])
 
-  // Les deux vues utilisent des PDF iframes (rendu réel : titres + fonds custom)
+  // Les deux vues utilisent des PDF iframes (vrai rendu : titres + fonds custom)
   const tall = view === 'salon'
 
   return (
@@ -266,7 +256,7 @@ function RegistryCard(
   { row, style, tall, priority }:
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
 ) {
-  // PDF public, contenu réel (titres/messages/fonds custom)
+  // PDF public, sans métadonnées périphériques, avec contenu réel (titres/messages/fonds custom)
   const pdfHref =
     `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
@@ -382,6 +372,7 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
 
     const io = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
+        // pré-monte quand visible (ou proche) + gate
         tryClaim()
       }
     }, { rootMargin: '400px' })
@@ -406,7 +397,7 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
           }}
         />
       ) : (
-        // Skeleton léger (dégradé) le temps de monter l’iframe
+        // Skeleton léger (image dégradée) le temps de monter l’iframe
         <div
           style={{
             position:'absolute', inset:0,

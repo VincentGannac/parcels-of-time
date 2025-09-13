@@ -69,7 +69,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
   // 1) DB directe
   let items = await getFromDB()
 
-  // 2) Si vide, second filet via l'API (toujours en SSR)
+  // 2) Si vide, second filet via l’API (toujours en SSR)
   if (items.length === 0) {
     const apiItems = await getFromAPI()
     if (apiItems.length) items = apiItems

@@ -1,60 +1,56 @@
-// app/api/minutes/[ts]/route.ts
+export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 
-export const dynamic = 'force-dynamic'
+/** Normalise au début de journée UTC (aligné avec claims.ts) */
+function normDayTs(ts: string) {
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return null
+  d.setUTCHours(0, 0, 0, 0)
+  return d.toISOString()
+}
 
-// GET /api/minutes/[ts] → { found, id, ts, title, message }
-export async function GET(_req: Request, ctx: any) {
-  const ts = decodeURIComponent(ctx?.params?.ts ?? '')
+export async function GET(_: Request, ctx: any) {
+  const tsRaw = decodeURIComponent(String(ctx?.params?.ts ?? ''))
+  const day = normDayTs(tsRaw)
+  if (!day) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
 
-  // 1) nouveau modèle : minute_public => tout le contenu du certificat
-  try {
-    const q = await pool.query(
-      `select c.id, c.ts, c.title, c.message
-         from minute_public mp
-         join claims c on c.ts = mp.ts
-        where mp.ts=$1::timestamptz
-        limit 1`,
-      [ts]
+  // Existe-t-il une publication pour ce jour ?
+  const { rows } = await pool.query(
+    `select 1
+       from minute_public
+      where ts = $1::timestamptz
+      limit 1`,
+    [day]
+  )
+  return NextResponse.json({ is_public: rows.length > 0 }, { headers: { 'Cache-Control': 'no-store' } })
+}
+
+export async function PUT(req: Request, ctx: any) {
+  const tsRaw = decodeURIComponent(String(ctx?.params?.ts ?? ''))
+  const day = normDayTs(tsRaw)
+  if (!day) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
+
+  const body = await req.json().catch(() => ({}))
+  const is_public = body?.is_public === true
+
+  // ⚠️ FK → vérifie que la claim existe exactement à ce ts (début de journée)
+  const { rows: chk } = await pool.query(`select 1 from claims where ts = $1::timestamptz`, [day])
+  if (is_public && chk.length === 0) {
+    return NextResponse.json({ ok: false, error: 'claim_not_found_for_ts' }, { status: 409 })
+  }
+
+  if (is_public) {
+    // Upsert (FK sur claims.ts)
+    await pool.query(
+      `insert into minute_public(ts)
+       values($1::timestamptz)
+       on conflict (ts) do nothing`,
+      [day]
     )
-    if (q.rows.length) {
-      const r = q.rows[0]
-      return NextResponse.json({
-        found: true,
-        id: String(r.id),
-        ts: new Date(r.ts).toISOString(),
-        title: r.title ?? null,
-        message: r.message ?? null,
-      })
-    }
-  } catch {}
+  } else {
+    await pool.query(`delete from minute_public where ts = $1::timestamptz`, [day])
+  }
 
-  // 2) compat (anciens flags titre/message)
-  try {
-    const q2 = await pool.query(
-      `select c.id, c.ts,
-              case when c.title_public   then c.title   else null end as title,
-              case when c.message_public then c.message else null end as message
-         from claims c
-        where c.ts=$1::timestamptz
-        limit 1`,
-      [ts]
-    )
-    if (q2.rows.length) {
-      const r = q2.rows[0]
-      const found = r.title != null || r.message != null
-      if (found) {
-        return NextResponse.json({
-          found: true,
-          id: String(r.id),
-          ts: new Date(r.ts).toISOString(),
-          title: r.title,
-          message: r.message,
-        })
-      }
-    }
-  } catch {}
-
-  return NextResponse.json({ found: false }, { status: 404 })
+  return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
 }
