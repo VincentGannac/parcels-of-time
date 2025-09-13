@@ -126,6 +126,7 @@ export async function POST(req: Request) {
     if (!price_cents || price_cents < 1) return NextResponse.json({ error: 'bad_price' }, { status: 400 })
     const stripeCurrency = (currency || 'eur').toLowerCase()
 
+    const ymd = tsISO.slice(0,10)
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{
@@ -134,7 +135,7 @@ export async function POST(req: Request) {
           currency: stripeCurrency,
           unit_amount: price_cents,
           product_data: {
-            name: `Parcels of Time — ${tsISO}`,
+            name: `Parcels of Time — ${ymd}`,
             description: 'Exclusive symbolic claim to a unique day (UTC).',
           },
         },
@@ -161,7 +162,7 @@ export async function POST(req: Request) {
           success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}${
             public_registry === '1' ? '&autopub=1' : ''
           }`,
-      cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,
+          cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(ymd)}&style=${cert_style}&cancelled=1`,
     })
 
     if (!session.url) return NextResponse.json({ error: 'no_checkout_url' }, { status: 500 })

@@ -14,9 +14,10 @@ type Params = { locale: string; ts: string }
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
 
 async function getPublicStateDb(tsISO: string): Promise<boolean> {
-    try {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`;
+  try {
       const { rows } = await pool.query(
-        `select exists(select 1 from minute_public where ts = $1::timestamptz) as ok`,
+        `select exists(select 1 from minute_public where date_trunc('day', ts) = $1::timestamptz) as ok`,
         [tsISO]
       );
       return !!rows[0]?.ok;
@@ -24,6 +25,7 @@ async function getPublicStateDb(tsISO: string): Promise<boolean> {
   }
   
   async function setPublicDb(tsISO: string, next: boolean): Promise<boolean> {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`;
     const client = await pool.connect();
     try {
       if (next) {
@@ -95,7 +97,8 @@ type ClaimForEdit = {
 }
 
 async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
-  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`;
+     try {
     const { rows } = await pool.query(
       `select o.email, o.display_name,
               c.title, c.message, c.link_url,
@@ -103,7 +106,7 @@ async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
               c.title_public, c.message_public
          from claims c
          left join owners o on o.id = c.owner_id
-        where c.ts = $1::timestamptz`,
+         where date_trunc('day', c.ts) = $1::timestamptz`,
       [tsISO]
     )
     if (!rows.length) return null
@@ -125,9 +128,10 @@ async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
 }
 
 async function getClaimMeta(tsISO: string) {
-  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`;
+     try {
     const { rows } = await pool.query(
-      `select id as claim_id, cert_hash from claims where ts=$1::timestamptz`,
+      `select id as claim_id, cert_hash from claims where date_trunc('day', ts) = $1::timestamptz`,
       [tsISO]
     )
     if (!rows.length) return null
@@ -167,7 +171,7 @@ async function getClaimMeta(tsISO: string) {
   const verifyHref = `/api/verify?ts=${encodeURIComponent(decodedTs)}`
 
   let niceTs = decodedTs
-  try { niceTs = formatISOAsNice(decodedTs) } catch {}
+  try { niceTs = formatISOAsNice(`${decodedTs}T00:00:00.000Z`) } catch {}
 
   const togglePublic = async (formData: FormData) => {
     'use server'

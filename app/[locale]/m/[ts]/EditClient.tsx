@@ -44,7 +44,7 @@ function getSafeArea(style: CertStyle){
   }
 }
 
-function isoDayString(d: Date) { const c = new Date(d.getTime()); c.setUTCHours(0,0,0,0); return c.toISOString() }
+function isoDayString(d: Date) { const c = new Date(d.getTime()); c.setUTCHours(0,0,0,0); return ymdUTC(c)}
 function parseToDateOrNull(input: string): Date | null { const s=(input||'').trim(); if(!s) return null; const d=new Date(s); if(isNaN(d.getTime())) return null; d.setUTCHours(0,0,0,0); return d }
 function ymdUTC(d: Date){ const y=d.getUTCFullYear(); const m=String(d.getUTCMonth()+1).padStart(2,'0'); const day=String(d.getUTCDate()).padStart(2,'0'); return `${y}-${m}-${day}` }
 function daysInMonth(y:number, m:number) { return new Date(y, m, 0).getDate() }

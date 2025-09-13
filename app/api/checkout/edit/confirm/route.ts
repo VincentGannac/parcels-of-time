@@ -109,7 +109,7 @@ export async function GET(req: Request) {
         const salt = process.env.SECRET_SALT || 'dev_salt'
         const data = `${tsISO}|${owner_id}|${price_cents}|${createdISO}|${salt}`
         const hash = crypto.createHash('sha256').update(data).digest('hex')
-        const cert_url = `/api/cert/${encodeURIComponent(tsISO)}`
+        const cert_url = `/api/cert/${encodeURIComponent(tsISO.slice(0,10))}`
         await client.query(
           `update claims set cert_hash=$1, cert_url=$2 where ts=$3::timestamptz`,
           [hash, cert_url, tsISO]
@@ -123,8 +123,8 @@ export async function GET(req: Request) {
     } finally {
       client.release()
     }
-
-    return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsISO)}?updated=1`, { status:303 })
+    
+    return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0,10))}?updated=1`, { status:303 })
 
   } catch (e:any) {
     console.error('[edit confirm] error:', e?.message || e)

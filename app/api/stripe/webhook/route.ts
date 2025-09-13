@@ -153,7 +153,7 @@ async function writeClaimFromSession(session: Stripe.Checkout.Session) {
     const salt = process.env.SECRET_SALT || 'dev_salt'
     const data = `${tsISO}|${createdRow.rows[0]?.owner_id || ownerId}|${price_cents}|${createdISO}|${salt}`
     const hash = crypto.createHash('sha256').update(data).digest('hex')
-    const cert_url = `/api/cert/${encodeURIComponent(tsISO)}`
+    const cert_url = `/api/cert/${encodeURIComponent(tsISO.slice(0,10))}`
     await client.query(
       `update claims set cert_hash=$1, cert_url=$2 where ts=$3::timestamptz`,
       [hash, cert_url, tsISO]
@@ -232,7 +232,7 @@ export async function POST(req: Request) {
             const guessedLocale =
               String(session.metadata?.locale || '').toLowerCase().startsWith('fr') ? 'fr' : 'en'
             const publicUrl = `${base}/${guessedLocale}/m/${encodeURIComponent(res.tsISO)}`
-            const pdfUrl = `${base}/api/cert/${encodeURIComponent(res.tsISO)}`
+           const pdfUrl = `${base}/api/cert/${encodeURIComponent(res.tsISO.slice(0,10))}`
             const { sendClaimReceiptEmail } = await import('@/lib/email')
             await sendClaimReceiptEmail({
               to: res.email,

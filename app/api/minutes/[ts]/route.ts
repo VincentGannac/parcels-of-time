@@ -23,9 +23,9 @@ export async function GET(_: Request, ctx: any) {
   if (!dayISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
 
   const { rows } = await pool.query(
-    'select 1 from minute_public where date_trunc(' + `'day', ts)` + ' = $1::timestamptz limit 1',
-    [dayISO]
-  )
+      `select 1 from minute_public where date_trunc('day', ts) = $1::timestamptz limit 1`,
+      [dayISO]
+    )
   return NextResponse.json({ is_public: rows.length > 0 }, { headers: { 'Cache-Control': 'no-store' } })
 }
 

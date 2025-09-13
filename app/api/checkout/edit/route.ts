@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       customer_email: body.email,
       metadata: {
         kind: 'edit',
-        ts: tsISO,
+        ts: tsISO.slice(0,10),
         email: body.email,
         display_name: body.display_name ?? '',
         title: body.title ?? '',
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
         locale,
       },
       success_url: `${origin}/api/checkout/edit/confirm?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/${locale}/m/${encodeURIComponent(tsISO)}?cancelled=1`,
+      cancel_url: `${origin}/${locale}/m/${encodeURIComponent(tsISO.slice(0,10))}?cancelled=1`,
     })
 
     if (!session.url) return NextResponse.json({ error: 'no_checkout_url' }, { status: 500 })

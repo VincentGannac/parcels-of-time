@@ -57,7 +57,7 @@ function safeDecode(value: string): string {
   try { for (let i=0;i<3;i++){ const dec=decodeURIComponent(out); if(dec===out) break; out=dec } } catch {}
   return out
 }
-function isoDayString(d: Date) { const c = new Date(d.getTime()); c.setUTCHours(0,0,0,0); return c.toISOString() }
+function isoDayString(d: Date) { const c = new Date(d.getTime()); c.setUTCHours(0,0,0,0); return ymdUTC(c) }
 function parseToDateOrNull(input: string): Date | null {
   const s = (input || '').trim(); if (!s) return null
   const d = new Date(s); if (isNaN(d.getTime())) return null

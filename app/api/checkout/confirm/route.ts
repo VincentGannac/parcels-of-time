@@ -209,8 +209,9 @@ export async function GET(req: Request) {
       await client.query('COMMIT');
 
       // email après commit (non bloquant)
-      const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
-      const pdfUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
+      const ymd = ts.slice(0,10)
+      const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ymd)}`
+      const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}`
       import('@/lib/email')
         .then(({ sendClaimReceiptEmail }) =>
           sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl: pdfUrl })
@@ -226,7 +227,7 @@ export async function GET(req: Request) {
 
     // Toujours rediriger côté client (même si DB a échoué ici)
     {
-      const to = new URL(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect)}`);
+      const to = new URL(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect.slice(0,10))}`);
       if (wantsAutopub) to.searchParams.set('autopub', '1');
       return NextResponse.redirect(to.toString(), { status: 303 });
     }
