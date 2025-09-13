@@ -41,6 +41,41 @@ export default function RegistryClient({
 }: { locale: string; initialItems: RegistryRow[] }) {
   const loc = (locale || 'en') as string
   const [items, setItems] = useState<RegistryRow[]>(initialItems)
+  const [loading, setLoading] = useState(initialItems.length === 0)
+  const [error, setError] = useState<string>('')
+
+  // Backoff si liste vide (publication toute fraîche / cold start)
+  useEffect(() => {
+    let cancelled = false
+    let attempt = 0
+    const delays = [800, 1600, 3200, 5000] // ~10s au total
+
+    const load = async () => {
+      try {
+        setLoading(true); setError('')
+        const res = await fetch(`/api/registry?v=${Date.now()}`, { cache: 'no-store' })
+        if (!res.ok) throw new Error('HTTP '+res.status)
+        const data: RegistryRow[] = await res.json()
+        if (cancelled) return
+        const clean = Array.isArray(data) ? data : []
+        setItems(clean)
+
+        // Re-tente si vide
+        if (clean.length === 0 && attempt < delays.length) {
+          const t = delays[attempt++]
+          setTimeout(() => { if (!cancelled) load() }, t)
+        }
+      } catch {
+        if (!cancelled) setError('Impossible de charger le registre public.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    if (initialItems.length === 0) load()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <main
@@ -61,6 +96,7 @@ export default function RegistryClient({
       }}
     >
       <section style={{maxWidth:1280, margin:'0 auto', padding:'56px 24px 64px'}}>
+        {/* Header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
           <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
           <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85, border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:12}}>
@@ -68,6 +104,7 @@ export default function RegistryClient({
           </a>
         </div>
 
+        {/* Manifeste / Hero */}
         <header style={{marginBottom:20}}>
           <h1 style={{fontFamily:'Fraunces, serif', fontSize:46, lineHeight:'54px', margin:'0 0 10px', letterSpacing:.2}}>
             Registre public — œuvres de la minute
@@ -82,20 +119,29 @@ export default function RegistryClient({
           </p>
         </header>
 
-        {items.length === 0 ? (
+        {loading ? (
+          <div style={{marginTop:24, opacity:.8}}>Chargement du registre…</div>
+        ) : error ? (
+          <div style={{marginTop:24, color:'#ffb2b2', border:'1px solid #ff8a8a', background:'rgba(255,0,0,.06)', padding:12, borderRadius:12}}>
+            {error}
+          </div>
+        ) : items.length === 0 ? (
           <div style={{marginTop:24, opacity:.8}}>Aucune œuvre publique pour le moment.</div>
         ) : (
-          <CurationBar items={items} onShuffle={()=>setItems(s=>shuffle(s))} />
+          <CurationBar items={items} />
         )}
       </section>
     </main>
   )
 }
 
-function CurationBar({ items, onShuffle }:{ items: RegistryRow[]; onShuffle:()=>void }) {
+/* ---------------- Client subcomponents ---------------- */
+
+function CurationBar({ items }: { items: RegistryRow[] }) {
   const [q, setQ] = useState('')
   const [view, setView] = useState<'wall'|'salon'>('wall')
-  const total = items.length
+  const [list, setList] = useState<RegistryRow[]>(items)
+  const total = list.length
 
   return (
     <>
@@ -112,7 +158,7 @@ function CurationBar({ items, onShuffle }:{ items: RegistryRow[]; onShuffle:()=>
             color:'var(--color-text)'
           }}
         />
-        <button onClick={onShuffle}
+        <button onClick={()=>setList(s=>shuffle(s))}
           style={{padding:'10px 12px', borderRadius:10, background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
           Inspiration aléatoire
         </button>
@@ -122,11 +168,12 @@ function CurationBar({ items, onShuffle }:{ items: RegistryRow[]; onShuffle:()=>
         </button>
       </div>
       <RegistryGalleryControls q={q} setQ={setQ} view={view} />
-      <RegistryWall key={view} view={view} q={q} items={items} total={total} />
+      <RegistryWall key={view} view={view} q={q} items={list} total={total} />
     </>
   )
 }
 
+/** Petit bandeau de stats / filtres sémantiques (non-intrusif) */
 function RegistryGalleryControls({ q, setQ, view }:{
   q:string; setQ:(s:string)=>void; view:'wall'|'salon'
 }) {
@@ -216,13 +263,16 @@ function RegistryCard(
   { row, style, tall }:
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean }
 ) {
+  // PDF public, sans interaction
   const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
-  // Mur : IMG rapide
+  // --- Mur : IMG rapide (visuel identique : cadre, voile, badge, légende au survol) ---
   if (!tall) {
-    const thumb = bgThumbForStyle(String(row.style || 'neutral'))
-    const full  = bgFullForStyle(String(row.style || 'neutral'))
+    const st = String(row.style || 'neutral')
+    const thumb = bgThumbForStyle(st)
+    const full  = bgFullForStyle(st)
     const fallback = '/cert_bg/neutral.png'
+
     return (
       <article
         onContextMenu={(e)=>e.preventDefault()}
@@ -260,10 +310,15 @@ function RegistryCard(
             loading="lazy"
             style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center'}}
           />
+
+          {/* voile artistique */}
           <div style={{
             position:'absolute', inset:0,
-            background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)'
+            background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)',
+            pointerEvents:'none'
           }} />
+
+          {/* ✅ Badge Authentifié */}
           <div
             aria-label="Certificat authentifié"
             style={{
@@ -273,16 +328,26 @@ function RegistryCard(
               background:'rgba(14,170,80,.18)',
               border:'1px solid rgba(14,170,80,.45)',
               color:'#D9FBE3', fontSize:12, fontWeight:700,
+              pointerEvents:'none'
             }}
           >
             <span>Authentifié</span><span aria-hidden>✓</span>
           </div>
-          <div style={{
-            position:'absolute', left:0, right:0, bottom:0,
-            padding:'10px 12px',
-            background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)',
-            color:'#fff', fontSize:12,
-          }}>
+
+          {/* légende discrète (affichée au survol) */}
+          <figcaption
+            style={{
+              position:'absolute', left:0, right:0, bottom:0,
+              padding:'12px 14px',
+              background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)',
+              color:'#fff',
+              fontSize:12,
+              opacity:.0,
+              transform:'translateY(6px)',
+              transition:'opacity .35s ease, transform .35s ease',
+              pointerEvents:'none'
+            }}
+          >
             <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
               <div style={{fontWeight:800, letterSpacing:.2}}>
                 {row.owner || 'Anonymous'}
@@ -292,18 +357,23 @@ function RegistryCard(
               </div>
             </div>
             {(row.title || row.message) && (
-              <div style={{marginTop:4, opacity:.95, fontStyle: row.message ? 'italic' : 'normal', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+              <div style={{marginTop:6, opacity:.95, fontStyle: row.message ? 'italic' : 'normal'}}>
                 {row.title || `“${row.message}”`}
               </div>
             )}
-          </div>
+          </figcaption>
         </div>
-        <style>{`article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }`}</style>
+
+        {/* hover effects */}
+        <style>{`
+          article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }
+          article:hover figcaption { opacity: 1; transform: translateY(0); }
+        `}</style>
       </article>
     )
   }
 
-  // Salon : iframe lazy
+  // --- Salon : iframe lazy (PDF) ---
   return (
     <article
       onContextMenu={(e)=>e.preventDefault()}
@@ -352,6 +422,7 @@ function RegistryCard(
   )
 }
 
+/* --- Utilitaire : monte l'iframe seulement quand visible --- */
 function LazyIframe({ src }: { src: string }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [mount, setMount] = useState(false)

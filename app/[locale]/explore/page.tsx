@@ -22,7 +22,8 @@ async function getPublicItems(): Promise<RegistryRow[]> {
     const host  = (h.get('host') || '').split(',')[0].trim()
     const base  = process.env.NEXT_PUBLIC_BASE_URL || (host ? `${proto}://${host}` : '')
 
-    const res = await fetch(`${base}/api/registry`, {
+    // Cache-buster pour éviter tout cache intermédiaire
+    const res = await fetch(`${base}/api/registry?v=${Date.now()}`, {
       cache: 'no-store',
       next: { revalidate: 0 },
     })
