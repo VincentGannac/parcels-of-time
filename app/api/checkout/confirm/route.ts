@@ -140,6 +140,7 @@ export async function GET(req: Request) {
       pushOpt('text_color', text_color);
       pushOpt('title_public', title_public);
       pushOpt('message_public', message_public);
+      
 
       const updateCols = insertCols.filter(n => !['ts','owner_id','price_cents','currency'].includes(n));
       const updateSet = updateCols.length

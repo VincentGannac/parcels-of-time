@@ -12,33 +12,40 @@ import EditClient from './EditClient'
 type Params = { locale: string; ts: string }
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
 
-async function getPublicState(tsISO: string): Promise<boolean> {
-  try {
-    const h = await headers();
-    const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https';
-    const host  = (h.get('host') || '').split(',')[0].trim();
-    const url = host
-      ? `${proto}://${host}/api/minutes/${encodeURIComponent(tsISO)}/public`
-      : `/api/minutes/${encodeURIComponent(tsISO)}/public`;
-
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return false;
-
-    const j = await r.json();
-    const raw =
-      j?.is_public ??
-      j?.isPublic ??
-      j?.public ??
-      j?.published ??
-      j?.data?.is_public ??
-      null;
-
-    if (typeof raw === 'boolean') return raw;
-    if (typeof raw === 'number')  return raw === 1;
-    if (typeof raw === 'string')  return raw === '1' || raw.toLowerCase() === 'true';
-  } catch {}
-  return false;
-}
+async function getPublicStateDb(tsISO: string): Promise<boolean> {
+    try {
+      const { rows } = await pool.query(
+        `select exists(select 1 from minute_public where ts = $1::timestamptz) as ok`,
+        [tsISO]
+      );
+      return !!rows[0]?.ok;
+    } catch { return false; }
+  }
+  
+  async function setPublicDb(tsISO: string, next: boolean): Promise<boolean> {
+    const client = await pool.connect();
+    try {
+      if (next) {
+        await client.query(
+          `insert into minute_public (ts)
+             values ($1::timestamptz)
+             on conflict (ts) do nothing`,
+          [tsISO]
+        );
+      } else {
+        await client.query(
+          `delete from minute_public where ts = $1::timestamptz`,
+          [tsISO]
+        );
+      }
+      return true;
+    } catch {
+      return false;
+    } finally {
+      client.release();
+    }
+  }
+  
 
 
 // Ajouter ce helper au même fichier (m/[ts]/page.tsx)
@@ -129,24 +136,25 @@ async function getClaimMeta(tsISO: string) {
 
  type SearchParams = { autopub?: string; ok?: string };
  export default async function Page({
-   params,
-   searchParams
- }: {
-   params: Promise<Params>;
-   searchParams?: Promise<SearchParams>;
- }) {
+    params,
+    searchParams
+  }: {
+    params: Promise<Params>,
+    searchParams: Promise<{ autopub?: string; ok?: string }>
+  }) {
   const { locale = 'en', ts: tsParam = '' } = await params;
+  const sp = await searchParams;
   const decodedTs = safeDecode(tsParam);
 
-  const sp = searchParams ? await searchParams : undefined;
-  const isPublic = await getPublicState(decodedTs);
+  const isPublicDb = await getPublicStateDb(decodedTs);
   const wantsAutopub = sp?.autopub === '1';
-  // 👇 autopub au premier chargement si demandé et pas déjà public
-  if (wantsAutopub && !isPublic) {
-    await setPublic(decodedTs, true);
-    revalidatePath(`/${locale}/m/${encodeURIComponent(decodedTs)}`);
-    redirect(`/${locale}/m/${encodeURIComponent(decodedTs)}?ok=1`); // on nettoie ?autopub
-  }
+  const isPublic = isPublicDb || wantsAutopub; // rendu optimiste
+   // Applique l’auto-publication au premier chargement si demandé
+  if (wantsAutopub && !isPublicDb) {
+    await setPublicDb(decodedTs, true);
+     revalidatePath(`/${locale}/m/${encodeURIComponent(decodedTs)}`);
+     redirect(`/${locale}/m/${encodeURIComponent(decodedTs)}?ok=1`); // on nettoie ?autopub
+   }
   const meta = await getClaimMeta(decodedTs)
 
   // Données d’édition
@@ -164,19 +172,7 @@ async function getClaimMeta(tsISO: string) {
     'use server'
     const ts = String(formData.get('ts') || '')
     const next = String(formData.get('next') || '0') === '1'
-    let ok = false
-    try {
-      const h = await headers()
-      const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
-      const host  = (h.get('host') || '').split(',')[0].trim()
-      const url = host ? `${proto}://${host}/api/minutes/${encodeURIComponent(ts)}/public`
-                       : `/api/minutes/${encodeURIComponent(ts)}/public`
-      const res = await fetch(url, {
-        method:'PUT', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ is_public: next }), cache:'no-store'
-      })
-      ok = res.ok
-    } catch {}
+    const ok = await setPublicDb(ts, next)
     revalidatePath(`/${locale}/m/${encodeURIComponent(ts)}`)
     redirect(`/${locale}/m/${encodeURIComponent(ts)}?ok=${ok?'1':'0'}`)
   }
