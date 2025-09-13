@@ -1,3 +1,4 @@
+// app/api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -156,7 +157,10 @@ export async function POST(req: Request) {
         public_registry,
         locale, // utile pour tes mails de secours, etc.
       },
-      success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
+      // ✅ propage la volonté de publication jusqu'à la page m/[ts]
+          success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}${
+            public_registry === '1' ? '&autopub=1' : ''
+          }`,
       cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(tsISO)}&style=${cert_style}&cancelled=1`,
     })
 

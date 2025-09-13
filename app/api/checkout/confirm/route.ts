@@ -43,7 +43,8 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const session_id = url.searchParams.get('session_id');
-
+    // ✅ récupère l’intention d’auto-publication passée par /api/checkout
+  let wantsAutopub = url.searchParams.get('autopub') === '1';
   // Si pas de session_id → retour accueil
   if (!session_id) return NextResponse.redirect(`${base}/`, { status: 302 });
 
@@ -89,6 +90,8 @@ export async function GET(req: Request) {
     const title_public = safeBool(s.metadata?.title_public);
     const message_public = safeBool(s.metadata?.message_public);
     const public_registry = safeBool(s.metadata?.public_registry);
+        // ✅ renforce wantsAutopub avec la méta Stripe (filet de sécurité)
+    wantsAutopub = wantsAutopub || public_registry;
 
     const amount_total_raw =
       s.amount_total ??
@@ -221,7 +224,11 @@ export async function GET(req: Request) {
     }
 
     // Toujours rediriger côté client (même si DB a échoué ici)
-    return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect)}`, { status: 303 });
+    {
+      const to = new URL(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect)}`);
+      if (wantsAutopub) to.searchParams.set('autopub', '1');
+      return NextResponse.redirect(to.toString(), { status: 303 });
+    }
 
   } catch (e:any) {
     console.error('confirm_error_top:', e?.message, e?.stack);

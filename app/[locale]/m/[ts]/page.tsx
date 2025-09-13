@@ -14,16 +14,52 @@ function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { re
 
 async function getPublicState(tsISO: string): Promise<boolean> {
   try {
-    const h = await headers()
-    const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https'
-    const host  = (h.get('host') || '').split(',')[0].trim()
-    const url = host ? `${proto}://${host}/api/minutes/${encodeURIComponent(tsISO)}/public`
-                     : `/api/minutes/${encodeURIComponent(tsISO)}/public`
-    const r = await fetch(url, { cache:'no-store' })
-    if (r.ok) { const j = await r.json(); return !!j?.is_public }
+    const h = await headers();
+    const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https';
+    const host  = (h.get('host') || '').split(',')[0].trim();
+    const url = host
+      ? `${proto}://${host}/api/minutes/${encodeURIComponent(tsISO)}/public`
+      : `/api/minutes/${encodeURIComponent(tsISO)}/public`;
+
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) return false;
+
+    const j = await r.json();
+    const raw =
+      j?.is_public ??
+      j?.isPublic ??
+      j?.public ??
+      j?.published ??
+      j?.data?.is_public ??
+      null;
+
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'number')  return raw === 1;
+    if (typeof raw === 'string')  return raw === '1' || raw.toLowerCase() === 'true';
   } catch {}
-  return false
+  return false;
 }
+
+
+// Ajouter ce helper au même fichier (m/[ts]/page.tsx)
+async function setPublic(tsISO: string, next: boolean): Promise<boolean> {
+  try {
+    const h = await headers();
+    const proto = (h.get('x-forwarded-proto') || 'https').split(',')[0].trim() || 'https';
+    const host  = (h.get('host') || '').split(',')[0].trim();
+    const url = host
+      ? `${proto}://${host}/api/minutes/${encodeURIComponent(tsISO)}/public`
+      : `/api/minutes/${encodeURIComponent(tsISO)}/public`;
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_public: next }),
+      cache: 'no-store',
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
 
 const TOKENS = {
   '--color-bg': '#0B0E14',
@@ -91,12 +127,22 @@ async function getClaimMeta(tsISO: string) {
   } catch { return null }
 }
 
-export default async function Page({ params }: { params: Promise<Params> }) {
-  const { locale = 'en', ts: tsParam = '' } = await params
-  const decodedTs = safeDecode(tsParam)
+export default async function Page({
+  params,
+  searchParams
+}: { params: Promise<Params>, searchParams?: { autopub?: string, ok?: string } }) {
+  const { locale = 'en', ts: tsParam = '' } = await params;
+  const decodedTs = safeDecode(tsParam);
 
-  // Données “public/tech”
-  const isPublic = await getPublicState(decodedTs)
+  const isPublic = await getPublicState(decodedTs);
+  const wantsAutopub = (searchParams?.autopub === '1');
+
+  // 👇 autopub au premier chargement si demandé et pas déjà public
+  if (wantsAutopub && !isPublic) {
+    await setPublic(decodedTs, true);
+    revalidatePath(`/${locale}/m/${encodeURIComponent(decodedTs)}`);
+    redirect(`/${locale}/m/${encodeURIComponent(decodedTs)}?ok=1`); // on nettoie ?autopub
+  }
   const meta = await getClaimMeta(decodedTs)
 
   // Données d’édition
