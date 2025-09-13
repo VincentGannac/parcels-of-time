@@ -44,15 +44,20 @@ export default function RegistryClient({
   initialItems
 }: { locale: string; initialItems: RegistryRow[] }) {
   const loc = (locale || 'en') as string
+
   const [items, setItems] = useState<RegistryRow[]>(initialItems)
   const [loading, setLoading] = useState(initialItems.length === 0)
   const [error, setError] = useState<string>('')
+  const [finishedRetries, setFinishedRetries] = useState<boolean>(initialItems.length > 0)
 
-  // Backoff si liste vide (publication fraîche / cold start)
+  // Backoff si liste vide (publication fraîche / cold start).
+  // N'affiche "Aucune œuvre" qu'après toutes les retentes.
   useEffect(() => {
+    if (initialItems.length > 0) return
+
     let cancelled = false
     let attempt = 0
-    const delays = [800, 1600, 3200, 5000] // ~10s
+    const delays = [800, 1600, 3200, 5000] // ~10s total
 
     const load = async () => {
       try {
@@ -67,15 +72,20 @@ export default function RegistryClient({
         if (clean.length === 0 && attempt < delays.length) {
           const t = delays[attempt++]
           setTimeout(() => { if (!cancelled) load() }, t)
+        } else {
+          setFinishedRetries(true)
         }
       } catch {
-        if (!cancelled) setError('Impossible de charger le registre public.')
+        if (!cancelled) {
+          setError('Impossible de charger le registre public.')
+          setFinishedRetries(true)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
 
-    if (initialItems.length === 0) load()
+    load()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -99,6 +109,7 @@ export default function RegistryClient({
       }}
     >
       <section style={{maxWidth:1280, margin:'0 auto', padding:'56px 24px 64px'}}>
+        {/* Header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
           <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
           <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85, border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:12}}>
@@ -106,6 +117,7 @@ export default function RegistryClient({
           </a>
         </div>
 
+        {/* Manifeste / Hero */}
         <header style={{marginBottom:20}}>
           <h1 style={{fontFamily:'Fraunces, serif', fontSize:46, lineHeight:'54px', margin:'0 0 10px', letterSpacing:.2}}>
             Registre public — œuvres de la minute
@@ -126,7 +138,7 @@ export default function RegistryClient({
           <div style={{marginTop:24, color:'#ffb2b2', border:'1px solid #ff8a8a', background:'rgba(255,0,0,.06)', padding:12, borderRadius:12}}>
             {error}
           </div>
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && finishedRetries ? (
           <div style={{marginTop:24, opacity:.8}}>Aucune œuvre publique pour le moment.</div>
         ) : (
           <CurationBar items={items} />
@@ -254,7 +266,7 @@ function RegistryCard(
   { row, style, tall, priority }:
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
 ) {
-  // PDF public, sans métadonnées périphériques, avec contenu réel (titres/messages/fonds custom)
+  // PDF public, contenu réel (titres/messages/fonds custom)
   const pdfHref =
     `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
@@ -394,6 +406,7 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
           }}
         />
       ) : (
+        // Skeleton léger (dégradé) le temps de monter l’iframe
         <div
           style={{
             position:'absolute', inset:0,
