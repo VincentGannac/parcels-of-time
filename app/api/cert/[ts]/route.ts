@@ -1,3 +1,4 @@
+//api/cert/[ts]
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -5,30 +6,56 @@ import { pool } from '@/lib/db'
 import { generateCertificatePDF } from '@/lib/cert'
 import { Buffer } from 'node:buffer'
 
-function toIsoDayUTC(input: string): string | null {
+/**
+ * Normalise un horodatage en ISO minute UTC.
+ * Accepte :
+ *  - 'YYYY-MM-DD'
+ *  - 'YYYY-MM-DDTHH:mm'
+ *  - 'YYYY-MM-DDTHH:mm:ss(.SSS)[Z]'
+ * Retourne toujours une ISO avec secondes/millis à 00 et suffixe Z.
+ */
+function toIsoMinuteUTC(input: string): string | null {
   if (!input) return null
   const s = input.trim()
+
+  // 1) Jour seul
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
     const d = new Date(`${s}T00:00:00.000Z`)
-    return isNaN(d.getTime()) ? null : d.toISOString()
+    return isNaN(d.getTime()) ? null : d.toISOString().replace(/\.\d{3}Z$/, '.000Z')
   }
+
+  // 2) Sans timezone, précision minute
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) {
+    const d = new Date(`${s}:00.000Z`) // on force UTC
+    return isNaN(d.getTime()) ? null : d.toISOString().replace(/\.\d{3}Z$/, '.000Z')
+  }
+
+  // 3) Formats ISO complets divers
   const d = new Date(s)
   if (isNaN(d.getTime())) return null
-  d.setUTCHours(0, 0, 0, 0)
+  // on aligne à la minute UTC
+  d.setUTCSeconds(0, 0)
   return d.toISOString()
 }
 
 export async function GET(req: Request, ctx: any) {
-  const rawParam = Array.isArray(ctx?.params?.ts) ? ctx.params.ts.join('/') : String(ctx?.params?.ts ?? '')
-  const decoded = decodeURIComponent(rawParam)
-  const dayISO = toIsoDayUTC(decoded)
-  if (!dayISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
+  // Récup du paramètre dynamique
+  const rawParam = Array.isArray(ctx?.params?.ts)
+    ? ctx.params.ts.join('/')
+    : String(ctx?.params?.ts ?? '')
 
+  const decoded = decodeURIComponent(rawParam)
+  const tsISO = toIsoMinuteUTC(decoded)
+  if (!tsISO) {
+    return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
+  }
+
+  // Localisation pour le QR
   const accLang = (req.headers.get('accept-language') || '').toLowerCase()
   const locale = accLang.startsWith('fr') ? 'fr' : 'en'
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
 
-  // On récupère la claim du jour (la plus récente si plusieurs)
+  // Lecture claim (match EXACT sur la minute normalisée)
   const { rows } = await pool.query(
     `SELECT
        c.id AS claim_id, c.ts, c.title, c.message, c.link_url, c.cert_hash, c.created_at,
@@ -36,27 +63,46 @@ export async function GET(req: Request, ctx: any) {
        o.display_name
      FROM claims c
      JOIN owners o ON o.id = c.owner_id
-     WHERE date_trunc('day', c.ts) = $1::timestamptz
-     ORDER BY c.ts DESC
-     LIMIT 1`,
-    [dayISO]
+     WHERE c.ts = $1::timestamptz`,
+    [tsISO]
   )
-  if (rows.length === 0) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  if (rows.length === 0) {
+    // filet de sécurité : on tente un match "minute" même si la précision DB diffère
+    const { rows: alt } = await pool.query(
+      `SELECT
+         c.id AS claim_id, c.ts, c.title, c.message, c.link_url, c.cert_hash, c.created_at,
+         c.cert_style, c.time_display, c.local_date_only, c.text_color,
+         o.display_name
+       FROM claims c
+       JOIN owners o ON o.id = c.owner_id
+       WHERE date_trunc('minute', c.ts) = $1::timestamptz
+       LIMIT 1`,
+      [tsISO]
+    )
+    if (alt.length === 0) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+    rows.push(alt[0])
+  }
+
   const row = rows[0]
 
-  // fond custom attaché à CETTE claim exacte
+  // Fond custom éventuel (sur la minute normalisée)
   const { rows: bgRows } = await pool.query(
     'select data_url from claim_custom_bg where ts=$1::timestamptz',
-    [row.ts]
+    [tsISO]
   )
   const customBgDataUrl = bgRows[0]?.data_url
 
+  // Mode d’affichage de l’heure (legacy → conservé)
   const td: string = row.time_display || 'local+utc'
   const timeLabelMode =
     td === 'utc+local' ? 'utc_plus_local'
   : td === 'local+utc' ? 'local_plus_utc'
   : 'utc'
 
+  // Options d’affichage (registre public, etc.)
   const url = new URL(req.url)
   const hideQr =
     url.searchParams.has('public') ||
@@ -66,12 +112,13 @@ export async function GET(req: Request, ctx: any) {
     url.searchParams.get('hide_meta') === '1' ||
     url.searchParams.has('hide_meta')
 
-  // URL publique pour le QR (basée sur le JOUR)
-  const publicUrl = `${base}/${locale}/m/${encodeURIComponent(dayISO)}`
+  // URL publique (pour le QR) basée sur la minute normalisée
+  const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO)}`
 
+  // Génération PDF
   const pdfBytes = await generateCertificatePDF({
-    ts: dayISO, // 👈 le PDF affiche AAAA-MM-JJ via ymdFromUTC()
-    display_name: row.display_name || '',
+    ts: tsISO, // 👈 toujours la minute UTC normalisée
+    display_name: row.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
     title: row.title,
     message: row.message,
     link_url: row.link_url,
@@ -92,7 +139,8 @@ export async function GET(req: Request, ctx: any) {
   return new Response(buf as unknown as BodyInit, {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="cert-${encodeURIComponent(dayISO.slice(0,10))}.pdf"`,
+      'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO)}.pdf"`,
+      // cache public CDN (les certificats sont immuables)
       'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
       'Vary': 'Accept-Language',
     },
