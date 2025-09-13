@@ -35,6 +35,10 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+/** Gate simple pour limiter le nombre d'iframes actives simultanément */
+let __activeIframes = 0
+const MAX_ACTIVE_IFRAMES = 8
+
 export default function RegistryClient({
   locale,
   initialItems
@@ -163,7 +167,7 @@ function CurationBar({ items }: { items: RegistryRow[] }) {
         </button>
         <button onClick={()=>setView(v=>v==='wall'?'salon':'wall')}
           style={{padding:'10px 12px', borderRadius:10, background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
-          {view==='wall' ? 'Mode Salon' : 'Mode Mur'}
+          {view==='wall' ? 'Mur — mosaïque' : 'Salon — œuvres larges'}
         </button>
       </div>
       <RegistryGalleryControls q={q} setQ={setQ} view={view} />
@@ -216,18 +220,9 @@ function RegistryWall({ items, q, view, total }:{
     )
   }, [q, items])
 
-  if (view === 'salon') {
-    return (
-      <div aria-live="polite" style={{marginTop:6}}>
-        {filtered.map((row) => (
-          <RegistryCard key={row.ts} row={row} style={{ margin:'0 0 32px', boxShadow:'var(--shadow-elev2)' }} tall />
-        ))}
-        {filtered.length===0 && <p style={{opacity:.7}}>Aucun résultat.</p>}
-      </div>
-    )
-  }
+  // Les deux vues utilisent des PDF iframes (vrai rendu : titres + fonds custom)
+  const tall = view === 'salon'
 
-  // Mur (mosaïque) : vignettes légères (pas d’iframe)
   return (
     <>
       <div style={{fontSize:12, color:'var(--color-muted)', margin:'2px 0 10px'}}>
@@ -237,13 +232,19 @@ function RegistryWall({ items, q, view, total }:{
       <div
         style={{
           display:'grid',
-          gridTemplateColumns:'repeat(auto-fill, minmax(360px, 1fr))',
-          gap:22,
+          gridTemplateColumns: tall ? '1fr' : 'repeat(auto-fill, minmax(360px, 1fr))',
+          gap: tall ? 26 : 22,
           alignItems:'stretch'
         }}
       >
-        {filtered.map((row) => (
-          <RegistryCard key={row.ts} row={row} tall={false} />
+        {filtered.map((row, i) => (
+          <RegistryCard
+            key={row.ts}
+            row={row}
+            tall={tall}
+            // priorité aux 6 premières cartes pour une première vue rapide
+            priority={i < 6}
+          />
         ))}
         {filtered.length===0 && <p style={{opacity:.7, gridColumn:'1 / -1'}}>Aucun résultat.</p>}
       </div>
@@ -251,128 +252,14 @@ function RegistryWall({ items, q, view, total }:{
   )
 }
 
-function bgThumbForStyle(style: string): string {
-  return `/cert_bg/${style}_thumb.jpg`
-}
-function bgFullForStyle(style: string): string {
-  return `/cert_bg/${style}.png`
-}
-
 function RegistryCard(
-  { row, style, tall }:
-  { row:RegistryRow; style?:React.CSSProperties; tall?:boolean }
+  { row, style, tall, priority }:
+  { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
 ) {
-  // PDF public, sans interaction
-  const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+  // PDF public, sans métadonnées périphériques, avec contenu réel (titres/messages/fonds custom)
+  const pdfHref =
+    `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
-  // --- Mur : IMG rapide (cadre/voile/badge/légende identiques) ---
-  if (!tall) {
-    const st = String(row.style || 'neutral')
-    const thumb = bgThumbForStyle(st)
-    const full  = bgFullForStyle(st)
-    const fallback = '/cert_bg/neutral.png'
-
-    return (
-      <article
-        onContextMenu={(e)=>e.preventDefault()}
-        style={{
-          ...style,
-          position:'relative',
-          borderRadius:18,
-          padding:12,
-          background:'linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.00))',
-          border:'1px solid var(--color-border)',
-          boxShadow:'var(--shadow-elev1)',
-          transform:'translateY(0)',
-          transition:'transform .35s cubic-bezier(.2,.9,.2,1), box-shadow .35s',
-          willChange:'transform',
-        }}
-      >
-        <div style={{
-          position:'relative',
-          width:'100%',
-          aspectRatio:'595/842',
-          background:'#0E1017',
-          borderRadius:12,
-          overflow:'hidden',
-          border:'1px solid rgba(255,255,255,.06)',
-          boxShadow:'inset 0 0 0 1px rgba(0,0,0,.35)',
-        }}>
-          <img
-            src={thumb}
-            onError={(e)=>{
-              const img = e.currentTarget
-              if (img.src.endsWith('_thumb.jpg')) img.src = full
-              else img.src = fallback
-            }}
-            alt={`Fond ${row.style}`}
-            loading="lazy"
-            style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center'}}
-          />
-
-          {/* voile artistique */}
-          <div style={{
-            position:'absolute', inset:0,
-            background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)',
-            pointerEvents:'none'
-          }} />
-
-          {/* ✅ Badge Authentifié */}
-          <div
-            aria-label="Certificat authentifié"
-            style={{
-              position:'absolute', left:8, bottom:8,
-              display:'inline-flex', alignItems:'center', gap:6,
-              padding:'6px 8px', borderRadius:999,
-              background:'rgba(14,170,80,.18)',
-              border:'1px solid rgba(14,170,80,.45)',
-              color:'#D9FBE3', fontSize:12, fontWeight:700,
-              pointerEvents:'none'
-            }}
-          >
-            <span>Authentifié</span><span aria-hidden>✓</span>
-          </div>
-
-          {/* légende discrète (affichée au survol) */}
-          <figcaption
-            style={{
-              position:'absolute', left:0, right:0, bottom:0,
-              padding:'12px 14px',
-              background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)',
-              color:'#fff',
-              fontSize:12,
-              opacity:.0,
-              transform:'translateY(6px)',
-              transition:'opacity .35s ease, transform .35s ease',
-              pointerEvents:'none'
-            }}
-          >
-            <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
-              <div style={{fontWeight:800, letterSpacing:.2}}>
-                {row.owner || 'Anonymous'}
-              </div>
-              <div style={{opacity:.85}}>
-                {row.ts.replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC')}
-              </div>
-            </div>
-            {(row.title || row.message) && (
-              <div style={{marginTop:6, opacity:.95, fontStyle: row.message ? 'italic' : 'normal'}}>
-                {row.title || `“${row.message}”`}
-              </div>
-            )}
-          </figcaption>
-        </div>
-
-        {/* hover effects */}
-        <style>{`
-          article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }
-          article:hover figcaption { opacity: 1; transform: translateY(0); }
-        `}</style>
-      </article>
-    )
-  }
-
-  // --- Salon : iframe lazy (PDF) ---
   return (
     <article
       onContextMenu={(e)=>e.preventDefault()}
@@ -383,7 +270,10 @@ function RegistryCard(
         padding:12,
         background:'linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.00))',
         border:'1px solid var(--color-border)',
-        boxShadow:'var(--shadow-elev1)',
+        boxShadow: tall ? 'var(--shadow-elev2)' : 'var(--shadow-elev1)',
+        transform:'translateY(0)',
+        transition:'transform .35s cubic-bezier(.2,.9,.2,1), box-shadow .35s',
+        willChange:'transform',
       }}
     >
       <div style={{
@@ -396,12 +286,16 @@ function RegistryCard(
         border:'1px solid rgba(255,255,255,.06)',
         boxShadow:'inset 0 0 0 1px rgba(0,0,0,.35)',
       }}>
-        <LazyIframe src={pdfHref} />
+        <LazyIframe src={pdfHref} priority={!!priority} />
+
+        {/* voile artistique */}
         <div style={{
           position:'absolute', inset:0,
           background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)',
           pointerEvents:'none'
         }} />
+
+        {/* ✅ Badge Authentifié */}
         <div
           aria-label="Certificat authentifié"
           style={{
@@ -416,28 +310,79 @@ function RegistryCard(
         >
           <span>Authentifié</span><span aria-hidden>✓</span>
         </div>
+
+        {/* légende discrète */}
+        <figcaption
+          style={{
+            position:'absolute', left:0, right:0, bottom:0,
+            padding:'12px 14px',
+            background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)',
+            color:'#fff',
+            fontSize:12,
+            opacity:.0,
+            transform:'translateY(6px)',
+            transition:'opacity .35s ease, transform .35s ease',
+            pointerEvents:'none'
+          }}
+        >
+          <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
+            <div style={{fontWeight:800, letterSpacing:.2}}>
+              {row.owner || 'Anonymous'}
+            </div>
+            <div style={{opacity:.85}}>
+              {row.ts.replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC')}
+            </div>
+          </div>
+          {(row.title || row.message) && (
+            <div style={{marginTop:6, opacity:.95, fontStyle: row.message ? 'italic' : 'normal'}}>
+              {row.title || `“${row.message}”`}
+            </div>
+          )}
+        </figcaption>
       </div>
+
+      {/* hover effects */}
+      <style>{`
+        article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }
+        article:hover figcaption { opacity: 1; transform: translateY(0); }
+      `}</style>
     </article>
   )
 }
 
-/* --- Monte l'iframe seulement quand l'élément devient visible --- */
-function LazyIframe({ src }: { src: string }) {
+/* --- Iframe lazy + gate de concurrence + skeleton --- */
+function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null)
-  const [mount, setMount] = useState(false)
+  const [mount, setMount] = useState<boolean>(priority)
 
   useEffect(() => {
+    if (priority) return setMount(true)
+
     const el = ref.current
     if (!el) return
+
+    let claimed = false
+    const tryClaim = () => {
+      if (!claimed && __activeIframes < MAX_ACTIVE_IFRAMES) {
+        __activeIframes += 1
+        claimed = true
+        setMount(true)
+      }
+    }
+
     const io = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
-        setMount(true)
-        io.disconnect()
+        // pré-monte quand visible (ou proche) + gate
+        tryClaim()
       }
-    }, { rootMargin: '300px' })
+    }, { rootMargin: '400px' })
+
     io.observe(el)
-    return () => io.disconnect()
-  }, [])
+    return () => {
+      io.disconnect()
+      if (claimed) __activeIframes = Math.max(0, __activeIframes - 1)
+    }
+  }, [priority])
 
   return (
     <div ref={ref} style={{position:'absolute', inset:0}}>
@@ -445,10 +390,23 @@ function LazyIframe({ src }: { src: string }) {
         <iframe
           src={src}
           title="Œuvre"
-          style={{position:'absolute', inset:0, width:'100%', height:'100%', border:'0'}}
+          loading="lazy"
+          style={{
+            position:'absolute', inset:0, width:'100%', height:'100%', border:'0',
+            pointerEvents:'none', userSelect:'none'
+          }}
         />
       ) : (
-        <div style={{position:'absolute', inset:0, background:'#0E1017'}} />
+        // Skeleton léger (image dégradée) le temps de monter l’iframe
+        <div
+          style={{
+            position:'absolute', inset:0,
+            background:
+              'linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00)),' +
+              'radial-gradient(80% 60% at 50% 10%, rgba(255,255,255,.06), rgba(0,0,0,.0) 60%),' +
+              '#0E1017'
+          }}
+        />
       )}
     </div>
   )
