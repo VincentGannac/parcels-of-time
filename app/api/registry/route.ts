@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 
 type Row = {
-  ts: string
+  ts: string         // ISO minuit UTC du jour
   owner: string
   title: string | null
   message: string | null
@@ -15,26 +15,38 @@ type Row = {
 
 export async function GET() {
   try {
+    // On sélectionne UNE claim par jour publié (la plus récente si plusieurs, par sécurité)
     const { rows } = await pool.query(
-      `select
-         c.ts,
-         coalesce(o.display_name, 'Anonymous') as owner,
-         c.title,
-         c.message,
-         c.cert_style as style
-       from minute_public mp
-       join claims c on c.ts = mp.ts
-       join owners o on o.id = c.owner_id
-       order by c.ts desc
-       limit 500`
+      `
+      select distinct on (day_utc)
+        day_utc,
+        owner,
+        title,
+        message,
+        style
+      from (
+        select
+          date_trunc('day', c.ts) as day_utc,
+          coalesce(o.display_name, 'Anonymous') as owner,
+          c.title,
+          c.message,
+          c.cert_style as style,
+          c.ts as claim_ts
+        from minute_public mp
+        join claims c on date_trunc('day', c.ts) = date_trunc('day', mp.ts)
+        join owners o on o.id = c.owner_id
+      ) t
+      order by day_utc desc, claim_ts desc
+      limit 500
+      `
     )
 
     const out: Row[] = rows.map((r: any) => ({
-      ts: new Date(r.ts).toISOString(),
+      ts: new Date(r.day_utc).toISOString(), // canon : minuit UTC
       owner: String(r.owner || 'Anonymous'),
       title: r.title ?? null,
       message: r.message ?? null,
-      style: (r.style || 'neutral'),
+      style: r.style || 'neutral',
       is_public: true,
     }))
 

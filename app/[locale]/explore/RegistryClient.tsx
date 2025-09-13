@@ -7,7 +7,7 @@ type StyleId =
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom'
 
 type RegistryRow = {
-  ts: string
+  ts: string  // ISO minuit UTC du jour
   owner: string
   title: string | null
   message: string | null
@@ -48,7 +48,7 @@ export default function RegistryClient({
   const [loading, setLoading] = useState(initialItems.length === 0)
   const [error, setError] = useState<string>('')
 
-  // Petit refresh client pour résorber les cas "0 œuvre" en SSR
+  // Petit refresh client (résorbe d’éventuels cas de 0 œuvre en SSR)
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -65,33 +65,6 @@ export default function RegistryClient({
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Backoff si la liste initiale est vide
-  useEffect(() => {
-    if (initialItems.length > 0) return
-    let cancelled = false, attempt = 0
-    const delays = [800, 1600, 3200, 5000]
-    const load = async () => {
-      try {
-        setLoading(true); setError('')
-        const res = await fetch(`/api/registry?v=${Date.now()}`, { cache: 'no-store' })
-        if (!res.ok) throw new Error('HTTP '+res.status)
-        const data: RegistryRow[] = await res.json()
-        if (!cancelled) {
-          const clean = Array.isArray(data) ? data : []
-          setItems(clean)
-          setLoading(false)
-          if (clean.length === 0 && attempt < delays.length) {
-            setTimeout(() => { if (!cancelled) load() }, delays[attempt++])
-          }
-        }
-      } catch {
-        if (!cancelled) { setError('Impossible de charger le registre public.'); setLoading(false) }
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [initialItems.length])
 
   return (
     <main
@@ -164,7 +137,7 @@ function CurationBar({ items }: { items: RegistryRow[] }) {
         alignItems:'center', margin:'18px 0 16px'
       }}>
         <input
-          placeholder="Rechercher une émotion, un titre, un prénom, une minute…"
+          placeholder="Rechercher une émotion, un titre, un prénom, un jour…"
           value={q} onChange={e=>setQ(e.target.value)}
           style={{
             padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:12,
@@ -226,7 +199,7 @@ function RegistryWall({ items, q, view, total }:{
       (it.owner || '').toLowerCase().includes(s) ||
       (it.title || '').toLowerCase().includes(s) ||
       (it.message || '').toLowerCase().includes(s) ||
-      it.ts.toLowerCase().includes(s)
+      it.ts.slice(0,10).includes(s) // recherche par jour AAAA-MM-DD
     )
   }, [q, items])
 
@@ -247,13 +220,7 @@ function RegistryWall({ items, q, view, total }:{
         }}
       >
         {filtered.map((row, i) => (
-          <RegistryCard
-            key={row.ts}
-            row={row}
-            tall={tall}
-            // on “démarre” les 12 premières très vite; le gate fait le reste
-            priority={i < 12}
-          />
+          <RegistryCard key={row.ts} row={row} tall={tall} priority={i < 12} />
         ))}
         {filtered.length===0 && <p style={{opacity:.7, gridColumn:'1 / -1'}}>Aucun résultat.</p>}
       </div>
@@ -265,9 +232,8 @@ function RegistryCard(
   { row, style, tall, priority }:
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
 ) {
-  // PDF réel avec fonds custom via /api/cert
-  const pdfHref =
-    `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+  const ymd = row.ts.slice(0,10)
+  const pdfHref = `/api/cert/${ymd}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
   return (
     <article
@@ -297,50 +263,18 @@ function RegistryCard(
       }}>
         <LazyIframe src={pdfHref} priority={!!priority} />
 
-        {/* voile artistique */}
-        <div style={{
-          position:'absolute', inset:0,
-          background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)',
-          pointerEvents:'none'
-        }} />
+        <div style={{ position:'absolute', inset:0, background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)', pointerEvents:'none' }} />
 
-        {/* ✅ Badge Authentifié */}
-        <div
-          aria-label="Certificat authentifié"
-          style={{
-            position:'absolute', left:8, bottom:8,
-            display:'inline-flex', alignItems:'center', gap:6,
-            padding:'6px 8px', borderRadius:999,
-            background:'rgba(14,170,80,.18)',
-            border:'1px solid rgba(14,170,80,.45)',
-            color:'#D9FBE3', fontSize:12, fontWeight:700,
-            pointerEvents:'none'
-          }}
-        >
+        <div aria-label="Certificat authentifié"
+          style={{ position:'absolute', left:8, bottom:8, display:'inline-flex', alignItems:'center', gap:6, padding:'6px 8px', borderRadius:999, background:'rgba(14,170,80,.18)', border:'1px solid rgba(14,170,80,.45)', color:'#D9FBE3', fontSize:12, fontWeight:700, pointerEvents:'none' }}>
           <span>Authentifié</span><span aria-hidden>✓</span>
         </div>
 
-        {/* légende discrète (affichée au survol) */}
         <figcaption
-          style={{
-            position:'absolute', left:0, right:0, bottom:0,
-            padding:'12px 14px',
-            background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)',
-            color:'#fff',
-            fontSize:12,
-            opacity:.0,
-            transform:'translateY(6px)',
-            transition:'opacity .35s ease, transform .35s ease',
-            pointerEvents:'none'
-          }}
-        >
+          style={{ position:'absolute', left:0, right:0, bottom:0, padding:'12px 14px', background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)', color:'#fff', fontSize:12, opacity:.0, transform:'translateY(6px)', transition:'opacity .35s ease, transform .35s ease', pointerEvents:'none' }}>
           <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
-            <div style={{fontWeight:800, letterSpacing:.2}}>
-              {row.owner || 'Anonymous'}
-            </div>
-            <div style={{opacity:.85}}>
-              {row.ts.replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC')}
-            </div>
+            <div style={{fontWeight:800, letterSpacing:.2}}>{row.owner || 'Anonymous'}</div>
+            <div style={{opacity:.85}}>{ymd}</div>
           </div>
           {(row.title || row.message) && (
             <div style={{marginTop:6, opacity:.95, fontStyle: row.message ? 'italic' : 'normal'}}>
@@ -350,23 +284,18 @@ function RegistryCard(
         </figcaption>
       </div>
 
-      {/* hover effects */}
-      <style>{`
-        article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }
-        article:hover figcaption { opacity: 1; transform: translateY(0); }
-      `}</style>
+      <style>{`article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); } article:hover figcaption { opacity: 1; transform: translateY(0); }`}</style>
     </article>
   )
 }
 
-/* --- Iframe lazy : ne démonte jamais une fois montée + gate de boot --- */
+/* --- Iframe lazy (gate de boot, ne démonte pas après) --- */
 function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
   const holderRef = useRef<HTMLDivElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [mounted, setMounted] = useState<boolean>(priority)
   const bootedRef = useRef(false)
 
-  // tente de prendre un "slot" de boot
   const tryBoot = () => {
     if (bootedRef.current || mounted) return
     if (__bootInflight < MAX_BOOT_CONCURRENCY) {
@@ -376,7 +305,6 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
     }
   }
 
-  // intersection → demande de boot (slot si dispo, sinon attend)
   useEffect(() => {
     if (priority) { tryBoot(); return }
     const el = holderRef.current
@@ -386,10 +314,8 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
     }, { rootMargin: '600px', threshold: 0.01 })
     io.observe(el)
     return () => io.disconnect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [priority])
 
-  // libère le slot une fois l'iframe chargée (ou time-out fail-safe)
   useEffect(() => {
     if (!mounted) return
     let released = false
@@ -398,16 +324,13 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
       released = true
       __bootInflight = Math.max(0, __bootInflight - 1)
     }
-
-    // fail-safe si le "load" ne se déclenche pas
     const to = window.setTimeout(release, 12000)
 
     const ifr = iframeRef.current
     if (ifr) {
       const onLoad = () => release()
-      ifr.addEventListener('load', onLoad)
-      // certains viewers peuvent injecter un sous-document → double sécurité
       const onError = () => release()
+      ifr.addEventListener('load', onLoad)
       ifr.addEventListener('error', onError)
       return () => {
         window.clearTimeout(to)
@@ -427,22 +350,14 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
           src={src}
           title="Œuvre"
           loading="lazy"
-          style={{
-            position:'absolute', inset:0, width:'100%', height:'100%', border:'0',
-            pointerEvents:'none', userSelect:'none'
-          }}
+          style={{ position:'absolute', inset:0, width:'100%', height:'100%', border:'0', pointerEvents:'none', userSelect:'none' }}
         />
       ) : (
-        // Skeleton léger le temps de disposer d’un slot de boot
-        <div
-          style={{
-            position:'absolute', inset:0,
-            background:
-              'linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00)),' +
-              'radial-gradient(80% 60% at 50% 10%, rgba(255,255,255,.06), rgba(0,0,0,.0) 60%),' +
-              '#0E1017'
-          }}
-        />
+        <div style={{ position:'absolute', inset:0,
+          background:
+            'linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00)),' +
+            'radial-gradient(80% 60% at 50% 10%, rgba(255,255,255,.06), rgba(0,0,0,.0) 60%),' +
+            '#0E1017' }} />
       )}
     </div>
   )
