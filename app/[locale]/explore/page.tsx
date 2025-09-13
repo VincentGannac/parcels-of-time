@@ -38,7 +38,7 @@ async function getFromDB(): Promise<RegistryRow[]> {
       `
     )
     return rows.map((r: any) => ({
-      ts: new Date(r.day_utc).toISOString(),
+      ts: new Date(r.day_utc).toISOString().slice(0,10), // => 'YYYY-MM-DD'
       owner: String(r.owner || 'Anonymous'),
       title: r.title ?? null,
       message: r.message ?? null,

@@ -1,3 +1,4 @@
+//app/locale/registry/RegistryClient.tsx
 'use client'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
@@ -266,8 +267,15 @@ function RegistryCard(
   { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
 ) {
   // PDF réel avec fonds custom via /api/cert
+   // Sécurise la ts au format JOUR quoi qu'on reçoive
+  const tsDay =
+    /^\d{4}-\d{2}-\d{2}$/.test(row.ts)
+      ? row.ts
+      : (() => { try { return new Date(row.ts).toISOString().slice(0,10) } catch { return String(row.ts).slice(0,10) } })()
+
+  // PDF réel avec fonds custom via /api/cert
   const pdfHref =
-    `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+    `/api/cert/${encodeURIComponent(tsDay)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
   return (
     <article
@@ -339,7 +347,7 @@ function RegistryCard(
               {row.owner || 'Anonymous'}
             </div>
             <div style={{opacity:.85}}>
-              {row.ts.replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC')}
+            {tsDay}
             </div>
           </div>
           {(row.title || row.message) && (
