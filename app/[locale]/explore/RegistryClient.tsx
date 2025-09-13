@@ -35,10 +35,6 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-/** Gate simple pour limiter le nombre d'iframes actives simultanément */
-let __activeIframes = 0
-const MAX_ACTIVE_IFRAMES = 8
-
 export default function RegistryClient({
   locale,
   initialItems
@@ -48,7 +44,7 @@ export default function RegistryClient({
   const [loading, setLoading] = useState(initialItems.length === 0)
   const [error, setError] = useState<string>('')
 
-  // Backoff si liste vide (publication fraîche / cold start)
+  // Backoff si SSR a renvoyé 0 (publication fraîche / cold start)
   useEffect(() => {
     let cancelled = false
     let attempt = 0
@@ -350,7 +346,7 @@ function RegistryCard(
   )
 }
 
-/* --- Iframe lazy + gate de concurrence + skeleton --- */
+/* --- Iframe lazy : monte quand visible, démonte quand hors écran --- */
 function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [mount, setMount] = useState<boolean>(priority)
@@ -361,26 +357,26 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
     const el = ref.current
     if (!el) return
 
-    let claimed = false
-    const tryClaim = () => {
-      if (!claimed && __activeIframes < MAX_ACTIVE_IFRAMES) {
-        __activeIframes += 1
-        claimed = true
-        setMount(true)
-      }
-    }
-
-    const io = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        // pré-monte quand visible (ou proche) + gate
-        tryClaim()
-      }
-    }, { rootMargin: '400px' })
+    let hideTimer: number | undefined
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          if (hideTimer) { window.clearTimeout(hideTimer); hideTimer = undefined }
+          setMount(true)
+        } else {
+          // on démonte après une petite latence pour éviter le clignotement
+          if (!hideTimer) {
+            hideTimer = window.setTimeout(() => setMount(false), 1200)
+          }
+        }
+      },
+      { rootMargin: '800px', threshold: 0.01 } // pré-monte bien avant l’affichage
+    )
 
     io.observe(el)
     return () => {
       io.disconnect()
-      if (claimed) __activeIframes = Math.max(0, __activeIframes - 1)
+      if (hideTimer) window.clearTimeout(hideTimer)
     }
   }, [priority])
 
@@ -397,7 +393,7 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
           }}
         />
       ) : (
-        // Skeleton léger (image dégradée) le temps de monter l’iframe
+        // Skeleton léger le temps du montage
         <div
           style={{
             position:'absolute', inset:0,
