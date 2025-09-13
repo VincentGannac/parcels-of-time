@@ -1,11 +1,18 @@
 'use client'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
-import type { RegistryRow } from './page'
 
 type StyleId =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom'
+
+type RegistryRow = {
+  ts: string
+  owner: string
+  title: string | null
+  message: string | null
+  style: StyleId | string
+}
 
 const TOKENS = {
   '--color-bg': '#0B0E14',
@@ -54,7 +61,6 @@ export default function RegistryClient({
       }}
     >
       <section style={{maxWidth:1280, margin:'0 auto', padding:'56px 24px 64px'}}>
-        {/* Header */}
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
           <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
           <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85, border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:12}}>
@@ -62,7 +68,6 @@ export default function RegistryClient({
           </a>
         </div>
 
-        {/* Manifeste / Hero */}
         <header style={{marginBottom:20}}>
           <h1 style={{fontFamily:'Fraunces, serif', fontSize:46, lineHeight:'54px', margin:'0 0 10px', letterSpacing:.2}}>
             Registre public — œuvres de la minute
@@ -86,8 +91,6 @@ export default function RegistryClient({
     </main>
   )
 }
-
-/* ---------------- Client subcomponents ---------------- */
 
 function CurationBar({ items, onShuffle }:{ items: RegistryRow[]; onShuffle:()=>void }) {
   const [q, setQ] = useState('')
@@ -124,7 +127,6 @@ function CurationBar({ items, onShuffle }:{ items: RegistryRow[]; onShuffle:()=>
   )
 }
 
-/** Petit bandeau de stats / filtres sémantiques */
 function RegistryGalleryControls({ q, setQ, view }:{
   q:string; setQ:(s:string)=>void; view:'wall'|'salon'
 }) {
@@ -179,7 +181,7 @@ function RegistryWall({ items, q, view, total }:{
     )
   }
 
-  // --- Mur (mosaïque) : vignettes légères (pas d'iframe) ---
+  // Mur (mosaïque) : vignettes légères (pas d’iframe)
   return (
     <>
       <div style={{fontSize:12, color:'var(--color-muted)', margin:'2px 0 10px'}}>
@@ -203,11 +205,10 @@ function RegistryWall({ items, q, view, total }:{
   )
 }
 
-function bgThumbForStyle(style: StyleId): string {
-  // on tente le thumb, sinon le plein
+function bgThumbForStyle(style: string): string {
   return `/cert_bg/${style}_thumb.jpg`
 }
-function bgFullForStyle(style: StyleId): string {
+function bgFullForStyle(style: string): string {
   return `/cert_bg/${style}.png`
 }
 
@@ -217,10 +218,11 @@ function RegistryCard(
 ) {
   const pdfHref = `/api/cert/${encodeURIComponent(row.ts)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
-  // --- Mur : IMG rapide ---
+  // Mur : IMG rapide
   if (!tall) {
-    const thumb = bgThumbForStyle(row.style)
-    const full  = bgFullForStyle(row.style)
+    const thumb = bgThumbForStyle(String(row.style || 'neutral'))
+    const full  = bgFullForStyle(String(row.style || 'neutral'))
+    const fallback = '/cert_bg/neutral.png'
     return (
       <article
         onContextMenu={(e)=>e.preventDefault()}
@@ -237,74 +239,71 @@ function RegistryCard(
           willChange:'transform',
         }}
       >
-        <a href={`/m/${encodeURIComponent(row.ts)}`} style={{textDecoration:'none'}} aria-label={`Voir ${row.ts}`}>
+        <div style={{
+          position:'relative',
+          width:'100%',
+          aspectRatio:'595/842',
+          background:'#0E1017',
+          borderRadius:12,
+          overflow:'hidden',
+          border:'1px solid rgba(255,255,255,.06)',
+          boxShadow:'inset 0 0 0 1px rgba(0,0,0,.35)',
+        }}>
+          <img
+            src={thumb}
+            onError={(e)=>{
+              const img = e.currentTarget
+              if (img.src.endsWith('_thumb.jpg')) img.src = full
+              else img.src = fallback
+            }}
+            alt={`Fond ${row.style}`}
+            loading="lazy"
+            style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center'}}
+          />
           <div style={{
-            position:'relative',
-            width:'100%',
-            aspectRatio:'595/842',
-            background:'#0E1017',
-            borderRadius:12,
-            overflow:'hidden',
-            border:'1px solid rgba(255,255,255,.06)',
-            boxShadow:'inset 0 0 0 1px rgba(0,0,0,.35)',
-          }}>
-            <img
-              src={thumb}
-              onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = full }}
-              alt={`Fond ${row.style}`}
-              loading="lazy"
-              style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center'}}
-            />
-            {/* voile + badge */}
-            <div style={{
-              position:'absolute', inset:0,
-              background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)'
-            }} />
-            <div
-              aria-label="Certificat authentifié"
-              style={{
-                position:'absolute', left:8, bottom:8,
-                display:'inline-flex', alignItems:'center', gap:6,
-                padding:'6px 8px', borderRadius:999,
-                background:'rgba(14,170,80,.18)',
-                border:'1px solid rgba(14,170,80,.45)',
-                color:'#D9FBE3', fontSize:12, fontWeight:700,
-              }}
-            >
-              <span>Authentifié</span><span aria-hidden>✓</span>
-            </div>
-            {/* légende courte */}
-            <div style={{
-              position:'absolute', left:0, right:0, bottom:0,
-              padding:'10px 12px',
-              background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)',
-              color:'#fff', fontSize:12,
-            }}>
-              <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
-                <div style={{fontWeight:800, letterSpacing:.2}}>
-                  {row.owner || 'Anonymous'}
-                </div>
-                <div style={{opacity:.85}}>
-                  {row.ts.replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC')}
-                </div>
-              </div>
-              {(row.title || row.message) && (
-                <div style={{marginTop:4, opacity:.95, fontStyle: row.message ? 'italic' : 'normal', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
-                  {row.title || `“${row.message}”`}
-                </div>
-              )}
-            </div>
+            position:'absolute', inset:0,
+            background:'radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,.18) 100%)'
+          }} />
+          <div
+            aria-label="Certificat authentifié"
+            style={{
+              position:'absolute', left:8, bottom:8,
+              display:'inline-flex', alignItems:'center', gap:6,
+              padding:'6px 8px', borderRadius:999,
+              background:'rgba(14,170,80,.18)',
+              border:'1px solid rgba(14,170,80,.45)',
+              color:'#D9FBE3', fontSize:12, fontWeight:700,
+            }}
+          >
+            <span>Authentifié</span><span aria-hidden>✓</span>
           </div>
-        </a>
-
-        <style>{`
-          article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }
-        `}</style>
+          <div style={{
+            position:'absolute', left:0, right:0, bottom:0,
+            padding:'10px 12px',
+            background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.65) 100%)',
+            color:'#fff', fontSize:12,
+          }}>
+            <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
+              <div style={{fontWeight:800, letterSpacing:.2}}>
+                {row.owner || 'Anonymous'}
+              </div>
+              <div style={{opacity:.85}}>
+                {row.ts.replace('T',' ').replace(':00.000Z',' UTC').replace('Z',' UTC')}
+              </div>
+            </div>
+            {(row.title || row.message) && (
+              <div style={{marginTop:4, opacity:.95, fontStyle: row.message ? 'italic' : 'normal', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                {row.title || `“${row.message}”`}
+              </div>
+            )}
+          </div>
+        </div>
+        <style>{`article:hover { transform: translateY(-4px); box-shadow: 0 18px 60px rgba(0,0,0,.55); }`}</style>
       </article>
     )
   }
 
-  // --- Salon : iframe lazy ---
+  // Salon : iframe lazy
   return (
     <article
       onContextMenu={(e)=>e.preventDefault()}
