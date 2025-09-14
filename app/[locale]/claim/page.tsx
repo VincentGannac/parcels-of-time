@@ -1,14 +1,22 @@
 // app/[locale]/claim/page.tsx
-import { Suspense } from 'react' 
-import ClientClaim from './ClientClaim' 
-export const dynamic = 'force-dynamic' // opt-out SSG pour cette page 
-export const revalidate = 0 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-export default function Page() { 
-    return ( 
-    <Suspense fallback={<main style=
-        {{padding:24}}>Loading…</main>}> 
-        <ClientClaim />
-        </Suspense> 
-    ) 
+import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
+import ClientClaim from './ClientClaim'
+import { readSession, redirectToLogin } from '@/lib/auth'
+
+type Params = { locale: 'fr' | 'en' }
+
+export default async function Page({ params }: { params: Promise<Params> }) {
+  const { locale } = await params
+  const session = await readSession()
+  if (!session) redirect(redirectToLogin(`/${locale}/claim`))
+
+  return (
+    <Suspense fallback={<main style={{ padding: 24 }}>Loading…</main>}>
+      <ClientClaim />
+    </Suspense>
+  )
 }

@@ -107,6 +107,7 @@ function Header({onToggleTheme, href}:{onToggleTheme:()=>void; href:(p:string)=>
           <li><Link href={href('/claim?gift=1')} style={{textDecoration:'none', color:'inherit'}}>{t('nav.gift')}</Link></li>
           <li><a href="#faq"      style={{textDecoration:'none', color:'inherit'}}>{t('nav.faq')}</a></li>
           <li><Link href={href('/explore')} style={{textDecoration:'none', color:'inherit'}}>Registre public</Link></li>
+          <li><Link href={href('/account')} style={{textDecoration:'none', color:'inherit'}}>{t('nav.account') ?? 'Mon Compte'}</Link></li>
         </ul>
 
         <div style={{display:'flex', gap:10, justifyContent:'flex-end', alignItems:'center'}}>

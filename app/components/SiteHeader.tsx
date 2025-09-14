@@ -74,6 +74,9 @@ export default function SiteHeader() {
           <Link href={href('/search')} style={linkStyle}>
             {labels.search}
           </Link>
+          <Link href={href('/account')} style={linkStyle}>
+            {locale === 'fr' ? 'Mon compte' : 'My Account'}
+          </Link>
 
           {/* Switch FR/EN */}
           <LocaleSwitcher />

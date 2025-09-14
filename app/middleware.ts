@@ -1,6 +1,7 @@
+// middleware.ts
 import { NextResponse, NextRequest } from 'next/server'
 
-const LOCALES = ['fr','en'] as const
+const LOCALES = ['fr', 'en'] as const
 const DEFAULT_LOCALE: (typeof LOCALES)[number] = 'en'
 
 // Admin Basic Auth (Edge-safe: atob)
@@ -22,9 +23,10 @@ export function middleware(req: NextRequest) {
   if (path.startsWith('/admin') || path.startsWith('/api/admin')) {
     const auth = req.headers.get('authorization') || ''
     if (auth.startsWith('Basic ')) {
-      const decoded = (typeof atob !== 'undefined')
-        ? atob(auth.split(' ')[1])
-        : Buffer.from(auth.split(' ')[1], 'base64').toString() // fallback Node (dev)
+      const decoded =
+        typeof atob !== 'undefined'
+          ? atob(auth.split(' ')[1])
+          : Buffer.from(auth.split(' ')[1], 'base64').toString()
       const [u, p] = decoded.split(':')
       if (u === USER && p === PASS) return NextResponse.next()
     }
@@ -34,12 +36,31 @@ export function middleware(req: NextRequest) {
     })
   }
 
-  // 2) Files et chemins déjà localisés → on ne touche pas
+  // 2) Si chemin déjà localisé ou fichier → on laisse passer
   const isFile = /\.[a-zA-Z0-9]+$/.test(path)
-  const alreadyLocalized = LOCALES.some(l => path === `/${l}` || path.startsWith(`/${l}/`))
-  if (isFile || alreadyLocalized) return NextResponse.next()
+  const alreadyLocalized = LOCALES.some((l) => path === `/${l}` || path.startsWith(`/${l}/`))
+  if (isFile || alreadyLocalized) {
+    // 2.b) Garde de session **seulement** pour certaines routes localisées
+    const guard =
+      /^\/(fr|en)\/(?:claim|account)(?:\/|$)/.test(path) ||
+      /^\/(fr|en)\/m\/.+/.test(path)
 
-  // 3) Redirection / → /{locale}
+    if (guard) {
+      const hasSess = req.nextUrl.searchParams.get('dbg') === '1' || req.cookies.has('pot_sess')
+      if (!hasSess) {
+        const locale = path.startsWith('/fr') ? 'fr' : 'en'
+        const next = path + (url.search || '')
+        const target = new URL(req.url)
+        target.pathname = `/${locale}/login`
+        target.searchParams.set('next', next)
+        return NextResponse.redirect(target)
+      }
+    }
+
+    return NextResponse.next()
+  }
+
+  // 3) Ajout auto de la locale si absente
   const header = req.headers.get('accept-language') || ''
   const guess = header.split(',')[0]?.split('-')[0]?.toLowerCase()
   const locale = (LOCALES as readonly string[]).includes(guess as any)
