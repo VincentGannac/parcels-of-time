@@ -11,13 +11,8 @@ type Params = { locale: 'fr' | 'en' }
 
 export default async function Page({ params }: { params: Promise<Params> }) {
   const { locale } = await params
-
-  // readSession est async dans votre setup Next 15
   const session = await readSession()
-  if (!session) {
-    const loginUrl = await redirectToLogin(`/${locale}/claim`)
-    redirect(loginUrl)
-  }
+  if (!session) redirect(await redirectToLogin(`/${locale}/claim`))
 
   return (
     <Suspense fallback={<main style={{ padding: 24 }}>Loading…</main>}>
