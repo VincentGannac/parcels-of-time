@@ -1,4 +1,4 @@
-// app/[locale]/login/page.tsx
+// app/[locale]/signup/page.tsx
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -7,9 +7,9 @@ import { redirect } from 'next/navigation'
 import { readSession } from '@/lib/auth'
 
 type Params = { locale: 'fr' | 'en' }
-type Search = { next?: string; err?: string; info?: string }
+type Search = { next?: string; err?: string }
 
-export default async function LoginPage({
+export default async function SignupPage({
   params, searchParams
 }: {
   params: Promise<Params>
@@ -23,18 +23,18 @@ export default async function LoginPage({
 
   const labels = locale === 'fr'
     ? {
-        title: 'Connexion',
+        title: 'Créer un compte',
         email: 'Adresse email',
-        password: 'Mot de passe',
-        submit: 'Se connecter',
-        switch: "Pas de compte ? S'inscrire →",
+        password: 'Mot de passe (min. 8)',
+        submit: "S'inscrire",
+        switch: 'Déjà inscrit ? Se connecter →',
       }
     : {
-        title: 'Sign in',
+        title: 'Create account',
         email: 'Email address',
-        password: 'Password',
-        submit: 'Sign in',
-        switch: 'No account? Sign up →',
+        password: 'Password (min. 8)',
+        submit: 'Sign up',
+        switch: 'Already have an account? Sign in →',
       }
 
   return (
@@ -42,20 +42,12 @@ export default async function LoginPage({
       <h1 style={{margin:'0 0 16px'}}>{labels.title}</h1>
       {sp?.err && (
         <p style={{color:'#b00', background:'#fee', border:'1px solid #fbb', padding:10, borderRadius:8, marginTop:0}}>
-          {sp.err === 'missing' ? (locale==='fr'?'Email et mot de passe requis.':'Email and password are required.')
-           : sp.err === 'badcreds' ? (locale==='fr'?'Identifiants invalides.':'Invalid credentials.')
+          {sp.err === 'weak' ? (locale==='fr'?'Mot de passe trop court.':'Password too short.')
            : (locale==='fr'?'Erreur serveur.':'Server error.')}
         </p>
       )}
-      {sp?.info === 'magic_disabled' && (
-        <p style={{background:'#eef7ff', border:'1px solid #cbe4ff', padding:10, borderRadius:8}}>
-          {locale==='fr'
-            ? "La connexion par lien magique n'est plus disponible. Connectez-vous avec votre mot de passe."
-            : 'Magic link sign-in is disabled. Please sign in with your password.'}
-        </p>
-      )}
 
-      <form action="/api/auth/login" method="post" style={{display:'grid', gap:12, marginTop:12}}>
+      <form action="/api/auth/signup" method="post" style={{display:'grid', gap:12, marginTop:12}}>
         <input type="hidden" name="next" value={next} />
         <input type="hidden" name="locale" value={locale} />
 
@@ -67,7 +59,7 @@ export default async function LoginPage({
 
         <label style={{display:'grid', gap:6}}>
           <span>{labels.password}</span>
-          <input name="password" type="password" required
+          <input name="password" type="password" required minLength={8}
                  style={{padding:'10px 12px', border:'1px solid #ddd', borderRadius:8}} />
         </label>
 
@@ -77,7 +69,7 @@ export default async function LoginPage({
       </form>
 
       <p style={{marginTop:12}}>
-        <a href={`/${locale}/signup?next=${encodeURIComponent(next)}`}>{labels.switch}</a>
+        <a href={`/${locale}/login?next=${encodeURIComponent(next)}`}>{labels.switch}</a>
       </p>
     </main>
   )

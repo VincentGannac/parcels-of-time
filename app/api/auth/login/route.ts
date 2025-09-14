@@ -1,56 +1,36 @@
+// app/api/auth/login/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
-import crypto from 'node:crypto'
-import { pool } from '@/lib/db'
-import { resend } from '@/lib/email'
-import { upsertOwnerByEmail } from '@/lib/auth'
-
-function baseFromReq(req: Request) {
-  const u = new URL(req.url)
-  return process.env.NEXT_PUBLIC_BASE_URL || `${u.protocol}//${u.host}`
-}
+import { authenticateWithPassword, writeSessionCookie } from '@/lib/auth'
 
 export async function POST(req: Request) {
+  const form = await req.formData()
+  const email = String(form.get('email') || '')
+  const password = String(form.get('password') || '')
+  const next = String(form.get('next') || '')
+  const locale = String(form.get('locale') || 'en')
+
+  if (!email || !password) {
+    return NextResponse.redirect(new URL(`/${locale}/login?err=missing&next=${encodeURIComponent(next || `/${locale}/account`)}`, req.url), { status: 303 })
+  }
+
   try {
-    const { email, next, locale } = await req.json()
-    const normEmail = String(email||'').trim().toLowerCase()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normEmail)) {
-      return NextResponse.json({ error: 'bad_email' }, { status: 400 })
-    }
-    const owner = await upsertOwnerByEmail(normEmail)
-
-    // Token (one-time, 30 min)
-    const token = crypto.randomBytes(32).toString('base64url')
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
-
-    await pool.query(
-        `insert into auth_login_tokens (token, email, owner_id, expires_at)
-         values ($1, $2, $3, $4)`,
-        [token, normEmail, owner.id, expiresAt] // owner.id est string (uuid)
-      )
-      
-
-    const base = baseFromReq(req)
-    const loc = (locale === 'fr' || locale === 'en') ? locale : 'fr'
-    const fallbackNext = `/${loc}/account`
-    const callbackUrl = `${base}/api/auth/callback?token=${token}&next=${encodeURIComponent(next || fallbackNext)}`
-
-    // Envoi email (silencieux si RESEND non config)
-    if (resend) {
-      await resend.emails.send({
-        from: process.env.FROM_EMAIL || 'Parcels of Time <no-reply@parcelsoftime.com>',
-        to: normEmail,
-        subject: loc === 'fr' ? 'Votre lien de connexion' : 'Your sign-in link',
-        text: loc === 'fr'
-          ? `Cliquez pour vous connecter : ${callbackUrl}\nLe lien expire dans 30 minutes.`
-          : `Click to sign in: ${callbackUrl}\nThe link expires in 30 minutes.`,
-        html: `<p><a href="${callbackUrl}">Se connecter</a> (expire dans 30 minutes)</p>`,
-      })
+    const user = await authenticateWithPassword(email, password)
+    if (!user) {
+      return NextResponse.redirect(new URL(`/${locale}/login?err=badcreds&next=${encodeURIComponent(next || `/${locale}/account`)}`, req.url), { status: 303 })
     }
 
-    return NextResponse.json({ ok: true })
-  } catch (e) {
-    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+    await writeSessionCookie({
+      ownerId: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      iat: Math.floor(Date.now() / 1000),
+    })
+
+    const target = next || `/${locale}/account`
+    return NextResponse.redirect(new URL(target, req.url), { status: 303 })
+  } catch {
+    return NextResponse.redirect(new URL(`/${locale}/login?err=server&next=${encodeURIComponent(next || `/${locale}/account`)}`, req.url), { status: 303 })
   }
 }
