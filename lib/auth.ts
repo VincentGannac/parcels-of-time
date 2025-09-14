@@ -74,7 +74,7 @@ function b64anyToUtf8(s: string): string {
 export async function readSession(): Promise<Session | null> {
   let raw = (await nextCookies()).get(COOKIE_NAME)?.value
   if (!raw) return null
-
+  console.log('[cookie]', raw)
   // Certains environnements percent-encodent les '=' du base64 → on tente de décoder
   try { raw = decodeURIComponent(raw) } catch { /* no-op */ }
 
