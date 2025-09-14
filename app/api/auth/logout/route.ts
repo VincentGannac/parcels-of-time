@@ -9,9 +9,10 @@ export async function POST(req: Request) {
   const referer = req.headers.get('referer') || ''
   const m = referer.match(/\/(fr|en)(?:\/|$)/)
   const loc = (m?.[1] as 'fr'|'en') || 'en'
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? url.hostname
+  
 
   const res = NextResponse.redirect(new URL(`/${loc}/login`, req.url), { status: 303 })
+  const host = new URL(req.url).host
   clearSessionCookieOnResponse(res, host)
   return res
 }

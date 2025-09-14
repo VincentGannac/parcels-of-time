@@ -26,13 +26,15 @@ export async function POST(req: Request) {
 
     const target = next || fallback
     const res = NextResponse.redirect(new URL(target, req.url), { status: 303 })
+    const host = new URL(req.url).host
     setSessionCookieOnResponse(res, {
       ownerId: user.id,
       email: user.email,
       displayName: user.display_name,
       iat: Math.floor(Date.now() / 1000),
-    }, host || undefined)
+    }, host)
     return res
+
   } catch {
     return NextResponse.redirect(new URL(`/${locale}/login?err=server&next=${encodeURIComponent(next || fallback)}`, req.url), { status: 303 })
   }
