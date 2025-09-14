@@ -29,9 +29,11 @@ export function middleware(req: NextRequest) {
   if (host === 'www.parcelsoftime.com') {
     const target = new URL(req.url)
     target.host = 'parcelsoftime.com'
-    target.protocol = 'https:' // par sûreté
-    return NextResponse.redirect(target, 308) // 308 préserve la méthode (POST login)
+    target.protocol = 'https:'
+    // 308 pour préserver la méthode si un jour on poste vers /api/auth depuis www
+    return NextResponse.redirect(target, 308)
   }
+  
 
   /* ============== 1) Admin Basic Auth (optionnel) ============== */
   if (path.startsWith('/admin') || path.startsWith('/api/admin')) {

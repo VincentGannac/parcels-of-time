@@ -63,18 +63,36 @@ export function clearSessionCookieOnResponse(res: NextResponse, hostFromReq?: st
   })
 }
 
+function b64anyToUtf8(s: string): string {
+  // Accepte base64url ( - _ ) et base64 classique ( + / ), rajoute le padding
+  let t = s.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = t.length % 4
+  if (pad) t += '='.repeat(4 - pad)
+  return Buffer.from(t, 'base64').toString('utf8')
+}
+
 export async function readSession(): Promise<Session | null> {
-  const c = (await nextCookies()).get(COOKIE_NAME)?.value
-  if (!c) return null
-  const [p, s] = c.split('.')
+  let raw = (await nextCookies()).get(COOKIE_NAME)?.value
+  if (!raw) return null
+
+  // Certains environnements percent-encodent les '=' du base64 → on tente de décoder
+  try { raw = decodeURIComponent(raw) } catch { /* no-op */ }
+
+  const [p, s] = raw.split('.')
   if (!p || !s) return null
+
+  // La signature est calculée sur la *chaîne* payload telle qu’elle est stockée dans le cookie
   if (sign(p) !== s) return null
+
   try {
-    const json = Buffer.from(p, 'base64').toString('utf8')
+    const json = b64anyToUtf8(p)
     const data = JSON.parse(json) as Session
     return data && typeof data.ownerId === 'string' ? data : null
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
+
 
 /** Variante "server-only" (pas utilisée dans les routes API) */
 export async function writeSessionCookie(sess: Session) {
