@@ -122,7 +122,7 @@ function Header({onToggleTheme, href}:{onToggleTheme:()=>void; href:(p:string)=>
   )
 }
 
-/* -------------------- Live UTC minute -------------------- */
+/* -------------------- Live UTC jour -------------------- */
 function LiveUTCDate() {
   const [now, setNow] = useState(new Date())
   useEffect(()=>{ const t = setInterval(()=>setNow(new Date()), 1000); return ()=>clearInterval(t) },[])

@@ -9,37 +9,9 @@ import { revalidatePath } from 'next/cache'
 import { formatISOAsNice } from '@/lib/date'
 import { pool } from '@/lib/db'
 import EditClient from './EditClient'
-import { getSession, ownerEmailForDay } from '@/lib/auth'
 
 type Params = { locale: string; ts: string }
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
-
-
-function toIsoDayUTC(s: string) {
-  if (!s) return null
-  const raw = String(s).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const d = new Date(`${raw}T00:00:00.000Z`)
-    return isNaN(d.getTime()) ? null : d.toISOString()
-  }
-  const d = new Date(raw); if (isNaN(d.getTime())) return null
-  d.setUTCHours(0,0,0,0); return d.toISOString()
-}
-
-async function getMyCollection(email: string) {
-  const { rows } = await pool.query(
-    `select date_trunc('day', c.ts) as day_utc, c.cert_style
-       from claims c join owners o on o.id = c.owner_id
-      where lower(o.email) = lower($1)
-      order by day_utc desc
-      limit 500`,
-    [email]
-  )
-  return rows.map((r: any) => ({
-    ts: new Date(r.day_utc).toISOString().slice(0,10),
-    style: String(r.cert_style || 'neutral'),
-  })) as { ts: string; style: string }[]
-}
 
 async function getPublicStateDb(tsISO: string): Promise<boolean> {
   if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`;
@@ -176,28 +148,8 @@ async function getClaimMeta(tsISO: string) {
     searchParams: Promise<{ autopub?: string; ok?: string }>
   }) {
   const { locale = 'en', ts: tsParam = '' } = await params;
-  const decodedTs = safeDecode(tsParam)
-  const dayISO = toIsoDayUTC(decodedTs)
-  if (!dayISO) redirect(`/${locale}`)
-
-  // ➊ Session requise
-  const session = await getSession()
-  if (!session) {
-    redirect(`/${locale}/login?next=/${locale}/m/${encodeURIComponent(decodedTs)}`)
-  }
-
-  // ➋ Vérifie que l'utilisateur est bien le propriétaire du jour
-  const ownerEmail = await ownerEmailForDay(dayISO)
-  if (!ownerEmail || ownerEmail !== session.email.toLowerCase()) {
-    // pas propriétaire → on renvoie à l’accueil (ou 404 si tu préfères)
-    redirect(`/${locale}`)
-  }
-
-  // ➌ Collection du propriétaire
-  const collection = await getMyCollection(session.email)
-
-  
   const sp = await searchParams;
+  const decodedTs = safeDecode(tsParam);
 
   const isPublicDb = await getPublicStateDb(decodedTs);
   const wantsAutopub = sp?.autopub === '1';
@@ -362,48 +314,6 @@ async function getClaimMeta(tsISO: string) {
             <div style={{fontSize:13, color:'var(--color-muted)'}}>Métadonnées non disponibles.</div>
           )}
         </aside>
-
-                {/* ----- Ma collection ----- */}
-                <aside style={{ marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-            <div style={{ fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)' }}>
-              Ma collection ({collection.length})
-            </div>
-            <form action={async()=>{
-              'use server'
-              await fetch('/api/auth/logout', { method:'POST' })
-              redirect(`/${locale}`)
-            }}>
-              <button type="submit" style={{border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', borderRadius:10, padding:'8px 10px'}}>Se déconnecter</button>
-            </form>
-          </div>
-
-          {collection.length ? (
-            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:12}}>
-              {collection.map((it)=>(
-                <a key={it.ts} href={`/${locale}/m/${encodeURIComponent(it.ts)}`}
-                   style={{textDecoration:'none', color:'var(--color-text)', border:'1px solid var(--color-border)', borderRadius:12, padding:10, display:'grid', gap:8}}>
-                  <div style={{height:120, borderRadius:8, border:'1px solid var(--color-border)',
-                               backgroundImage:`url(/cert_bg/${it.style}_thumb.jpg), url(/cert_bg/${it.style}.png)`,
-                               backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'}} />
-                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:13}}>
-                    <strong>{it.ts}</strong>
-                    <span style={{opacity:.7}}>{it.style}</span>
-                  </div>
-                  <div style={{display:'flex', gap:8}}>
-                    <a href={`/api/cert/${encodeURIComponent(it.ts)}`} target="_blank" rel="noreferrer"
-                       style={{flex:1, textAlign:'center', border:'1px solid var(--color-border)', borderRadius:8, padding:'6px 8px', textDecoration:'none', color:'var(--color-text)'}}>PDF</a>
-                    <a href={`/${locale}/m/${encodeURIComponent(it.ts)}`}
-                       style={{flex:1, textAlign:'center', border:'1px solid var(--color-border)', borderRadius:8, padding:'6px 8px', textDecoration:'none', color:'var(--color-text)'}}>Ouvrir</a>
-                  </div>
-                </a>
-              ))}
-            </div>
-          ) : (
-            <div style={{fontSize:13, color:'var(--color-muted)'}}>Aucun certificat pour le moment.</div>
-          )}
-        </aside>
-
 
         {/* ======= ÉDITION (9,99 €) — DÉPLIANTE ======= */}
         <section style={{ marginTop:24 }}>

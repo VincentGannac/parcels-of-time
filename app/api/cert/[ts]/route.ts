@@ -2,20 +2,41 @@
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
-import { getSessionFromRequest, ownerEmailForDay } from '@/lib/auth'
 import { pool } from '@/lib/db'
 import { generateCertificatePDF } from '@/lib/cert'
 import { Buffer } from 'node:buffer'
 
+/**
+ * Normalise un horodatage en ISO minute UTC.
+ * Accepte :
+ *  - 'YYYY-MM-DD'
+ *  - 'YYYY-MM-DDTHH:mm'
+ *  - 'YYYY-MM-DDTHH:mm:ss(.SSS)[Z]'
+ * Retourne toujours une ISO avec secondes/millis à 00 et suffixe Z.
+ */
+function toIsoMinuteUTC(input: string): string | null {
+  if (!input) return null
+  const s = input.trim()
 
- /** Normalise un input JOUR → ISO minuit UTC. Rejette toute heure. */
-function toIsoDayUTC(input: string): string | null {
-    if (!input) return null
-    const s = input.trim()
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  // 1) Jour seul
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
     const d = new Date(`${s}T00:00:00.000Z`)
-    return isNaN(d.getTime()) ? null : d.toISOString()
+    return isNaN(d.getTime()) ? null : d.toISOString().replace(/\.\d{3}Z$/, '.000Z')
   }
+
+  // 2) Sans timezone, précision minute
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) {
+    const d = new Date(`${s}:00.000Z`) // on force UTC
+    return isNaN(d.getTime()) ? null : d.toISOString().replace(/\.\d{3}Z$/, '.000Z')
+  }
+
+  // 3) Formats ISO complets divers
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return null
+  // on aligne à la minute UTC
+  d.setUTCSeconds(0, 0)
+  return d.toISOString()
+}
 
 export async function GET(req: Request, ctx: any) {
   // Récup du paramètre dynamique
@@ -24,26 +45,9 @@ export async function GET(req: Request, ctx: any) {
     : String(ctx?.params?.ts ?? '')
 
   const decoded = decodeURIComponent(rawParam)
-  const tsISO = toIsoDayUTC(decoded)
+  const tsISO = toIsoMinuteUTC(decoded)
   if (!tsISO) {
     return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
-  }
-
-  // Jour public ?
-  const { rows: pubRows } = await pool.query(
-    `select 1 from minute_public where date_trunc('day', ts) = $1::timestamptz limit 1`,
-    [tsISO]
-  )
-  const isDayPublic = pubRows.length > 0
-  const isRegistryRender = new URL(req.url).searchParams.get('public') === '1'
-
-  if (!isDayPublic && !isRegistryRender) {
-    // contrôle session propriétaire
-    const sess = getSessionFromRequest(req)
-    const ownerEmail = await ownerEmailForDay(tsISO)
-    if (!sess || !ownerEmail || ownerEmail !== sess.email.toLowerCase()) {
-      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    }
   }
 
   // Localisation pour le QR
@@ -72,7 +76,7 @@ export async function GET(req: Request, ctx: any) {
          o.display_name
        FROM claims c
        JOIN owners o ON o.id = c.owner_id
-       WHERE date_trunc('day', c.ts) = $1::timestamptz
+       WHERE date_trunc('minute', c.ts) = $1::timestamptz
        LIMIT 1`,
       [tsISO]
     )
@@ -108,9 +112,8 @@ export async function GET(req: Request, ctx: any) {
     url.searchParams.get('hide_meta') === '1' ||
     url.searchParams.has('hide_meta')
 
-  // URL publique (pour le QR) 
-  const day = tsISO.slice(0,10)
-  const publicUrl = `${base}/${locale}/m/${encodeURIComponent(day)}`
+  // URL publique (pour le QR) basée sur la minute normalisée
+  const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO)}`
 
   // Génération PDF
   const pdfBytes = await generateCertificatePDF({
@@ -133,15 +136,13 @@ export async function GET(req: Request, ctx: any) {
   })
 
   const buf = Buffer.from(pdfBytes)
-  const headers: Record<string,string> = {
-    'Content-Type': 'application/pdf',
-    'Content-Disposition': `inline; filename="cert-${encodeURIComponent(day)}.pdf"`,
-    'Vary': 'Accept-Language, Cookie',
-  }
-  if (isDayPublic || isRegistryRender) {
-    headers['Cache-Control'] = 'public, s-maxage=86400, stale-while-revalidate=604800'
-  } else {
-    headers['Cache-Control'] = 'private, no-store' // pas de cache partagé
-  }
-  return new Response(buf as unknown as BodyInit, { headers })
+  return new Response(buf as unknown as BodyInit, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO)}.pdf"`,
+      // cache public CDN (les certificats sont immuables)
+      'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+      'Vary': 'Accept-Language',
+    },
+  })
 }

@@ -2,28 +2,28 @@
     "brand": "Parcels of Time",
     "nav": { "why": "Why", "how": "How", "pricing": "Pricing", "rare": "Rare minutes", "gift": "Gift", "faq": "FAQ" },
     "hero": {
-      "h1": "Own the minute that matters.",
+      "h1": "Own the day that matters.",
       "subtitle": "Engrave a life moment by claiming it forever. Unique. Digital. Shareable.",
-      "rarity": "Real rarity: 525,600 minutes per year."
+      "rarity": "Real rarity: only 365 days per year."
     },
-    "cta": { "claim": "Reserve my minute", "gift": "Gift a minute" },
+    "cta": { "claim": "Reserve my day", "gift": "Gift a day" },
     "receive": {
       "title": "What you receive",
-      "points": ["Public page for your minute", "Signed PDF certificate", "Personal message & optional link", "Instant email delivery"]
+      "points": ["Public page for your day", "Signed PDF certificate", "Personal message & optional link", "Instant email delivery"]
     },
     "claim": {
-      "title": "Claim your minute",
+      "title": "Claim your day",
       "step1": "STEP 1 — INFORMATION",
       "email": "Your email (receipt & certificate)",
       "display_name": "Recipient name (public on certificate)",
       "message": "Message (optional)",
       "link": "Link (optional)",
       "moderation": "Moderated content. Be kind ❤️",
-      "step2": "STEP 2 — YOUR MINUTE",
+      "step2": "STEP 2 — YOUR DAY",
       "utc_input": "UTC timestamp (ISO, e.g. 2100-01-01T00:00Z)",
-      "pick_local": "Or select in local time (rounded to the minute)",
+      "pick_local": "Or select in local time (rounded to the day)",
       "style": "Certificate style",
-      "pay": "Pay & claim this minute",
+      "pay": "Pay & claim this day",
       "timeLabel": { "utc_only": "UTC only", "utc_plus_local": "UTC + local (small)", "local_plus_utc": "Local + UTC (small)" }
     },
     "certificate": {
