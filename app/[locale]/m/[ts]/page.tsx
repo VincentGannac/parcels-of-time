@@ -145,9 +145,10 @@ export default async function Page({
 
   // 1) Auth obligatoire
   const session = await readSession()
-  if (!session) redirect(await redirectToLogin(`/${locale}/m/${encodeURIComponent(decodedTs)}`))
-
-
+  if (!session) {
+    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
+  }
+  
   // 2) Ownership obligatoire
   const ownerId = await ownerIdForDay(decodedTs)
   if (!ownerId) redirect(`/${locale}/account?not_found=1`)

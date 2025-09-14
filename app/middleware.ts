@@ -91,5 +91,6 @@ export function middleware(req: NextRequest) {
 
   const target = new URL(req.url)
   target.pathname = `/${locale}${path}`
-  return NextResponse.redirect(target)
+  return NextResponse.redirect(target, { status: 302 })
+
 }

@@ -1,4 +1,3 @@
-// app/api/auth/login/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -16,7 +15,7 @@ export async function POST(req: Request) {
   if (!email || !password) {
     return NextResponse.redirect(
       new URL(`/${locale}/login?err=missing&next=${encodeURIComponent(next || fallback)}`, req.url),
-      { status: 303 }
+      { status: 302 }
     )
   }
 
@@ -25,12 +24,12 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.redirect(
         new URL(`/${locale}/login?err=badcreds&next=${encodeURIComponent(next || fallback)}`, req.url),
-        { status: 303 }
+        { status: 302 }
       )
     }
 
     const target = next || fallback
-    const res = NextResponse.redirect(new URL(target, req.url), { status: 303 })
+    const res = NextResponse.redirect(new URL(target, req.url), { status: 302 })
     setSessionCookieOnResponse(res, {
       ownerId: user.id,
       email: user.email,
@@ -41,7 +40,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.redirect(
       new URL(`/${locale}/login?err=server&next=${encodeURIComponent(next || fallback)}`, req.url),
-      { status: 303 }
+      { status: 302 }
     )
   }
 }
