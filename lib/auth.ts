@@ -3,6 +3,7 @@ import { cookies as nextCookies, headers as nextHeaders } from 'next/headers'
 import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { pool } from '@/lib/db'
+import { NextResponse } from 'next/server'
 
 const COOKIE_NAME = 'pot_sess'
 const SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me'
@@ -19,6 +20,32 @@ function b64u(buf: Buffer) {
 }
 function sign(input: string) {
   return b64u(crypto.createHmac('sha256', SECRET).update(input).digest())
+}
+export function encodeSessionForCookie(sess: Session): string {
+  const payload = Buffer.from(JSON.stringify(sess)).toString('base64')
+  const sig = sign(payload)
+  return `${payload}.${sig}`
+}
+
+export function setSessionCookieOnResponse(res: NextResponse, sess: Session) {
+  res.cookies.set(COOKIE_NAME, encodeSessionForCookie(sess), {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30, // 30 jours
+  })
+}
+
+/** Efface le cookie de session sur une réponse NextResponse */
+export function clearSessionCookieOnResponse(res: NextResponse) {
+  res.cookies.set(COOKIE_NAME, '', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  })
 }
 
 export async function readSession(): Promise<Session | null> {

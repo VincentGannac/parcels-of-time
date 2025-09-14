@@ -2,14 +2,16 @@
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
-import { clearSessionCookie } from '@/lib/auth'
+import { clearSessionCookieOnResponse } from '@/lib/auth'
 
 export async function POST(req: Request) {
-  await clearSessionCookie()
   const url = new URL(req.url)
-  // Essaie de retrouver la locale depuis le Referer
-  const ref = req.headers.get('referer') || ''
-  const m = /^https?:\/\/[^/]+\/(fr|en)(\/|$)/i.exec(ref)
-  const locale = (m?.[1] || 'en').toLowerCase()
-  return NextResponse.redirect(new URL(`/${locale}`, url), { status: 303 })
+  // essaie de déduire la locale à partir du Referer, sinon /en
+  const referer = req.headers.get('referer') || ''
+  const m = referer.match(/\/(fr|en)(?:\/|$)/)
+  const loc = (m?.[1] as 'fr'|'en') || 'en'
+
+  const res = NextResponse.redirect(new URL(`/${loc}/login`, req.url), { status: 303 })
+  clearSessionCookieOnResponse(res)
+  return res
 }
