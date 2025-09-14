@@ -6,19 +6,14 @@ const DEFAULT_LOCALE: (typeof LOCALES)[number] = 'en'
 
 export const config = {
   matcher: [
-    // Admin protégé (inclut l’API admin)
-    '/admin/:path*',
-    '/api/admin/:path*',
+    // On inclut explicitement les routes auth API pour normaliser le host AVANT qu'elles ne s'exécutent
+    '/api/auth/:path*',
 
-    // Routes qui nécessitent une session
-    '/fr/claim',
-    '/en/claim',
-    '/fr/m/:path*',
-    '/en/m/:path*',
-    '/fr/account',
-    '/en/account',
+    // Routes protégées + pages locales
+    '/fr/:path*',
+    '/en/:path*',
 
-    // Redirection de locale (catch-all hors statiques & API classiques)
+    // Catch-all (hors statiques & images & HMR & api)
     '/((?!api|_next/static|_next/image|_next/webpack-hmr|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|xml)).*)',
   ],
 }
@@ -26,8 +21,19 @@ export const config = {
 export function middleware(req: NextRequest) {
   const url = req.nextUrl
   const path = url.pathname
+  const host = req.headers.get('host') || ''
 
-  /* ============== 1) Admin: Basic Auth ============== */
+  /* ============== 0) Normalisation d’hôte : www -> apex ==============
+     On le fait ici pour *toutes* les routes (pages + /api/auth/*)
+  =====================================================================*/
+  if (host === 'www.parcelsoftime.com') {
+    const target = new URL(req.url)
+    target.host = 'parcelsoftime.com'
+    target.protocol = 'https:' // par sûreté
+    return NextResponse.redirect(target, 308) // 308 préserve la méthode (POST login)
+  }
+
+  /* ============== 1) Admin Basic Auth (optionnel) ============== */
   if (path.startsWith('/admin') || path.startsWith('/api/admin')) {
     const auth = req.headers.get('authorization') || ''
     if (auth.startsWith('Basic ')) {
@@ -35,7 +41,6 @@ export function middleware(req: NextRequest) {
         const decoded =
           typeof atob !== 'undefined'
             ? atob(auth.split(' ')[1])
-            // fallback dev Node (pas utilisé en edge prod)
             : Buffer.from(auth.split(' ')[1], 'base64').toString()
         const [u, p] = decoded.split(':')
         const USER = process.env.ADMIN_USER || 'admin'
@@ -49,18 +54,21 @@ export function middleware(req: NextRequest) {
     })
   }
 
-  /* ============== 2) Si déjà localisé ou fichier → on laisse passer (avec garde sélective) ============== */
+  /* ============== 2) Laisse toujours passer les handlers d’auth API ============== */
+  if (path.startsWith('/api/auth/')) {
+    return NextResponse.next()
+  }
+
+  /* ============== 3) Si déjà localisé ou fichier → on laisse passer (avec garde sélective) ============== */
   const isFile = /\.[a-zA-Z0-9]+$/.test(path)
-  const alreadyLocalized =
-    path === '/fr' || path === '/en' || path.startsWith('/fr/') || path.startsWith('/en/')
+  const alreadyLocalized = path === '/fr' || path === '/en' || path.startsWith('/fr/') || path.startsWith('/en/')
 
   if (isFile || alreadyLocalized) {
-    // On protège uniquement ces routes, mais jamais /{locale}/login ou /{locale}/signup
+    // Garde ses routes (jamais /{locale}/login|signup)
     const isGuarded =
       /^\/(fr|en)\/(?:claim|account)(?:\/|$)/.test(path) ||
       /^\/(fr|en)\/m\/.+/.test(path)
-    const isAuthPage =
-      /^\/(fr|en)\/(?:login|signup)(?:\/|$)/.test(path)
+    const isAuthPage = /^\/(fr|en)\/(?:login|signup)(?:\/|$)/.test(path)
 
     if (isGuarded && !isAuthPage) {
       const hasSess =
@@ -75,14 +83,13 @@ export function middleware(req: NextRequest) {
         target.pathname = `/${loc}/login`
         target.search = ''
         target.searchParams.set('next', next)
-        return NextResponse.redirect(target)
+        return NextResponse.redirect(target, 302)
       }
     }
-
     return NextResponse.next()
   }
 
-  /* ============== 3) Ajout auto de la locale si absente ============== */
+  /* ============== 4) Ajout auto de la locale si absente ============== */
   const header = req.headers.get('accept-language') || ''
   const guess = header.split(',')[0]?.split('-')[0]?.toLowerCase()
   const locale = (LOCALES as readonly string[]).includes(guess as any)
@@ -92,5 +99,4 @@ export function middleware(req: NextRequest) {
   const target = new URL(req.url)
   target.pathname = `/${locale}${path}`
   return NextResponse.redirect(target, { status: 302 })
-
 }
