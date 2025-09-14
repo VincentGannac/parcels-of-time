@@ -1,3 +1,4 @@
+// app/api/auth/login/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -11,6 +12,7 @@ export async function POST(req: Request) {
   const locale = String(form.get('locale') || 'en')
 
   const fallback = `/${locale}/account`
+  const host = new URL(req.url).hostname
 
   if (!email || !password) {
     return NextResponse.redirect(
@@ -35,7 +37,7 @@ export async function POST(req: Request) {
       email: user.email,
       displayName: user.display_name,
       iat: Math.floor(Date.now() / 1000),
-    })
+    }, host)
     return res
   } catch {
     return NextResponse.redirect(

@@ -6,12 +6,11 @@ import { clearSessionCookieOnResponse } from '@/lib/auth'
 
 export async function POST(req: Request) {
   const url = new URL(req.url)
-  // essaie de déduire la locale à partir du Referer, sinon /en
   const referer = req.headers.get('referer') || ''
   const m = referer.match(/\/(fr|en)(?:\/|$)/)
   const loc = (m?.[1] as 'fr'|'en') || 'en'
 
-  const res = NextResponse.redirect(new URL(`/${loc}/login`, req.url), { status: 303 })
-  clearSessionCookieOnResponse(res)
+  const res = NextResponse.redirect(new URL(`/${loc}/login`, req.url), { status: 302 })
+  clearSessionCookieOnResponse(res, url.hostname)
   return res
 }

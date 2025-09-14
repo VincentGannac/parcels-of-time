@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { formatISOAsNice } from '@/lib/date'
 import { pool } from '@/lib/db'
-import { readSession, ownerIdForDay, redirectToLogin } from '@/lib/auth'
+import { readSession, ownerIdForDay } from '@/lib/auth'
 import EditClient from './EditClient'
 
 type Params = { locale: string; ts: string }
