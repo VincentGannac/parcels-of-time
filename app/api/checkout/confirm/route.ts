@@ -43,8 +43,9 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const session_id = url.searchParams.get('session_id');
-    // ✅ récupère l’intention d’auto-publication passée par /api/checkout
+  // ✅ récupère l’intention d’auto-publication passée par /api/checkout
   let wantsAutopub = url.searchParams.get('autopub') === '1';
+
   // Si pas de session_id → retour accueil
   if (!session_id) return NextResponse.redirect(`${base}/`, { status: 302 });
 
@@ -90,7 +91,7 @@ export async function GET(req: Request) {
     const title_public = safeBool(s.metadata?.title_public);
     const message_public = safeBool(s.metadata?.message_public);
     const public_registry = safeBool(s.metadata?.public_registry);
-        // ✅ renforce wantsAutopub avec la méta Stripe (filet de sécurité)
+    // ✅ renforce wantsAutopub avec la méta Stripe (filet de sécurité)
     wantsAutopub = wantsAutopub || public_registry;
 
     const amount_total_raw =
@@ -99,7 +100,7 @@ export async function GET(req: Request) {
         ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
         : 0);
     const price_cents = Math.max(0, Number(amount_total_raw) | 0);
-    const currency = String(s.currency || 'EUR').toUpperCase()
+    const currency = String(s.currency || 'EUR').toUpperCase();
 
     // ====== Transaction DB (robuste) ======
     const client = await pool.connect();
@@ -119,8 +120,8 @@ export async function GET(req: Request) {
 
       // claims upsert dynamique
       const cols = await getColumns(client, 'claims');
-      const insertCols: string[] = ['ts','owner_id','price_cents','currency']
-      const values: any[] = [ts, ownerId, price_cents, currency]
+      const insertCols: string[] = ['ts','owner_id','price_cents','currency'];
+      const values: any[] = [ts, ownerId, price_cents, currency];
       const placeholders: string[] = ['$1','$2','$3','$4'];
 
       const pushOpt = (name: string, value: any) => {
@@ -140,7 +141,6 @@ export async function GET(req: Request) {
       pushOpt('text_color', text_color);
       pushOpt('title_public', title_public);
       pushOpt('message_public', message_public);
-      
 
       const updateCols = insertCols.filter(n => !['ts','owner_id','price_cents','currency'].includes(n));
       const updateSet = updateCols.length
@@ -208,29 +208,46 @@ export async function GET(req: Request) {
 
       await client.query('COMMIT');
 
-      // email après commit (non bloquant)
-      const ymd = ts.slice(0,10)
-      const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ymd)}`
-      const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}`
-      import('@/lib/email')
-        .then(({ sendClaimReceiptEmail }) =>
-          sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl: pdfUrl })
-        )
-        .catch(e => console.warn('[confirm] email warn:', e?.message || e));
+      // --------- Email après COMMIT (non bloquant) ---------
+      const ymd = ts.slice(0,10);
+      const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ymd)}`;
+      const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}`;
 
-    } catch (e:any) {
+      try {
+        const [{ createMagicLoginLink }, { sendClaimReceiptEmail }] = await Promise.all([
+          import('@/lib/auth_magic'),
+          import('@/lib/email'),
+        ]);
+
+        const nextPath = `/${locale}/m/${encodeURIComponent(ymd)}`; // redirection après auto-login
+        const magicUrl = await createMagicLoginLink({ email, nextPath, locale });
+
+        await sendClaimReceiptEmail({
+          to: email,
+          ts,
+          displayName: display_name,
+          publicUrl: wantsAutopub ? `${publicUrl}?autopub=1` : publicUrl,
+          certUrl: pdfUrl,
+          magicUrl, // ← lien 1-clic inclus dans le reçu
+        });
+      } catch (e: any) {
+        console.warn('[confirm] email warn:', e?.message || e);
+      }
+
+    } catch (e: any) {
       try { await pool.query('ROLLBACK') } catch {}
       console.error('[confirm] db_error:', e?.message || e);
       // ⚠️ On NE renvoie PAS 500 : on continue vers la page de la minute.
       // Le webhook Stripe /api/stripe/webhook complètera l’écriture côté DB si nécessaire.
+    } finally {
+      // Toujours libérer la connexion
+      try { client.release() } catch {}
     }
 
     // Toujours rediriger côté client (même si DB a échoué ici)
-    {
-      const to = new URL(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect.slice(0,10))}`);
-      if (wantsAutopub) to.searchParams.set('autopub', '1');
-      return NextResponse.redirect(to.toString(), { status: 303 });
-    }
+    const to = new URL(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect.slice(0,10))}`);
+    if (wantsAutopub) to.searchParams.set('autopub', '1');
+    return NextResponse.redirect(to.toString(), { status: 303 });
 
   } catch (e:any) {
     console.error('confirm_error_top:', e?.message, e?.stack);

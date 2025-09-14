@@ -2,6 +2,7 @@
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
+import { getSessionFromRequest, ownerEmailForDay } from '@/lib/auth'
 import { pool } from '@/lib/db'
 import { generateCertificatePDF } from '@/lib/cert'
 import { Buffer } from 'node:buffer'
@@ -26,6 +27,23 @@ export async function GET(req: Request, ctx: any) {
   const tsISO = toIsoDayUTC(decoded)
   if (!tsISO) {
     return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
+  }
+
+  // Jour public ?
+  const { rows: pubRows } = await pool.query(
+    `select 1 from minute_public where date_trunc('day', ts) = $1::timestamptz limit 1`,
+    [tsISO]
+  )
+  const isDayPublic = pubRows.length > 0
+  const isRegistryRender = new URL(req.url).searchParams.get('public') === '1'
+
+  if (!isDayPublic && !isRegistryRender) {
+    // contrôle session propriétaire
+    const sess = getSessionFromRequest(req)
+    const ownerEmail = await ownerEmailForDay(tsISO)
+    if (!sess || !ownerEmail || ownerEmail !== sess.email.toLowerCase()) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
   }
 
   // Localisation pour le QR
@@ -115,13 +133,15 @@ export async function GET(req: Request, ctx: any) {
   })
 
   const buf = Buffer.from(pdfBytes)
-  return new Response(buf as unknown as BodyInit, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="cert-${encodeURIComponent(day)}.pdf"`,
-      // cache public CDN (les certificats sont immuables)
-      'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
-      'Vary': 'Accept-Language',
-    },
-  })
+  const headers: Record<string,string> = {
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `inline; filename="cert-${encodeURIComponent(day)}.pdf"`,
+    'Vary': 'Accept-Language, Cookie',
+  }
+  if (isDayPublic || isRegistryRender) {
+    headers['Cache-Control'] = 'public, s-maxage=86400, stale-while-revalidate=604800'
+  } else {
+    headers['Cache-Control'] = 'private, no-store' // pas de cache partagé
+  }
+  return new Response(buf as unknown as BodyInit, { headers })
 }

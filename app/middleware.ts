@@ -1,10 +1,10 @@
 // middleware.ts
 import { NextResponse, NextRequest } from 'next/server'
 
-const LOCALES = ['fr','en'] as const
+const LOCALES = ['fr', 'en'] as const
 const DEFAULT_LOCALE: (typeof LOCALES)[number] = 'en'
 
-// Admin Basic Auth (Edge-safe: atob)
+// Admin Basic Auth (Edge-safe)
 const USER = process.env.ADMIN_USER || 'admin'
 const PASS = process.env.ADMIN_PASS || 'LaDisciplineMeMeneraLoin123'
 
@@ -37,26 +37,48 @@ export function middleware(req: NextRequest) {
     })
   }
 
-  // ---------- 2) Pas de traitement pour fichiers déjà localisés ----------
+  // ---------- 2) Fichiers statiques : pass-through ----------
   const isFile = /\.[a-zA-Z0-9]+$/.test(path)
-  const alreadyLocalized = LOCALES.some(l => path === `/${l}` || path.startsWith(`/${l}/`))
-  if (isFile || alreadyLocalized) return NextResponse.next()
 
-  // Détection de la locale préférée
+  // ---------- 3) Déjà localisé ? ----------
+  const alreadyLocalized = LOCALES.some(
+    (l) => path === `/${l}` || path.startsWith(`/${l}/`)
+  )
+
+  // 3.1) Garde-barrière cookie sur /{locale}/m/YYYY-MM-DD
+  if (
+    alreadyLocalized &&
+    /^\/(fr|en)\/m\/\d{4}-\d{2}-\d{2}(?:$|[/?#])/.test(path)
+  ) {
+    const hasCookie = req.cookies.has('pot_sess')
+    if (!hasCookie) {
+      const locale = path.split('/')[1] || 'en'
+      const login = url.clone()
+      login.pathname = `/${locale}/login`
+      login.searchParams.set('next', url.pathname + url.search)
+      return NextResponse.redirect(login)
+    }
+  }
+
+  // ---------- 4) Laisser passer les fichiers et URLs déjà localisées ----------
+  if (isFile) return NextResponse.next()
+  if (alreadyLocalized) return NextResponse.next()
+
+  // ---------- 5) Détection de la locale préférée ----------
   const header = req.headers.get('accept-language') || ''
   const guess = header.split(',')[0]?.split('-')[0]?.toLowerCase()
   const locale = (LOCALES as readonly string[]).includes(guess as any)
     ? (guess as (typeof LOCALES)[number])
     : DEFAULT_LOCALE
 
-  // ---------- 3) Compat : anciennes URLs /m/:ts → /{locale}/m/:ts ----------
+  // ---------- 6) Compat : anciennes URLs /m/:ts → /{locale}/m/:ts ----------
   if (path.startsWith('/m/')) {
     const legacy = url.clone()
     legacy.pathname = `/${locale}${path}`
-    return NextResponse.redirect(legacy, 308) // permanent pour stabiliser les liens e-mail
+    return NextResponse.redirect(legacy, 308) // permanent
   }
 
-  // ---------- 4) Préfixer toute URL non localisée ----------
+  // ---------- 7) Préfixer toute URL non localisée ----------
   const localized = url.clone()
   localized.pathname = `/${locale}${path}`
   return NextResponse.redirect(localized)
