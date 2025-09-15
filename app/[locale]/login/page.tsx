@@ -64,7 +64,7 @@ export default async function LoginPage({
   const dbg = await debugSessionSnapshot()
   const h = await headers()
   const reqUrl = h.get('referer') || `/${locale}/login`
-
+  const potFromHeader = h.get('x-pot-sess') ? 'yes' : 'no'
   return (
     <main style={{ maxWidth: 520, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui' }}>
       <h1 style={{ margin: '0 0 16px' }}>{labels.title}</h1>
@@ -149,6 +149,7 @@ export default async function LoginPage({
           <div><strong>cookie present:</strong> {String(dbg.cookiePresent)} — <strong>rawLen:</strong> {dbg.rawLen}</div>
           <div><strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”</div>
           <div><strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} — <strong>reason:</strong> {dbg.reason || '—'}</div>
+          <div><strong>x-pot-sess header seen:</strong> {potFromHeader}</div>
           <div style={{ marginTop: 6 }}>
             Astuce : ajoute <code>?debug=1</code> à l’URL pour ouvrir ce panneau automatiquement.
           </div>

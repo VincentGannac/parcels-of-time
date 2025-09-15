@@ -6,16 +6,25 @@ const DEFAULT_LOCALE: (typeof LOCALES)[number] = 'en'
 
 export const config = {
   matcher: [
-    // On inclut explicitement les routes auth API pour normaliser le host AVANT qu'elles ne s'exécutent
+    // On inclut explicitement l'auth API et toutes les pages locales
     '/api/auth/:path*',
-
-    // Routes protégées + pages locales
     '/fr/:path*',
     '/en/:path*',
-
-    // Catch-all (hors statiques & images & HMR & api)
+    // Catch-all (hors statiques & images & HMR & api racine)
     '/((?!api|_next/static|_next/image|_next/webpack-hmr|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|xml)).*)',
   ],
+}
+
+function nextWithMirroredCookie(req: NextRequest) {
+  const requestHeaders = new Headers(req.headers)
+  const sess = req.cookies.get('pot_sess')?.value
+  if (sess) {
+    // en-tête **interne** lu seulement côté serveur (pas renvoyé au client)
+    requestHeaders.set('x-pot-sess', sess)
+  } else {
+    requestHeaders.delete('x-pot-sess')
+  }
+  return NextResponse.next({ request: { headers: requestHeaders } })
 }
 
 export function middleware(req: NextRequest) {
@@ -23,19 +32,15 @@ export function middleware(req: NextRequest) {
   const path = url.pathname
   const host = req.headers.get('host') || ''
 
-  /* ============== 0) Normalisation d’hôte : www -> apex ==============
-     On le fait ici pour *toutes* les routes (pages + /api/auth/*)
-  =====================================================================*/
+  /* 0) Normalisation d’hôte : www -> apex (redirection 308) */
   if (host === 'www.parcelsoftime.com') {
     const target = new URL(req.url)
     target.host = 'parcelsoftime.com'
     target.protocol = 'https:'
-    // 308 pour préserver la méthode si un jour on poste vers /api/auth depuis www
     return NextResponse.redirect(target, 308)
   }
-  
 
-  /* ============== 1) Admin Basic Auth (optionnel) ============== */
+  /* 1) Admin Basic Auth (optionnel) */
   if (path.startsWith('/admin') || path.startsWith('/api/admin')) {
     const auth = req.headers.get('authorization') || ''
     if (auth.startsWith('Basic ')) {
@@ -47,7 +52,7 @@ export function middleware(req: NextRequest) {
         const [u, p] = decoded.split(':')
         const USER = process.env.ADMIN_USER || 'admin'
         const PASS = process.env.ADMIN_PASS || 'LaDisciplineMeMeneraLoin123'
-        if (u === USER && p === PASS) return NextResponse.next()
+        if (u === USER && p === PASS) return nextWithMirroredCookie(req)
       } catch {}
     }
     return new NextResponse('Authentication required', {
@@ -56,12 +61,13 @@ export function middleware(req: NextRequest) {
     })
   }
 
-  /* ============== 2) Laisse toujours passer les handlers d’auth API ============== */
+  /* 2) Toujours laisser passer /api/auth/* (login/logout/signup)
+        mais on **miroir** le cookie pour les pages suivantes */
   if (path.startsWith('/api/auth/')) {
-    return NextResponse.next()
+    return nextWithMirroredCookie(req)
   }
 
-  /* ============== 3) Si déjà localisé ou fichier → on laisse passer (avec garde sélective) ============== */
+  /* 3) Si déjà localisé ou fichier → on laisse passer (avec garde sélective) */
   const isFile = /\.[a-zA-Z0-9]+$/.test(path)
   const alreadyLocalized = path === '/fr' || path === '/en' || path.startsWith('/fr/') || path.startsWith('/en/')
 
@@ -88,10 +94,12 @@ export function middleware(req: NextRequest) {
         return NextResponse.redirect(target, 302)
       }
     }
-    return NextResponse.next()
+
+    // IMPORTANT: on renvoie toujours la requête avec l’en-tête x-pot-sess reflétant le cookie courant
+    return nextWithMirroredCookie(req)
   }
 
-  /* ============== 4) Ajout auto de la locale si absente ============== */
+  /* 4) Ajout auto de la locale si absente */
   const header = req.headers.get('accept-language') || ''
   const guess = header.split(',')[0]?.split('-')[0]?.toLowerCase()
   const locale = (LOCALES as readonly string[]).includes(guess as any)

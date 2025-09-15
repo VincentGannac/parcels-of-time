@@ -95,16 +95,21 @@ function parseCookieHeader(rawHeader: string | null | undefined, name: string): 
 }
 
 export async function readSession(): Promise<Session | null> {
-  // 1) source principale
-  let raw = (await nextCookies()).get(COOKIE_NAME)?.value
+    // 1) source principale
+    let raw = (await nextCookies()).get(COOKIE_NAME)?.value
 
-  // 2) fallback depuis l’en-tête Cookie brut (certains environnements Edge/Node peuvent diverger)
-  if (!raw) {
-    const headerCookie = (await nextHeaders()).get('cookie') || (await nextHeaders()).get('Cookie')
-    raw = parseCookieHeader(headerCookie, COOKIE_NAME)
-  }
+    // 1.bis) si middleware a injecté l’en-tête interne, on le privilégie (fiable en App Router)
+    if (!raw) {
+      const xSess = (await nextHeaders()).get('x-pot-sess')
+      if (xSess) raw = xSess
+    }
+  
+    // 2) fallback depuis l’en-tête Cookie brut
+    if (!raw) {
+      const headerCookie = (await nextHeaders()).get('cookie') || (await nextHeaders()).get('Cookie')
+      raw = parseCookieHeader(headerCookie, COOKIE_NAME)
+    }
   if (!raw) return null
-
   // Tolère des encodages : parfois '=' sont %3D, parfois rien. On essaye sans, puis avec.
   let payload = ''
   let sig = ''
