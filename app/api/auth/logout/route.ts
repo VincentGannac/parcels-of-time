@@ -11,6 +11,9 @@ export async function POST(req: Request) {
   const loc = (m?.[1] as 'fr'|'en') || 'en'
 
   const res = NextResponse.redirect(new URL(`/${loc}/login`, req.url), { status: 303 })
-  clearSessionCookieOnResponse(res)
+
+  const host = url.host
+  clearSessionCookieOnResponse(res, host)
+
   return res
 }
