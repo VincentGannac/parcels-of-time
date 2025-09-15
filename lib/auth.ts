@@ -197,6 +197,22 @@ export async function authenticateWithPassword(emailRaw: string, password: strin
   return ok ? { id: row.id, email: row.email, display_name: row.display_name } : null
 }
 
+/** ---- manquant pour app/[locale]/m/[ts]/page.tsx ----
+ * Essaie de trouver l’owner d’un jour (ISO AAAA-MM-JJ).
+ * Adapte la requête à ton schéma si besoin.
+ */
+export async function ownerIdForDay(isoDay: string): Promise<string | null> {
+  try {
+    const { rows } = await pool.query(
+      // ajuste la table/colonne selon ton schéma réel
+      `select owner_id as "ownerId" from claims where ts_day = $1 limit 1`,
+      [isoDay]
+    )
+    return rows?.[0]?.ownerId ?? null
+  } catch {
+    return null
+  }
+}
 
 /* ---------- debug (affiché dans /login?debug=1) ---------- */
 export async function debugSessionSnapshot() {
