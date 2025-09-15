@@ -1,4 +1,3 @@
-// middleware.ts
 import { NextResponse, NextRequest } from 'next/server'
 
 const LOCALES = ['fr', 'en'] as const
@@ -18,17 +17,8 @@ export const config = {
 export function middleware(req: NextRequest) {
   const url = req.nextUrl
   const path = url.pathname
-  const host = req.headers.get('host') || ''
 
-  // 0) Canonique : apex (sans www) — si tu veux forcer www, inverse la logique
-  if (host === 'www.parcelsoftime.com') {
-    const target = new URL(req.url)
-    target.host = 'parcelsoftime.com'
-    target.protocol = 'https:'
-    return NextResponse.redirect(target, 308)
-  }
-
-  // 1) Admin (inchangé)
+  // 1) Admin basique
   if (path.startsWith('/admin') || path.startsWith('/api/admin')) {
     const auth = req.headers.get('authorization') || ''
     if (auth.startsWith('Basic ')) {
@@ -49,7 +39,7 @@ export function middleware(req: NextRequest) {
     })
   }
 
-  // 2) Routes déjà localisées
+  // 2) Routes déjà localisées -> garde
   const isFile = /\.[a-zA-Z0-9]+$/.test(path)
   const alreadyLocalized = path === '/fr' || path === '/en' || path.startsWith('/fr/') || path.startsWith('/en/')
 
@@ -74,7 +64,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // 3) Pref. locale
+  // 3) Préfixe locale si absente
   const header = req.headers.get('accept-language') || ''
   const guess = header.split(',')[0]?.split('-')[0]?.toLowerCase()
   const locale = (LOCALES as readonly string[]).includes(guess as any)
