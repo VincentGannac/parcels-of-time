@@ -10,14 +10,15 @@ type Params = { locale: 'fr' | 'en' }
 type Search = { next?: string; err?: string }
 
 export default async function SignupPage({
-  params, searchParams
+  params,
+  searchParams,
 }: {
-  params: Params
-  searchParams: Search
+  params: Promise<Params>            // 👈 Promise
+  searchParams: Promise<Search>      // 👈 Promise
 }) {
-  const { locale = 'en' } = params
+  const { locale = 'en' } = await params       // 👈 await
+  const sp = await searchParams                // 👈 await
   const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
-  const sp = searchParams
   const next = sp?.next || `/${locale}/account`
 
   const sess = await readSession()
