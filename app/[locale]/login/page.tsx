@@ -13,12 +13,13 @@ export default async function LoginPage({
   params,
   searchParams,
 }: {
-  params: Params
-  searchParams: Search
+  // Next.js 15: PageProps<...> a params/searchParams potentiellement *async*
+  params: Promise<Params> | Params
+  searchParams: Promise<Search> | Search
 }) {
-  const { locale } = params
-  const sp = searchParams
-  const next = sp?.next ?? '' // on garde tel quel, on le validera côté /api/auth/login
+  const { locale } = await params
+  const sp = await searchParams
+  const next = sp?.next ?? '' // validé côté /api/auth/login
   const showDebug = sp?.debug === '1'
 
   const sess = await readSession()

@@ -183,6 +183,7 @@ export async function createOwnerWithPassword(emailRaw: string, password: string
   )
   return rows[0]
 }
+
 export async function authenticateWithPassword(emailRaw: string, password: string) {
   const email = emailRaw.trim().toLowerCase()
   const { rows } = await pool.query(
@@ -195,6 +196,7 @@ export async function authenticateWithPassword(emailRaw: string, password: strin
   const ok = await verifyPassword(password, row.password_hash)
   return ok ? { id: row.id, email: row.email, display_name: row.display_name } : null
 }
+
 
 /* ---------- debug (affiché dans /login?debug=1) ---------- */
 export async function debugSessionSnapshot() {
