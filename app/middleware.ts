@@ -3,7 +3,7 @@ import { NextResponse, NextRequest } from 'next/server'
 
 const LOCALES = ['fr', 'en'] as const
 const DEFAULT_LOCALE: (typeof LOCALES)[number] = 'en'
-const COOKIE_NAME = '__Host-pot_sess' // nouveau nom robuste
+const COOKIE_NAME = '__Host-pot_sess' // host-only, Secure, Path=/, sans Domain
 
 export const config = {
   matcher: [
@@ -17,14 +17,14 @@ export const config = {
 export function middleware(req: NextRequest) {
   const url = req.nextUrl
   const path = url.pathname
-  const host = req.headers.get('host') || ''
+  const hostHeader = (req.headers.get('host') || '').toLowerCase()
 
-  // 0) www → apex
-  if (host === 'www.parcelsoftime.com') {
+  // 0) Canonical host : redirige TOUS les "www.*" vers l'apex, toute route confondue
+  if (hostHeader.startsWith('www.')) {
     const target = new URL(req.url)
-    target.host = 'parcelsoftime.com'
+    target.host = hostHeader.slice(4) // retire "www."
     target.protocol = 'https:'
-    return NextResponse.redirect(target, 308)
+    return NextResponse.redirect(target, 308) // 308 pour préserver la méthode (POST)
   }
 
   // 1) Admin basique (inchangé)
@@ -32,10 +32,11 @@ export function middleware(req: NextRequest) {
     const auth = req.headers.get('authorization') || ''
     if (auth.startsWith('Basic ')) {
       try {
+        const token = auth.split(' ')[1]
         const decoded =
           typeof atob !== 'undefined'
-            ? atob(auth.split(' ')[1])
-            : Buffer.from(auth.split(' ')[1], 'base64').toString()
+            ? atob(token)
+            : Buffer.from(token, 'base64').toString()
         const [u, p] = decoded.split(':')
         const USER = process.env.ADMIN_USER || 'admin'
         const PASS = process.env.ADMIN_PASS || 'LaDisciplineMeMeneraLoin123'
@@ -48,11 +49,19 @@ export function middleware(req: NextRequest) {
     })
   }
 
-  // 2) Garder /fr|/en/... protégées
+  // 2) Fichiers statiques (par sécurité) et détection locale
   const isFile = /\.[a-zA-Z0-9]+$/.test(path)
   const alreadyLocalized = path === '/fr' || path === '/en' || path.startsWith('/fr/') || path.startsWith('/en/')
 
+  // 2bis) Ne JAMAIS préfixer /api/* avec une locale
+  if (path.startsWith('/api/')) {
+    // Protection des endpoints API admin gérée plus haut,
+    // ici on laisse passer sans préfixe de locale.
+    return NextResponse.next()
+  }
+
   if (isFile || alreadyLocalized) {
+    // Pages/segments localisés : protège certaines routes
     const isGuarded =
       /^\/(fr|en)\/(?:claim|account)(?:\/|$)/.test(path) ||
       /^\/(fr|en)\/m\/.+/.test(path)
@@ -74,7 +83,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // 3) Préfixe locale si absente
+  // 3) Préfixe de locale si absente (pour les pages non localisées et non-fichiers)
   const header = req.headers.get('accept-language') || ''
   const guess = header.split(',')[0]?.split('-')[0]?.toLowerCase()
   const locale = (LOCALES as readonly string[]).includes(guess as any)
@@ -83,5 +92,5 @@ export function middleware(req: NextRequest) {
 
   const target = new URL(req.url)
   target.pathname = `/${locale}${path}`
-  return NextResponse.redirect(target, { status: 302 })
+  return NextResponse.redirect(target, 302)
 }

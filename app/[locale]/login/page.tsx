@@ -10,6 +10,16 @@ import { readSession, debugSessionSnapshot } from '@/lib/auth'
 type Params = { locale: 'fr' | 'en' }
 type Search = { next?: string; err?: string; info?: string; debug?: string }
 
+// Helper local : base canonique sans "www."
+async function canonicalBase() {
+  const h = await headers()
+  const rawHost = (h.get('x-forwarded-host') || h.get('host') || 'parcelsoftime.com').toLowerCase()
+  const host = rawHost.replace(/^www\./, '')
+  const protoSrc = h.get('x-forwarded-proto') || 'https'
+  const proto = protoSrc.includes('https') ? 'https' : 'http'
+  return `${proto}://${host}`
+}
+
 export default async function LoginPage({
   params,
   searchParams,
@@ -22,7 +32,9 @@ export default async function LoginPage({
   const next = sp?.next || `/${locale}/account`
   const showDebug = sp?.debug === '1'
 
-  // si déjà connecté → redirige
+  const BASE = await canonicalBase()
+
+  // Déjà connecté ? -> redirection
   const sess = await readSession()
   if (sess) redirect(next)
 
@@ -43,7 +55,7 @@ export default async function LoginPage({
           switch: 'No account? Sign up →',
         }
 
-  // messages d’erreur
+  // Messages d’erreur
   const errKey = sp?.err
   const errText =
     errKey === 'missing'
@@ -67,7 +79,6 @@ export default async function LoginPage({
   const potFromHeader = h.get('x-pot-sess') ? 'yes' : 'no'
 
   const hasNext = !!sp?.next
-  const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
 
   return (
     <main
@@ -127,7 +138,7 @@ export default async function LoginPage({
         </p>
       )}
 
-      {/* 👉 action absolue vers l’apex */}
+      {/* Action absolue sur l’apex */}
       <form action={`${BASE}/api/auth/login`} method="post" style={{ display: 'grid', gap: 12, marginTop: 12 }}>
         <input type="hidden" name="next" value={next} />
         <input type="hidden" name="locale" value={locale} />

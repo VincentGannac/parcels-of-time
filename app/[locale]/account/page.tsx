@@ -4,14 +4,25 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { readSession } from '@/lib/auth'
 import { pool } from '@/lib/db'
 
-type Params = { locale: string }
+type Params = { locale: 'fr' | 'en' }
+
+// Helper local : base canonique sans "www."
+async function canonicalBase() {
+  const h = await headers()
+  const rawHost = (h.get('x-forwarded-host') || h.get('host') || 'parcelsoftime.com').toLowerCase()
+  const host = rawHost.replace(/^www\./, '')
+  const protoSrc = h.get('x-forwarded-proto') || 'https'
+  const proto = protoSrc.includes('https') ? 'https' : 'http'
+  return `${proto}://${host}`
+}
 
 export default async function AccountPage({ params }: { params: Promise<Params> }) {
-  const { locale = 'fr' } = await params   // 👈 params est une Promise sur Next 15.4.6
-  const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
+  const { locale = 'fr' } = await params
+  const BASE = await canonicalBase()
 
   const sess = await readSession()
   if (!sess) {
@@ -36,6 +47,7 @@ export default async function AccountPage({ params }: { params: Promise<Params> 
     <main style={{ maxWidth: 1000, margin: '0 auto', padding: '36px 20px', fontFamily: 'Inter, system-ui' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ margin: 0 }}>Mon compte</h1>
+        {/* Action absolue sur l’apex */}
         <form action={`${BASE}/api/auth/logout`} method="post">
           <button style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}>
             Se déconnecter

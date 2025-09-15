@@ -4,21 +4,32 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { readSession } from '@/lib/auth'
 
 type Params = { locale: 'fr' | 'en' }
 type Search = { next?: string; err?: string }
 
+// Helper local : base canonique sans "www."
+async function canonicalBase() {
+  const h = await headers()
+  const rawHost = (h.get('x-forwarded-host') || h.get('host') || 'parcelsoftime.com').toLowerCase()
+  const host = rawHost.replace(/^www\./, '')
+  const protoSrc = h.get('x-forwarded-proto') || 'https'
+  const proto = protoSrc.includes('https') ? 'https' : 'http'
+  return `${proto}://${host}`
+}
+
 export default async function SignupPage({
   params,
   searchParams,
 }: {
-  params: Promise<Params>            // 👈 Promise
-  searchParams: Promise<Search>      // 👈 Promise
+  params: Promise<Params>
+  searchParams: Promise<Search>
 }) {
-  const { locale = 'en' } = await params       // 👈 await
-  const sp = await searchParams                // 👈 await
-  const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
+  const { locale = 'en' } = await params
+  const sp = await searchParams
+  const BASE = await canonicalBase()
   const next = sp?.next || `/${locale}/account`
 
   const sess = await readSession()
@@ -50,6 +61,7 @@ export default async function SignupPage({
         </p>
       )}
 
+      {/* Action absolue sur l’apex */}
       <form action={`${BASE}/api/auth/signup`} method="post" style={{display:'grid', gap:12, marginTop:12}}>
         <input type="hidden" name="next" value={next} />
         <input type="hidden" name="locale" value={locale} />
