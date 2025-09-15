@@ -4,10 +4,11 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { redirect } from 'next/navigation'
-import { readSession } from '@/lib/auth'
+import { headers } from 'next/headers'
+import { readSession, debugSessionSnapshot } from '@/lib/auth'
 
 type Params = { locale: 'fr' | 'en' }
-type Search = { next?: string; err?: string; info?: string }
+type Search = { next?: string; err?: string; info?: string; debug?: string }
 
 export default async function LoginPage({
   params,
@@ -19,7 +20,9 @@ export default async function LoginPage({
   const { locale = 'en' } = await params
   const sp = await searchParams
   const next = sp?.next || `/${locale}/account`
+  const showDebug = sp?.debug === '1' // active le panneau debug si ?debug=1
 
+  // --------- si déjà connecté → redirige
   const sess = await readSession()
   if (sess) redirect(next)
 
@@ -40,7 +43,7 @@ export default async function LoginPage({
           switch: 'No account? Sign up →',
         }
 
-  // ---------- Bandeau d’erreur clair ----------
+  // --------- messages d’erreur
   const errKey = sp?.err
   const errText =
     errKey === 'missing'
@@ -57,8 +60,13 @@ export default async function LoginPage({
         : 'Server error. Please try again.'
       : null
 
+  // --------- DEBUG serveur (ne fuit aucune donnée sensible)
+  const dbg = await debugSessionSnapshot()
+  const h = await headers()
+  const reqUrl = h.get('referer') || `/${locale}/login`
+
   return (
-    <main style={{ maxWidth: 420, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui' }}>
+    <main style={{ maxWidth: 520, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui' }}>
       <h1 style={{ margin: '0 0 16px' }}>{labels.title}</h1>
 
       {errText && (
@@ -98,6 +106,7 @@ export default async function LoginPage({
             name="email"
             type="email"
             required
+            autoComplete="email"
             style={{ padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8 }}
           />
         </label>
@@ -108,6 +117,7 @@ export default async function LoginPage({
             name="password"
             type="password"
             required
+            autoComplete="current-password"
             style={{ padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8 }}
           />
         </label>
@@ -129,6 +139,21 @@ export default async function LoginPage({
       <p style={{ marginTop: 12 }}>
         <a href={`/${locale}/signup?next=${encodeURIComponent(next)}`}>{labels.switch}</a>
       </p>
+
+      {/* ===================== DEBUG ===================== */}
+      <details open={showDebug} style={{ marginTop: 18, border: '1px dashed #ccc', borderRadius: 10, padding: 12 }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 700 }}>DEBUG — côté serveur</summary>
+        <div style={{ fontSize: 12, lineHeight: '18px', marginTop: 8 }}>
+          <div><strong>Request referer:</strong> {reqUrl}</div>
+          <div><strong>host:</strong> {dbg.host} — <strong>xfh:</strong> {dbg.xfh} — <strong>proto:</strong> {dbg.proto}</div>
+          <div><strong>cookie present:</strong> {String(dbg.cookiePresent)} — <strong>rawLen:</strong> {dbg.rawLen}</div>
+          <div><strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”</div>
+          <div><strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} — <strong>reason:</strong> {dbg.reason || '—'}</div>
+          <div style={{ marginTop: 6 }}>
+            Astuce : ajoute <code>?debug=1</code> à l’URL pour ouvrir ce panneau automatiquement.
+          </div>
+        </div>
+      </details>
     </main>
   )
 }
