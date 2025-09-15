@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   
 
   const res = NextResponse.redirect(new URL(`/${loc}/login`, req.url), { status: 303 })
-  const host = new URL(req.url).host
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? undefined
   clearSessionCookieOnResponse(res, host)
   return res
 }

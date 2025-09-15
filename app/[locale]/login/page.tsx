@@ -65,8 +65,40 @@ export default async function LoginPage({
   const h = await headers()
   const reqUrl = h.get('referer') || `/${locale}/login`
   const potFromHeader = h.get('x-pot-sess') ? 'yes' : 'no'
+
+  const hasNext = !!sp?.next
+
   return (
-    <main style={{ maxWidth: 520, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui' }}>
+    <main
+      style={{
+        maxWidth: 520,
+        margin: '0 auto',
+        padding: '32px 20px',
+        fontFamily: 'Inter, system-ui',
+        // 🎨 fond différent si on vient d’un redirect
+        background: hasNext ? 'linear-gradient(180deg, #fffbe6, #ffffff)' : '#ffffff',
+        borderRadius: 12,
+        boxShadow: hasNext ? '0 10px 30px rgba(228,183,61,.18)' : 'none',
+      }}
+    >
+      {hasNext && (
+        <div
+          style={{
+            margin: '-12px -12px 12px',
+            padding: '10px 12px',
+            background: '#fff3bf',
+            border: '1px solid #ffe08a',
+            borderRadius: 10,
+            fontSize: 13,
+            color: '#6b4e00',
+            fontWeight: 700,
+          }}
+        >
+          Vous vous connectez pour accéder à :{' '}
+          <code style={{ fontWeight: 800 }}>{sp?.next}</code>
+        </div>
+      )}
+
       <h1 style={{ margin: '0 0 16px' }}>{labels.title}</h1>
 
       {errText && (
@@ -89,7 +121,14 @@ export default async function LoginPage({
       )}
 
       {sp?.info === 'magic_disabled' && (
-        <p style={{ background: '#eef7ff', border: '1px solid #cbe4ff', padding: 10, borderRadius: 8 }}>
+        <p
+          style={{
+            background: '#eef7ff',
+            border: '1px solid #cbe4ff',
+            padding: 10,
+            borderRadius: 8,
+          }}
+        >
           {locale === 'fr'
             ? "La connexion par lien magique n'est plus disponible. Connectez-vous avec votre mot de passe."
             : 'Magic link sign-in is disabled. Please sign in with your password.'}
@@ -144,12 +183,25 @@ export default async function LoginPage({
       <details open={showDebug} style={{ marginTop: 18, border: '1px dashed #ccc', borderRadius: 10, padding: 12 }}>
         <summary style={{ cursor: 'pointer', fontWeight: 700 }}>DEBUG — côté serveur</summary>
         <div style={{ fontSize: 12, lineHeight: '18px', marginTop: 8 }}>
-          <div><strong>Request referer:</strong> {reqUrl}</div>
-          <div><strong>host:</strong> {dbg.host} — <strong>xfh:</strong> {dbg.xfh} — <strong>proto:</strong> {dbg.proto}</div>
-          <div><strong>cookie present:</strong> {String(dbg.cookiePresent)} — <strong>rawLen:</strong> {dbg.rawLen}</div>
-          <div><strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”</div>
-          <div><strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} — <strong>reason:</strong> {dbg.reason || '—'}</div>
-          <div><strong>x-pot-sess header seen:</strong> {potFromHeader}</div>
+          <div>
+            <strong>Request referer:</strong> {reqUrl}
+          </div>
+          <div>
+            <strong>host:</strong> {dbg.host} — <strong>xfh:</strong> {dbg.xfh} — <strong>proto:</strong> {dbg.proto}
+          </div>
+          <div>
+            <strong>cookie present:</strong> {String(dbg.cookiePresent)} — <strong>rawLen:</strong> {dbg.rawLen}
+          </div>
+          <div>
+            <strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”
+          </div>
+          <div>
+            <strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} —{' '}
+            <strong>reason:</strong> {dbg.reason || '—'}
+          </div>
+          <div>
+            <strong>x-pot-sess header seen:</strong> {potFromHeader}
+          </div>
           <div style={{ marginTop: 6 }}>
             Astuce : ajoute <code>?debug=1</code> à l’URL pour ouvrir ce panneau automatiquement.
           </div>
