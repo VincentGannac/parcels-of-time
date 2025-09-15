@@ -11,7 +11,7 @@ type Params = { locale: string }
 
 export default async function AccountPage({ params }: { params: Promise<Params> }) {
   const { locale = 'fr' } = await params
-
+  const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
   // readSession est async dans votre projet → on attend
   const sess = await readSession()
   if (!sess) {
@@ -36,7 +36,7 @@ export default async function AccountPage({ params }: { params: Promise<Params> 
     <main style={{ maxWidth: 1000, margin: '0 auto', padding: '36px 20px', fontFamily: 'Inter, system-ui' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ margin: 0 }}>Mon compte</h1>
-        <form action="/api/auth/logout" method="post">
+        <form action={`${BASE}/api/auth/logout`} method="post">
           <button style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}>
             Se déconnecter
           </button>

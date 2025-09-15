@@ -54,29 +54,27 @@ export function encodeSessionForCookie(sess: Session): string {
   return `${payload}.${sig}`
 }
 
-export function setSessionCookieOnResponse(res: NextResponse, sess: Session, hostFromReq?: string) {
-  const domain = cookieDomainForHost(hostFromReq)
+export function setSessionCookieOnResponse(res: NextResponse, sess: Session) {
   res.cookies.set(COOKIE_NAME, encodeSessionForCookie(sess), {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
-    ...(domain ? { domain } : {}),
+    // 👇 pas de Domain → host-only (fiable avec l’apex canonique)
   })
 }
 
-export function clearSessionCookieOnResponse(res: NextResponse, hostFromReq?: string) {
-  const domain = cookieDomainForHost(hostFromReq)
+export function clearSessionCookieOnResponse(res: NextResponse) {
   res.cookies.set(COOKIE_NAME, '', {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
     path: '/',
     maxAge: 0,
-    ...(domain ? { domain } : {}),
   })
 }
+
 
 /* ============ Lecture robuste ============ */
 function parseCookieHeader(rawHeader: string | null | undefined, name: string): string | undefined {
@@ -150,19 +148,13 @@ export async function readSession(): Promise<Session | null> {
 
 /* ============ Helpers “server-only” ============ */
 export async function writeSessionCookie(sess: Session) {
-  const domain = cookieDomainForHost((await nextHeaders()).get('host'))
-  const value = encodeSessionForCookie(sess)
-  ;(await nextCookies()).set(COOKIE_NAME, value, {
-    httpOnly: true, secure: true, sameSite: 'lax',
-    path: '/', maxAge: 60 * 60 * 24 * 30,
-    ...(domain ? { domain } : {}),
+  ;(await nextCookies()).set(COOKIE_NAME, encodeSessionForCookie(sess), {
+    httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30,
   })
 }
 export async function clearSessionCookie() {
-  const domain = cookieDomainForHost((await nextHeaders()).get('host'))
   ;(await nextCookies()).set(COOKIE_NAME, '', {
     httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 0,
-    ...(domain ? { domain } : {}),
   })
 }
 

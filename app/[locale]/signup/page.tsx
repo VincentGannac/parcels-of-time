@@ -16,6 +16,7 @@ export default async function SignupPage({
   searchParams: Promise<Search>
 }) {
   const { locale = 'en' } = await params
+  const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
   const sp = await searchParams
   const next = sp?.next || `/${locale}/account`
   const sess = await readSession()
@@ -47,7 +48,7 @@ export default async function SignupPage({
         </p>
       )}
 
-      <form action="/api/auth/signup" method="post" style={{display:'grid', gap:12, marginTop:12}}>
+      <form action={`${BASE}/api/auth/signup`} method="post" style={{display:'grid', gap:12, marginTop:12}}>
         <input type="hidden" name="next" value={next} />
         <input type="hidden" name="locale" value={locale} />
 
