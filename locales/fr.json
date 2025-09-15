@@ -17,7 +17,7 @@
       "email": "Votre e-mail (reçu & certificat)",
       "display_name": "Nom du·de la destinataire (public sur le certificat)",
       "message": "Message (optionnel)",
-      "link": "Lien (optionnel)",
+      "link": "Lien",
       "moderation": "Contenu modéré. Restez bienveillant(e) ❤️",
       "step2": "ÉTAPE 2 — VOTRE JOUR",
       "utc_input": "Horodatage UTC (ISO, ex. 2100-01-01T00:00Z)",
