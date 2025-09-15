@@ -1,11 +1,11 @@
 // lib/auth.ts
-import { cookies as nextCookies, headers as nextHeaders } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { pool } from '@/lib/db'
 
-const COOKIE_NAME = 'pot_sess'
+const COOKIE_NAME = '__Host-pot_sess'
 const SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me'
 
 export type Session = {
@@ -15,40 +15,24 @@ export type Session = {
   iat: number
 }
 
-/* ============ base64 helpers ============ */
 function b64url(buf: Buffer) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/,'')
 }
 function toB64(s: string) {
-  // base64url -> base64, avec padding
   let t = s.replace(/-/g, '+').replace(/_/g, '/')
   const pad = t.length % 4
   if (pad) t += '='.repeat(4 - pad)
   return t
 }
 function b64anyToUtf8(s: string): string {
-  // accepte base64url OU base64
   const std = /[-_]/.test(s) ? toB64(s) : s
   return Buffer.from(std, 'base64').toString('utf8')
 }
-
-/* ============ HMAC ============ */
 function sign(input: string) {
   return b64url(crypto.createHmac('sha256', SECRET).update(input).digest())
 }
 
-/* ============ Cookie domain ============ */
-function cookieDomainForHost(host?: string | null): string | undefined {
-  if (!host) return undefined
-  const h = host.split(':')[0].toLowerCase()
-  if (h === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(h) || h.endsWith('.vercel.app')) return undefined
-  if (h === 'parcelsoftime.com' || h === 'www.parcelsoftime.com') return 'parcelsoftime.com'
-  return undefined
-}
-
-/* ============ Encoder / Set / Clear ============ */
 export function encodeSessionForCookie(sess: Session): string {
-  // Utilise un payload en base64url (pour éviter les '=', '+', '/')
   const payload = b64url(Buffer.from(JSON.stringify(sess)))
   const sig = sign(payload)
   return `${payload}.${sig}`
@@ -61,10 +45,8 @@ export function setSessionCookieOnResponse(res: NextResponse, sess: Session) {
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
-    // 👇 pas de Domain → host-only (fiable avec l’apex canonique)
   })
 }
-
 export function clearSessionCookieOnResponse(res: NextResponse) {
   res.cookies.set(COOKIE_NAME, '', {
     httpOnly: true,
@@ -75,58 +57,43 @@ export function clearSessionCookieOnResponse(res: NextResponse) {
   })
 }
 
-
-/* ============ Lecture robuste ============ */
 function parseCookieHeader(rawHeader: string | null | undefined, name: string): string | undefined {
   if (!rawHeader) return undefined
-  // parse à la main (pas de lib)
   const parts = rawHeader.split(/;\s*/)
   for (const p of parts) {
     const idx = p.indexOf('=')
     if (idx === -1) continue
     const k = p.slice(0, idx).trim()
     if (k !== name) continue
-    // ne PAS decodeURIComponent ici : certains clients laissent le payload en base64url pur
     return p.slice(idx + 1)
   }
   return undefined
 }
 
 export async function readSession(): Promise<Session | null> {
-    // 1) source principale
-    let raw = (await nextCookies()).get(COOKIE_NAME)?.value
+  // ⚠️ cookies() et headers() sont asynchrones
+  const ck = await cookies()
+  let raw = ck.get(COOKIE_NAME)?.value
 
-    // 1.bis) si middleware a injecté l’en-tête interne, on le privilégie (fiable en App Router)
-    if (!raw) {
-      const xSess = (await nextHeaders()).get('x-pot-sess')
-      if (xSess) raw = xSess
-    }
-  
-    // 2) fallback depuis l’en-tête Cookie brut
-    if (!raw) {
-      const headerCookie = (await nextHeaders()).get('cookie') || (await nextHeaders()).get('Cookie')
-      raw = parseCookieHeader(headerCookie, COOKIE_NAME)
-    }
-  if (!raw) return null
-  // Tolère des encodages : parfois '=' sont %3D, parfois rien. On essaye sans, puis avec.
-  let payload = ''
-  let sig = ''
-  {
-    const dot = raw.indexOf('.')
-    if (dot <= 0) return null
-    payload = raw.slice(0, dot)
-    sig = raw.slice(dot + 1)
+  if (!raw) {
+    const h = await headers()
+    raw = parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME)
   }
+  if (!raw) return null
 
-  // Si la signature ne matche pas au premier coup, essaye de décoder un éventuel %xx
+  const dot = raw.indexOf('.')
+  if (dot <= 0) return null
+  let payload = raw.slice(0, dot)
+  let sig = raw.slice(dot + 1)
+
   let sigOk = (sign(payload) === sig)
   if (!sigOk) {
     try {
-      const maybeDecoded = decodeURIComponent(raw)
-      const dot2 = maybeDecoded.indexOf('.')
-      if (dot2 > 0) {
-        const p2 = maybeDecoded.slice(0, dot2)
-        const s2 = maybeDecoded.slice(dot2 + 1)
+      const maybe = decodeURIComponent(raw)
+      const d2 = maybe.indexOf('.')
+      if (d2 > 0) {
+        const p2 = maybe.slice(0, d2)
+        const s2 = maybe.slice(d2 + 1)
         if (sign(p2) === s2) {
           payload = p2
           sig = s2
@@ -146,28 +113,28 @@ export async function readSession(): Promise<Session | null> {
   }
 }
 
-/* ============ Helpers “server-only” ============ */
+/** Helpers server-only (écriture via le store implicite) */
 export async function writeSessionCookie(sess: Session) {
-  ;(await nextCookies()).set(COOKIE_NAME, encodeSessionForCookie(sess), {
+  const ck = await cookies()
+  ck.set(COOKIE_NAME, encodeSessionForCookie(sess), {
     httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30,
   })
 }
 export async function clearSessionCookie() {
-  ;(await nextCookies()).set(COOKIE_NAME, '', {
+  const ck = await cookies()
+  ck.set(COOKIE_NAME, '', {
     httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 0,
   })
 }
 
-/* ============ Redirect helper ============ */
 export async function redirectToLogin(nextPath?: string) {
-  const h = await nextHeaders()
+  const h = await headers()
   const pathname = nextPath || (h.get('x-pathname') || '/')
   const m = /^\/(fr|en)(\/|$)/.exec(pathname)
   const locale = (m?.[1] as 'fr'|'en') || 'en'
   return `/${locale}/login?next=${encodeURIComponent(pathname)}`
 }
 
-/* ============ DB ============ */
 export async function ownerIdForDay(tsISOorDay: string): Promise<string | null> {
   let ts = tsISOorDay
   if (/^\d{4}-\d{2}-\d{2}$/.test(ts)) ts = `${ts}T00:00:00.000Z`
@@ -181,7 +148,6 @@ export async function ownerIdForDay(tsISOorDay: string): Promise<string | null> 
   return rows[0]?.owner_id ?? null
 }
 
-/* ============ Password & auth ============ */
 export async function hashPassword(plain: string) { return bcrypt.hash(plain, 12) }
 export async function verifyPassword(plain: string, hash: string) {
   try { return await bcrypt.compare(plain, hash) } catch { return false }
@@ -230,15 +196,14 @@ export async function authenticateWithPassword(emailRaw: string, password: strin
   return ok ? { id: row.id, email: row.email, display_name: row.display_name } : null
 }
 
-/* ============ DEBUG (sans rien exposer de sensible) ============ */
+/** DEBUG : ne fuite rien de sensible */
 export async function debugSessionSnapshot() {
-  const h = await nextHeaders()
-  const ck = await nextCookies()
+  const h = await headers()
+  const ck = await cookies()
   const host = h.get('host') || ''
   const xfh  = h.get('x-forwarded-host') || ''
   const proto = h.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
-  const path  = h.get('x-pathname') || 'N/A'
-  // brut
+
   const rawFromStore = ck.get(COOKIE_NAME)?.value
   const rawFromHeader = parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME)
   const raw = rawFromStore ?? rawFromHeader ?? ''
@@ -262,7 +227,7 @@ export async function debugSessionSnapshot() {
     reason = 'cookie_absent'
   }
   return {
-    host, xfh, proto, path,
+    host, xfh, proto,
     cookiePresent: !!raw,
     rawLen: raw.length,
     payloadStart: payload.slice(0, 10),

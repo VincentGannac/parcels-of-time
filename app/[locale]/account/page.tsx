@@ -9,10 +9,10 @@ import { pool } from '@/lib/db'
 
 type Params = { locale: string }
 
-export default async function AccountPage({ params }: { params: Promise<Params> }) {
-  const { locale = 'fr' } = await params
+export default async function AccountPage({ params }: { params: Params }) {
+  const { locale = 'fr' } = params
   const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
-  // readSession est async dans votre projet → on attend
+
   const sess = await readSession()
   if (!sess) {
     redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
@@ -29,7 +29,7 @@ export default async function AccountPage({ params }: { params: Promise<Params> 
       where c.owner_id = $1::uuid
       order by day_utc desc
     `,
-    [sess!.ownerId] // uuid (string)
+    [sess!.ownerId]
   )
 
   return (

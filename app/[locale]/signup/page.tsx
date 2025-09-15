@@ -12,13 +12,14 @@ type Search = { next?: string; err?: string }
 export default async function SignupPage({
   params, searchParams
 }: {
-  params: Promise<Params>
-  searchParams: Promise<Search>
+  params: Params
+  searchParams: Search
 }) {
-  const { locale = 'en' } = await params
+  const { locale = 'en' } = params
   const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
-  const sp = await searchParams
+  const sp = searchParams
   const next = sp?.next || `/${locale}/account`
+
   const sess = await readSession()
   if (sess) redirect(next)
 

@@ -10,7 +10,6 @@ export async function POST(req: Request) {
   const password = String(form.get('password') || '')
   const next = String(form.get('next') || '')
   const locale = String(form.get('locale') || 'en')
-  
 
   const fallback = `/${locale}/account`
   if (!email || !password || password.length < 8) {
@@ -26,7 +25,7 @@ export async function POST(req: Request) {
       email: user.email,
       displayName: user.display_name,
       iat: Math.floor(Date.now() / 1000),
-    }, )
+    })
     return res
   } catch {
     return NextResponse.redirect(new URL(`/${locale}/signup?err=server&next=${encodeURIComponent(next || fallback)}`, req.url), { status: 303 })
