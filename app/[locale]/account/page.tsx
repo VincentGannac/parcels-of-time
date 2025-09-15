@@ -9,8 +9,8 @@ import { pool } from '@/lib/db'
 
 type Params = { locale: string }
 
-export default async function AccountPage({ params }: { params: Params }) {
-  const { locale = 'fr' } = params
+export default async function AccountPage({ params }: { params: Promise<Params> }) {
+  const { locale = 'fr' } = await params   // 👈 params est une Promise sur Next 15.4.6
   const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
 
   const sess = await readSession()
