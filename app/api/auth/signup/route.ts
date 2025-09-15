@@ -20,15 +20,12 @@ export async function POST(req: Request) {
     const user = await createOwnerWithPassword(email, password)
     const target = next || fallback
     const res = NextResponse.redirect(new URL(target, req.url), { status: 303 })
-
-    const host = (new URL(req.url)).host
     setSessionCookieOnResponse(res, {
       ownerId: user.id,
       email: user.email,
       displayName: user.display_name,
       iat: Math.floor(Date.now() / 1000),
-    }, host)
-
+    })
     return res
   } catch {
     return NextResponse.redirect(new URL(`/${locale}/signup?err=server&next=${encodeURIComponent(next || fallback)}`, req.url), { status: 303 })

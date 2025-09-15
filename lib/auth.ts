@@ -5,11 +5,10 @@ import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { pool } from '@/lib/db'
 
-/** IMPORTANT :
- *  - on n'utilise plus __Host- (host-only) pour éviter les boucles entre apex/www
- *  - on utilise un cookie de domaine : Domain=parcelsoftime.com
- */
-const COOKIE_NAME = 'pot_sess'
+/** Cookie principal + cookie de compat (temporaire). */
+export const COOKIE_NAME_MAIN = '__Host-pot_sess'   // host-only (PAS de Domain)
+export const COOKIE_NAME_COMP = 'pot_sess'          // compat: Domain=.parcelsoftime.com
+
 const SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me'
 
 export type Session = {
@@ -19,20 +18,8 @@ export type Session = {
   iat: number
 }
 
-/** Utilitaire : déduire le domain pour le Set-Cookie.
- *  - En prod : forcer parcelsoftime.com pour couvrir apex + www.
- *  - En dev/preview (localhost, *.vercel.app) : pas de Domain (host-only local).
- */
-function cookieDomainFromHost(host: string | null | undefined): string | undefined {
-  if (!host) return undefined
-  const h = host.toLowerCase()
-  if (h === 'parcelsoftime.com' || h === 'www.parcelsoftime.com') return 'parcelsoftime.com'
-  // évite de poser un Domain incorrect sur preview/dev
-  if (h.endsWith('.vercel.app') || h.startsWith('localhost')) return undefined
-  return undefined
-}
+/* ================= Base64 & HMAC ================= */
 
-/* ============ base64 helpers ============ */
 function b64url(buf: Buffer) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/,'')
 }
@@ -46,45 +33,59 @@ function b64anyToUtf8(s: string): string {
   const std = /[-_]/.test(s) ? toB64(s) : s
   return Buffer.from(std, 'base64').toString('utf8')
 }
-
-/* ============ HMAC ============ */
 function sign(input: string) {
   return b64url(crypto.createHmac('sha256', SECRET).update(input).digest())
 }
 
-/* ============ Encoder ============ */
+/* ================= Encodage session ================= */
+
 export function encodeSessionForCookie(sess: Session): string {
   const payload = b64url(Buffer.from(JSON.stringify(sess)))
   const sig = sign(payload)
   return `${payload}.${sig}`
 }
 
-/* ============ Set / Clear (avec Domain dynamique) ============ */
-export function setSessionCookieOnResponse(res: NextResponse, sess: Session, hostHint?: string | null) {
-  const domain = cookieDomainFromHost(hostHint)
-  res.cookies.set(COOKIE_NAME, encodeSessionForCookie(sess), {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-    ...(domain ? { domain } : {}),
+/* ================= Cookies (réponse) ================= */
+
+export function setSessionCookieOnResponse(res: NextResponse, sess: Session) {
+  const value = encodeSessionForCookie(sess)
+  // Cookie principal host-only
+  res.cookies.set(COOKIE_NAME_MAIN, value, {
+    httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30,
+  })
+  // Cookie compat (sur quelques jours), pour apex + www
+  res.cookies.set(COOKIE_NAME_COMP, value, {
+    httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 7,
+    domain: '.parcelsoftime.com',
   })
 }
 
-export function clearSessionCookieOnResponse(res: NextResponse, hostHint?: string | null) {
-  const domain = cookieDomainFromHost(hostHint)
-  res.cookies.set(COOKIE_NAME, '', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-    ...(domain ? { domain } : {}),
+export function clearSessionCookieOnResponse(res: NextResponse) {
+  res.cookies.set(COOKIE_NAME_MAIN, '', {
+    httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 0,
+  })
+  res.cookies.set(COOKIE_NAME_COMP, '', {
+    httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 0,
+    domain: '.parcelsoftime.com',
   })
 }
 
-/* ============ Lecture ============ */
+/* ================= Cookies (store implicite) ================= */
+
+export async function writeSessionCookie(sess: Session) {
+  const ck = await cookies()
+  const value = encodeSessionForCookie(sess)
+  ck.set(COOKIE_NAME_MAIN, value, { httpOnly:true, secure:true, sameSite:'lax', path:'/', maxAge: 60 * 60 * 24 * 30 })
+  ck.set(COOKIE_NAME_COMP, value, { httpOnly:true, secure:true, sameSite:'lax', path:'/', maxAge: 60 * 60 * 24 * 7, domain: '.parcelsoftime.com' })
+}
+export async function clearSessionCookie() {
+  const ck = await cookies()
+  ck.set(COOKIE_NAME_MAIN, '', { httpOnly:true, secure:true, sameSite:'lax', path:'/', maxAge: 0 })
+  ck.set(COOKIE_NAME_COMP, '', { httpOnly:true, secure:true, sameSite:'lax', path:'/', maxAge: 0, domain: '.parcelsoftime.com' })
+}
+
+/* ================= Lecture cookie ================= */
+
 function parseCookieHeader(rawHeader: string | null | undefined, name: string): string | undefined {
   if (!rawHeader) return undefined
   const parts = rawHeader.split(/;\s*/)
@@ -100,15 +101,18 @@ function parseCookieHeader(rawHeader: string | null | undefined, name: string): 
 
 export async function readSession(): Promise<Session | null> {
   const ck = await cookies()
-  let raw = ck.get(COOKIE_NAME)?.value
+  // Essaie l’officiel puis la compat
+  let raw = ck.get(COOKIE_NAME_MAIN)?.value || ck.get(COOKIE_NAME_COMP)?.value
+
   if (!raw) {
     const h = await headers()
-    raw = parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME)
+    raw =
+      parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME_MAIN) ||
+      parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME_COMP)
   }
   if (!raw) return null
 
-  const dot = raw.indexOf('.')
-  if (dot <= 0) return null
+  const dot = raw.indexOf('.'); if (dot <= 0) return null
   let payload = raw.slice(0, dot)
   let sig = raw.slice(dot + 1)
 
@@ -120,11 +124,7 @@ export async function readSession(): Promise<Session | null> {
       if (d2 > 0) {
         const p2 = maybe.slice(0, d2)
         const s2 = maybe.slice(d2 + 1)
-        if (sign(p2) === s2) {
-          payload = p2
-          sig = s2
-          sigOk = true
-        }
+        if (sign(p2) === s2) { payload = p2; sig = s2; sigOk = true }
       }
     } catch {}
   }
@@ -134,32 +134,11 @@ export async function readSession(): Promise<Session | null> {
     const json = b64anyToUtf8(payload)
     const data = JSON.parse(json) as Session
     return data && typeof data.ownerId === 'string' ? data : null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
-/* ============ Helpers server-only (store implicite) ============ */
-export async function writeSessionCookie(sess: Session) {
-  const h = await headers()
-  const domain = cookieDomainFromHost(h.get('x-forwarded-host') || h.get('host'))
-  const ck = await cookies()
-  ck.set(COOKIE_NAME, encodeSessionForCookie(sess), {
-    httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30,
-    ...(domain ? { domain } : {}),
-  })
-}
-export async function clearSessionCookie() {
-  const h = await headers()
-  const domain = cookieDomainFromHost(h.get('x-forwarded-host') || h.get('host'))
-  const ck = await cookies()
-  ck.set(COOKIE_NAME, '', {
-    httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 0,
-    ...(domain ? { domain } : {}),
-  })
-}
+/* ================= Helpers “business” ================= */
 
-/* ============ Redirect helper ============ */
 export async function redirectToLogin(nextPath?: string) {
   const h = await headers()
   const pathname = nextPath || (h.get('x-pathname') || '/')
@@ -168,7 +147,6 @@ export async function redirectToLogin(nextPath?: string) {
   return `/${locale}/login?next=${encodeURIComponent(pathname)}`
 }
 
-/* ============ DB & Auth ============ */
 export async function ownerIdForDay(tsISOorDay: string): Promise<string | null> {
   let ts = tsISOorDay
   if (/^\d{4}-\d{2}-\d{2}$/.test(ts)) ts = `${ts}T00:00:00.000Z`
@@ -182,10 +160,15 @@ export async function ownerIdForDay(tsISOorDay: string): Promise<string | null> 
   return rows[0]?.owner_id ?? null
 }
 
-export async function hashPassword(plain: string) { return bcrypt.hash(plain, 12) }
+/* ================= Password auth (bcrypt + Postgres) ================= */
+
+export async function hashPassword(plain: string) {
+  return bcrypt.hash(plain, 12)
+}
 export async function verifyPassword(plain: string, hash: string) {
   try { return await bcrypt.compare(plain, hash) } catch { return false }
 }
+
 export async function createOwnerWithPassword(emailRaw: string, password: string) {
   const email = emailRaw.trim().toLowerCase()
   const pwHash = await hashPassword(password)
@@ -198,6 +181,7 @@ export async function createOwnerWithPassword(emailRaw: string, password: string
   )
   if (existing.length) {
     const row = existing[0]
+    // si déjà un password, on considère que le compte existe
     if (row.password_hash) return { id: row.id, email: row.email, display_name: row.display_name }
     const { rows } = await pool.query(
       `update owners set password_hash = $2 where id = $1
@@ -214,6 +198,7 @@ export async function createOwnerWithPassword(emailRaw: string, password: string
   )
   return rows[0]
 }
+
 export async function authenticateWithPassword(emailRaw: string, password: string) {
   const email = emailRaw.trim().toLowerCase()
   const { rows } = await pool.query(
@@ -230,7 +215,8 @@ export async function authenticateWithPassword(emailRaw: string, password: strin
   return ok ? { id: row.id, email: row.email, display_name: row.display_name } : null
 }
 
-/* ============ DEBUG (ne fuite rien de sensible) ============ */
+/* ================= DEBUG ================= */
+
 export async function debugSessionSnapshot() {
   const h = await headers()
   const ck = await cookies()
@@ -238,21 +224,18 @@ export async function debugSessionSnapshot() {
   const xfh  = h.get('x-forwarded-host') || ''
   const proto = h.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
 
-  const rawFromStore = ck.get(COOKIE_NAME)?.value
-  const rawFromHeader = parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME)
-  const raw = rawFromStore ?? rawFromHeader ?? ''
+  const rawFromStoreMain = ck.get(COOKIE_NAME_MAIN)?.value
+  const rawFromStoreComp = ck.get(COOKIE_NAME_COMP)?.value
+  const rawFromHeaderMain = parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME_MAIN)
+  const rawFromHeaderComp = parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME_COMP)
+
+  const raw = rawFromStoreMain ?? rawFromHeaderMain ?? rawFromStoreComp ?? rawFromHeaderComp ?? ''
   let payload = '', sig = '', sigOk = false, parseOk = false, reason = ''
   if (raw) {
     const dot = raw.indexOf('.')
     if (dot > 0) { payload = raw.slice(0, dot); sig = raw.slice(dot + 1) }
     try {
-      sigOk = (sign(payload) === sig) || (()=>{
-        try {
-          const dec = decodeURIComponent(raw)
-          const d2 = dec.indexOf('.'); if (d2 <= 0) return false
-          return sign(dec.slice(0, d2)) === dec.slice(d2 + 1)
-        } catch { return false }
-      })()
+      sigOk = (sign(payload) === sig)
       const j = b64anyToUtf8(payload)
       JSON.parse(j)
       parseOk = true
@@ -262,6 +245,10 @@ export async function debugSessionSnapshot() {
   }
   return {
     host, xfh, proto,
+    haveMainStore: !!rawFromStoreMain,
+    haveMainHeader: !!rawFromHeaderMain,
+    haveCompStore: !!rawFromStoreComp,
+    haveCompHeader: !!rawFromHeaderComp,
     cookiePresent: !!raw,
     rawLen: raw.length,
     payloadStart: payload.slice(0, 10),

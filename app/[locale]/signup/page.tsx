@@ -61,10 +61,10 @@ export default async function SignupPage({
         </p>
       )}
 
-      {/* Action absolue sur l’apex */}
-      <form action={`${BASE}/api/auth/signup`} method="post" style={{display:'grid', gap:12, marginTop:12}}>
-        <input type="hidden" name="next" value={next} />
-        <input type="hidden" name="locale" value={locale} />
+     
+    <form action="/api/auth/signup" method="post" style={{display:'grid', gap:12, marginTop:12}}>
+      <input type="hidden" name="next" value={next} />
+      <input type="hidden" name="locale" value={locale} />
 
         <label style={{display:'grid', gap:6}}>
           <span>{labels.email}</span>
