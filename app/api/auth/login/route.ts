@@ -1,54 +1,44 @@
 // app/api/auth/login/route.ts
 export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
 import { NextResponse } from 'next/server'
-import {
-  authenticateWithPassword,
-  setSessionCookieOnResponse,
-} from '@/lib/auth'
+import { authenticateWithPassword, encodeSessionForCookie } from '@/lib/auth'
 
-function resolveNext(nextRaw: string, locale: 'fr' | 'en') {
-  let next = ''
-  try { next = decodeURIComponent(nextRaw || '') } catch { next = nextRaw || '' }
-  // On autorise seulement un chemin local /fr/... ou /en/... (pas de boucle vers login/signup)
-  if (/^\/(fr|en)\//.test(next) && !/^\/(fr|en)\/(?:login|signup)(\/|$)/.test(next)) {
-    return next
-  }
+const COOKIE_NAME = 'pot_sess' as const
+const COOKIE_DOMAIN = '.parcelsoftime.com' as const
+const MAX_AGE = 60 * 60 * 24 * 30 // 30j
+
+function safeNext(n: string | null | undefined, locale: 'fr'|'en') {
+  if (!n) return `/${locale}/account`
+  try {
+    const dec = decodeURIComponent(n)
+    // Autoriser uniquement chemins internes localisés
+    if (/^\/(fr|en)\//.test(dec)) return dec
+  } catch {}
   return `/${locale}/account`
 }
 
 export async function POST(req: Request) {
   const form = await req.formData()
-  const email   = String(form.get('email') || '').trim()
-  const password= String(form.get('password') || '')
-  const locale  = (String(form.get('locale') || 'en') === 'fr') ? 'fr' : 'en'
-  const nextRaw = String(form.get('next') || '')
+  const email = String(form.get('email') || '').trim()
+  const password = String(form.get('password') || '')
+  const locale = (String(form.get('locale') || 'en') === 'fr') ? 'fr' : 'en'
+  const next = safeNext(String(form.get('next') || ''), locale)
 
   if (!email || !password) {
-    const url = new URL(`/${locale}/login`, req.url)
-    url.searchParams.set('err', 'missing')
-    if (nextRaw) url.searchParams.set('next', nextRaw)
-    return NextResponse.redirect(url, 303)
+    return NextResponse.redirect(`/${locale}/login?err=missing&next=${encodeURIComponent(next)}`, 303)
   }
 
   const owner = await authenticateWithPassword(email, password)
   if (!owner) {
-    const url = new URL(`/${locale}/login`, req.url)
-    url.searchParams.set('err', 'badcreds')
-    if (nextRaw) url.searchParams.set('next', nextRaw)
-    return NextResponse.redirect(url, 303)
+    return NextResponse.redirect(`/${locale}/login?err=badcreds&next=${encodeURIComponent(next)}`, 303)
   }
 
-  const dest = resolveNext(nextRaw, locale)       // ✅ HONORE le next demandé
-  const res  = NextResponse.redirect(dest, 303)   // ✅ redirection relative
+  const payload = { ownerId: owner.id, email: owner.email, displayName: owner.display_name || null, iat: Math.floor(Date.now()/1000) }
+  const val = encodeSessionForCookie(payload)
 
-  setSessionCookieOnResponse(res, {
-    ownerId: owner.id,
-    email: owner.email,
-    displayName: owner.display_name ?? null,
-    iat: Math.floor(Date.now() / 1000),
-  })
-
+  const res = NextResponse.redirect(next, 303)
+  // Un SEUL cookie, de domaine, pour éviter les doublons {www, apex}
+  res.headers.append('Set-Cookie',
+    `${COOKIE_NAME}=${val}; Path=/; Domain=${COOKIE_DOMAIN}; Max-Age=${MAX_AGE}; HttpOnly; Secure; SameSite=Lax`)
   return res
 }
