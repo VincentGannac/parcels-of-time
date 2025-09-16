@@ -1,11 +1,17 @@
 // app/api/auth/logout/route.ts
 export const runtime = 'nodejs'
-import { NextResponse } from 'next/server'
-const COOKIE_NAME = 'pot_sess'
-const COOKIE_DOMAIN = '.parcelsoftime.com'
 
-export async function POST() {
-  const res = NextResponse.redirect('/en/login', 303)
-  res.headers.append('Set-Cookie', `${COOKIE_NAME}=; Path=/; Domain=${COOKIE_DOMAIN}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`)
+import { NextResponse } from 'next/server'
+
+export async function POST(req: Request) {
+  const url = new URL(req.url)
+  const locale = url.pathname.startsWith('/fr') ? 'fr' : 'en'
+  const back = `/${locale}/login`
+
+  const res = NextResponse.redirect(new URL(back, req.url), { status: 303 })
+  // purge host-only
+  res.cookies.set('pot_sess', '', { path: '/', maxAge: 0, httpOnly: true, secure: true, sameSite: 'lax' })
+  // purge domain-wide
+  res.cookies.set('pot_sess', '', { path: '/', maxAge: 0, httpOnly: true, secure: true, sameSite: 'lax', domain: '.parcelsoftime.com' })
   return res
 }
