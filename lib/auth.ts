@@ -3,7 +3,7 @@
 // Outils d'auth côté serveur: signature HMAC, cookie SameSite=None; Secure, helpers DB.
 // + Support password optionnel (scrypt), avec détection dynamique des colonnes.
 
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import type { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { pool } from '@/lib/db'
@@ -126,16 +126,47 @@ export async function readSession(): Promise<SessionPayload | null> {
 /**
  * Petit utilitaire debug pour ta page /login?debug=1
  */
-export async function debugSessionSnapshot() {
+export type DebugSnapshot = {
+  present: boolean
+  raw: string
+  payload: SessionPayload | null
+  host: string
+  xfh: string
+  proto: string
+  cookiePresent: boolean
+  rawLen: number
+}
+
+export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
   try {
     const c = await cookies()
+    const h = await headers()
+
     const raw = c.get(AUTH_COOKIE_NAME)?.value || ''
     const payload = parseSignedCookieValue(raw)
-    return { present: !!raw, raw, payload }
+
+    const host = h.get('host') || ''
+    const xfh = h.get('x-forwarded-host') || ''
+    const proto = h.get('x-forwarded-proto') || ''
+
+    const cookiePresent = !!raw
+    const rawLen = raw.length
+
+    return { present: cookiePresent, raw, payload, host, xfh, proto, cookiePresent, rawLen }
   } catch {
-    return { present: false, raw: '', payload: null }
+    return {
+      present: false,
+      raw: '',
+      payload: null,
+      host: '',
+      xfh: '',
+      proto: '',
+      cookiePresent: false,
+      rawLen: 0,
+    }
   }
 }
+
 
 // ====== DB helpers ======
 
