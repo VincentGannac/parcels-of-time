@@ -98,14 +98,14 @@ export async function POST(req: Request) {
   const host = req.headers.get('x-forwarded-host') || req.headers.get('host')
   const domain = cookieDomainFromHost(host)
   res.cookies.set({
-    name: COOKIE_NAME,
+    name: 'pot_sess',
     value,
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
     path: '/',
     maxAge: COOKIE_TTL_SECONDS,
-    ...(domain ? { domain } : {}),
+    ...(domain ? { domain } : {}), // ← .parcelsoftime.com en prod, sinon host-only
   })
 
   return res

@@ -13,11 +13,11 @@ import { pool } from '@/lib/db'
  *  Config cookie + secret
  * ============================ */
 export const COOKIE_NAME = 'pot_sess' as const                 // un seul cookie
-export const COOKIE_DOMAIN = '.parcelsoftime.com' as const      // couvre apex + www
+export const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30                        // 30 jours
 
-// ⚠️ En prod, définis SESSION_SECRET (>=32 octets aléatoires)
-const SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me'
+
+const SECRET = process.env.SESSION_SECRET || process.env.SECRET_SALT || 'dev_salt'
 
 /* ============================
  *  Types
