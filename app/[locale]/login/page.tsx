@@ -34,23 +34,13 @@ function errMessage(locale: 'fr' | 'en', code?: string | null) {
 function t(locale: 'fr' | 'en') {
   const fr = {
     title: 'Connexion',
-    email: 'E-mail',
-    password: 'Mot de passe',
-    submit: 'Se connecter',
-    or: 'ou',
-    withLink: 'Se connecter par lien magique',
-    linkHelp: 'Si vous avez reçu un e-mail avec un lien, cliquez-le directement.',
     backHome: 'Retour à l’accueil',
+    linkHelp: 'Si vous avez reçu un e-mail avec un lien, cliquez-le directement.',
   }
   const en = {
     title: 'Sign in',
-    email: 'Email',
-    password: 'Password',
-    submit: 'Sign in',
-    or: 'or',
-    withLink: 'Sign in with magic link',
-    linkHelp: 'If you received a sign-in link by email, just click it.',
     backHome: 'Back to home',
+    linkHelp: 'If you received a sign-in link by email, just click it.',
   }
   return locale === 'fr' ? fr : en
 }
@@ -59,11 +49,12 @@ export default async function Page({
   params,
   searchParams,
 }: {
-  params: Params
-  searchParams: Search
+  // ✅ IMPORTANT : ces deux props sont des Promises dans ton setup
+  params: Promise<Params>
+  searchParams: Promise<Search>
 }) {
-  const { locale } = params
-  const { next, err, debug } = searchParams
+  const { locale } = await params
+  const { next, err, debug } = await searchParams
   const i18n = t(locale)
 
   // Si déjà connecté (et pas d’erreur explicite), redirige vers next ou /account
