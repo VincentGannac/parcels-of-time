@@ -10,19 +10,10 @@ import { pool } from '@/lib/db'
 
 type Params = { locale: 'fr' | 'en' }
 
-// Helper local : base canonique sans "www."
-async function canonicalBase() {
-  const h = await headers()
-  const rawHost = (h.get('x-forwarded-host') || h.get('host') || 'parcelsoftime.com').toLowerCase()
-  const host = rawHost.replace(/^www\./, '')
-  const protoSrc = h.get('x-forwarded-proto') || 'https'
-  const proto = protoSrc.includes('https') ? 'https' : 'http'
-  return `${proto}://${host}`
-}
 
 export default async function AccountPage({ params }: { params: Promise<Params> }) {
   const { locale = 'fr' } = await params
-  const BASE = await canonicalBase()
+
 
   const sess = await readSession()
   if (!sess) {
@@ -47,8 +38,9 @@ export default async function AccountPage({ params }: { params: Promise<Params> 
     <main style={{ maxWidth: 1000, margin: '0 auto', padding: '36px 20px', fontFamily: 'Inter, system-ui' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ margin: 0 }}>Mon compte</h1>
-        {/* Action absolue sur l’apex */}
-        <form action={`${BASE}/api/auth/logout`} method="post">
+        {/* Action relative + locale pour décider la redirection */}
+        <form action="/api/auth/logout" method="post">
+          <input type="hidden" name="locale" value={locale} />
           <button style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}>
             Se déconnecter
           </button>
