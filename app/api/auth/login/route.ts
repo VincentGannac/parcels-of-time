@@ -1,12 +1,12 @@
+// app/api/auth/login/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { authenticateWithPassword, setSessionCookieOnResponse } from '@/lib/auth'
 
-function safeNext(input: string, locale: 'fr'|'en'): string {
+function safeNext(input: string, locale: 'fr'|'en') {
   const s = (input || '').trim()
-  if (/^\/(fr|en)\//.test(s)) return s
-  return `/${locale}/account`
+  return /^\/(fr|en)\//.test(s) ? s : `/${locale}/account`
 }
 
 async function parseBody(req: Request) {
@@ -32,7 +32,6 @@ async function parseBody(req: Request) {
 
 export async function POST(req: Request) {
   const { email, password, locale, next } = await parseBody(req)
-
   if (!email || !password) {
     const loc = `/${locale}/login?err=missing${next ? `&next=${encodeURIComponent(next)}` : ''}`
     return NextResponse.redirect(new URL(loc, req.url))

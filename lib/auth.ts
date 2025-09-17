@@ -80,8 +80,13 @@ export async function readSession(): Promise<Session | null> {
         const sig = val.slice(dot + 1)
         if (sign(payload) === sig) {
           const json = b64anyToUtf8(payload)
-          const data = JSON.parse(json) as Session
-          if (data && typeof data.ownerId === 'string') return data
+          const data = JSON.parse(json) as any
+          const now = Math.floor(Date.now()/1000)
+          const hasIat = typeof data?.iat === 'number' && data.iat > now - 60*60*24*35 // 35j
+          const hasExp = typeof data?.exp === 'number' && data.exp > now
+          if (data && typeof data.ownerId === 'string' && (hasIat || hasExp)) {
+            return data as Session
+          }
         }
       }
     }

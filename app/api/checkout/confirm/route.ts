@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import crypto from 'node:crypto';
 import { pool } from '@/lib/db';
+import { setSessionCookieOnResponse } from '@/lib/auth';
 
 type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
@@ -50,6 +51,9 @@ export async function GET(req: Request) {
 
   let tsForRedirect = ''; // on essaie de toujours rediriger même en cas d’erreur DB
 
+  let outOwnerId = ''
+  let outEmail = ''
+  let outDisplayName: string | null = null
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
     const s = await stripe.checkout.sessions.retrieve(session_id, { expand: ['payment_intent'] });
@@ -116,6 +120,9 @@ export async function GET(req: Request) {
         [email, display_name]
       );
       const ownerId = ownerRows[0].id;
+      outOwnerId = String(ownerId);
+      outEmail = email;
+      outDisplayName = display_name;
 
       // claims upsert dynamique
       const cols = await getColumns(client, 'claims');
@@ -228,8 +235,18 @@ export async function GET(req: Request) {
     {
       const to = new URL(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect)}`);
       if (wantsAutopub) to.searchParams.set('autopub', '1');
-      return NextResponse.redirect(to.toString(), { status: 303 });
-    }
+      const res = NextResponse.redirect(to.toString(), { status: 303 });
+      // ✅ Auto-login si on a l’ownerId
+      if (outOwnerId && outEmail) {
+        setSessionCookieOnResponse(res, {
+          ownerId: outOwnerId,
+          email: outEmail,
+          displayName: outDisplayName,
+          iat: Math.floor(Date.now() / 1000),
+        });
+      }
+      return res;
+     }
 
   } catch (e:any) {
     console.error('confirm_error_top:', e?.message, e?.stack);

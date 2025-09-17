@@ -145,9 +145,11 @@ export function middleware(req: NextRequest) {
 
   // 4) Pages protégées → redirection vers /[locale]/login?next=...
   const locale = hasLocalePrefix(pathname).locale || preferredLocale(req)
-  if (needsAuth(pathname)) {
-    const sessionCookie = req.cookies.get(AUTH_COOKIE_NAME)?.value
-    if (!sessionCookie) {
+    if (needsAuth(pathname)) {
+        const raw = req.cookies.get(AUTH_COOKIE_NAME)?.value || ''
+        // format basique: <b64url>.<b64url>
+        const looksSigned = /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/.test(raw)
+        if (!looksSigned) {
       const nextTarget = sanitizeNext(`${pathname}${url.search}`, locale)
       url.pathname = `/${locale}/login`
       url.searchParams.set('next', nextTarget)
