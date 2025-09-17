@@ -1,306 +1,185 @@
 // lib/auth.ts
-// Next.js 15 – headers() / cookies() sont asynchrones.
+// Runtime: nodejs
+// Outils d'auth côté serveur: signature HMAC, cookie SameSite=None; Secure, helpers DB.
 
-export const runtime = 'nodejs'
-
-import crypto from 'node:crypto'
-import bcrypt from 'bcryptjs'
-import { cookies, headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import type { NextResponse } from 'next/server'
+import crypto from 'node:crypto'
 import { pool } from '@/lib/db'
 
-/* ============================
- *  Config cookie + secret
- * ============================ */
-export const COOKIE_NAME = 'pot_sess' as const                 // un seul cookie
-export const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 30                        // 30 jours
+export const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'pot_sess'
+const AUTH_SECRET = process.env.AUTH_SECRET || process.env.SECRET_SALT || 'dev_salt'
 
+// ===== Utils base64url =====
+function b64url(input: Buffer | string) {
+  return Buffer.from(input)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
+function fromB64url(input: string) {
+  input = input.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = input.length % 4 ? 4 - (input.length % 4) : 0
+  return Buffer.from(input + '='.repeat(pad), 'base64').toString('utf8')
+}
 
-const SECRET = process.env.SESSION_SECRET || process.env.SECRET_SALT || 'dev_salt'
-
-/* ============================
- *  Types
- * ============================ */
-export type Session = {
+// ===== Signature HMAC (type JWT light) =====
+export type SessionPayload = {
   ownerId: string
   email: string
   displayName?: string | null
-  iat: number
+  iat?: number
+  exp?: number
 }
 
-/* ============================
- *  Helpers base64url + HMAC
- * ============================ */
-function b64url(buf: Buffer) {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-function toStd(b64urlStr: string) {
-  let t = b64urlStr.replace(/-/g, '+').replace(/_/g, '/')
-  const pad = t.length % 4
-  if (pad) t += '='.repeat(4 - pad)
-  return t
-}
-function b64anyToUtf8(s: string): string {
-  const std = /[-_]/.test(s) ? toStd(s) : s
-  return Buffer.from(std, 'base64').toString('utf8')
-}
-function sign(payload: string) {
-  return b64url(crypto.createHmac('sha256', SECRET).update(payload).digest())
+function hmac(input: string) {
+  return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('base64url')
 }
 
-/* ============================
- *  Encode / Decode session
- * ============================ */
-export function encodeSessionForCookie(sess: Session): string {
-  const payload = b64url(Buffer.from(JSON.stringify(sess)))
-  const sig = sign(payload)
-  return `${payload}.${sig}`
+export function makeSignedCookieValue(payload: SessionPayload, ttlSec = 60 * 60 * 24 * 90) {
+  const now = Math.floor(Date.now() / 1000)
+  const body = { ...payload, iat: payload.iat ?? now, exp: payload.exp ?? now + ttlSec }
+  const p64 = b64url(JSON.stringify(body))
+  const sig = hmac(p64)
+  return `${p64}.${sig}`
 }
 
-function parseCookieHeader(rawHeader: string | null | undefined, name: string): string | undefined {
-  if (!rawHeader) return undefined
-  const re = new RegExp(`(?:^|;\\s*)${name}=([^;]+)`)
-  const m = re.exec(rawHeader)
-  return m ? m[1] : undefined
-}
-
-/* ============================
- *  Lecture session (cookies() puis headers())
- * ============================ */
-export async function readSession(): Promise<Session | null> {
-  // 1) magasin de cookies
+export function parseSignedCookieValue(value: string | undefined): SessionPayload | null {
+  if (!value) return null
+  const [p64, sig] = value.split('.')
+  if (!p64 || !sig) return null
+  const good = hmac(p64)
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null
   try {
-    const ck = await cookies()
-    const val = ck.get(COOKIE_NAME)?.value
-    if (val) {
-      const dot = val.indexOf('.')
-      if (dot > 0) {
-        const payload = val.slice(0, dot)
-        const sig = val.slice(dot + 1)
-        if (sign(payload) === sig) {
-          const json = b64anyToUtf8(payload)
-          const data = JSON.parse(json) as any
-          const now = Math.floor(Date.now()/1000)
-          const hasIat = typeof data?.iat === 'number' && data.iat > now - 60*60*24*35 // 35j
-          const hasExp = typeof data?.exp === 'number' && data.exp > now
-          if (data && typeof data.ownerId === 'string' && (hasIat || hasExp)) {
-            return data as Session
-          }
-        }
-      }
-    }
-  } catch {}
-
-  // 2) fallback: header Cookie
-  try {
-    const h = await headers()
-    const raw = h.get('cookie') || h.get('Cookie') || ''
-    const val = parseCookieHeader(raw, COOKIE_NAME)
-    if (val) {
-      const dot = val.indexOf('.')
-      if (dot > 0) {
-        const payload = val.slice(0, dot)
-        const sig = val.slice(dot + 1)
-        if (sign(payload) === sig) {
-          const json = b64anyToUtf8(payload)
-          const data = JSON.parse(json) as Session
-          if (data && typeof data.ownerId === 'string') return data
-        }
-      }
-    }
-  } catch {}
-
-  return null
-}
-
-/* ============================
- *  Helpers écriture/clear côté RSC (cookies())
- *  (Les routes API peuvent aussi utiliser les variantes *OnResponse)
- * ============================ */
-export async function writeSessionCookie(sess: Session) {
-  try {
-    const ck = await cookies()
-    ck.set(COOKIE_NAME, encodeSessionForCookie(sess), {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: COOKIE_MAX_AGE,
-      // pas de domain ici (host-only) — utile côté RSC
-    })
-  } catch {}
-}
-
-export async function clearSessionCookie() {
-  try {
-    const ck = await cookies()
-    ck.set(COOKIE_NAME, '', { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 0 })
-  } catch {}
-}
-
-/* ============================
- *  Helpers écriture/clear sur une NextResponse
- * ============================ */
-export function setSessionCookieOnResponse(res: NextResponse, sess: Session) {
-  res.cookies.set(COOKIE_NAME, encodeSessionForCookie(sess), {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    domain: COOKIE_DOMAIN,   // couvre apex + www
-    maxAge: COOKIE_MAX_AGE,
-  })
-}
-
-export function clearSessionCookieOnResponse(res: NextResponse) {
-  res.cookies.set(COOKIE_NAME, '', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    domain: COOKIE_DOMAIN,
-    maxAge: 0,
-  })
-}
-
-/* ============================
- *  Redirection pratique vers /login
- * ============================ */
-export async function redirectToLogin(nextPath?: string) {
-  const h = await headers()
-  const pathname = nextPath || (h.get('x-pathname') || '/')
-  const m = /^\/(fr|en)(\/|$)/.exec(pathname)
-  const locale = (m?.[1] as 'fr' | 'en') || 'en'
-  return `/${locale}/login?next=${encodeURIComponent(pathname)}`
-}
-
-/* ============================
- *  Auth DB (email + mot de passe)
- * ============================ */
-export async function hashPassword(plain: string) {
-  return bcrypt.hash(plain, 12)
-}
-export async function verifyPassword(plain: string, hash: string) {
-  try { return await bcrypt.compare(plain, hash) } catch { return false }
-}
-
-export async function createOwnerWithPassword(emailRaw: string, password: string) {
-  const email = emailRaw.trim().toLowerCase()
-  const pwHash = await hashPassword(password)
-
-  const { rows: existing } = await pool.query(
-    `select id, email, display_name, password_hash
-       from owners
-      where lower(email)=lower($1)
-      limit 1`,
-    [email]
-  )
-
-  if (existing.length) {
-    const row = existing[0]
-    if (row.password_hash) {
-      return { id: row.id, email: row.email, display_name: row.display_name }
-    }
-    const { rows } = await pool.query(
-      `update owners
-          set password_hash = $2
-        where id = $1
-      returning id, email, display_name`,
-      [row.id, pwHash]
-    )
-    return rows[0]
-  }
-
-  const { rows } = await pool.query(
-    `insert into owners (email, password_hash)
-     values ($1, $2)
-     returning id, email, display_name`,
-    [email, pwHash]
-  )
-  return rows[0]
-}
-
-export async function authenticateWithPassword(emailRaw: string, password: string) {
-  const email = emailRaw.trim().toLowerCase()
-  const { rows } = await pool.query(
-    `select id, email, display_name, password_hash
-       from owners
-      where lower(email)=lower($1)
-      limit 1`,
-    [email]
-  )
-  if (!rows.length) return null
-  const row = rows[0]
-  if (!row.password_hash) return null
-  const ok = await verifyPassword(password, row.password_hash)
-  return ok ? { id: row.id, email: row.email, display_name: row.display_name } : null
-}
-
-/* ============================
- *  Optionnel — lookup propriétaire d'une journée
- * ============================ */
-export async function ownerIdForDay(ts: string): Promise<string | null> {
-  try {
-    const { rows } = await pool.query(
-      `select owner_id from claims where ts = $1 limit 1`,
-      [ts]
-    )
-    return rows[0]?.owner_id ?? null
+    const obj = JSON.parse(fromB64url(p64))
+    if (obj?.exp && typeof obj.exp === 'number' && obj.exp < Math.floor(Date.now() / 1000)) return null
+    return obj
   } catch {
     return null
   }
 }
 
-/* ============================
- *  Debug — affiché dans /login?debug=1 ou /api/_diag
- * ============================ */
-export async function debugSessionSnapshot() {
-  const h = await headers()
-  const ck = await cookies()
+// ===== Cookies helpers =====
 
-  const rawFromStore = ck.get(COOKIE_NAME)?.value
-  const rawFromHeader = parseCookieHeader(h.get('cookie') || h.get('Cookie'), COOKIE_NAME)
-  const raw = rawFromStore ?? rawFromHeader ?? ''
-
-  let payload = ''
-  let sig = ''
-  let sigOk = false
-  let parseOk = false
-  let reason = ''
-
-  if (raw) {
-    const dot = raw.indexOf('.')
-    if (dot > 0) {
-      payload = raw.slice(0, dot)
-      sig = raw.slice(dot + 1)
-      try {
-        sigOk = sign(payload) === sig
-        const j = b64anyToUtf8(payload)
-        JSON.parse(j)
-        parseOk = true
-      } catch (e: any) {
-        reason = String(e?.message || e)
-      }
-    } else {
-      reason = 'malformed_cookie'
-    }
-  } else {
-    reason = 'cookie_absent'
+/**
+ * Pose la session sur la réponse avec SameSite=None; Secure.
+ * Utiliser CETTE fonction partout (login, retour Stripe, etc.).
+ */
+export function setSessionCookieOnResponse(res: NextResponse, payload: SessionPayload, ttlSec?: number) {
+  const value = makeSignedCookieValue(payload, ttlSec)
+  const base = {
+    httpOnly: true as const,
+    secure: true,
+    sameSite: 'none' as const,
+    path: '/',
+    maxAge: ttlSec ?? 60 * 60 * 24 * 90,
   }
+  const dom = process.env.COOKIE_DOMAIN || ''
+  // Variante "domain" (prod)
+  if (dom) res.cookies.set(AUTH_COOKIE_NAME, value, { ...base, domain: dom })
+  // Variante host-only (preview / localhost)
+  res.cookies.set(AUTH_COOKIE_NAME, value, base)
+}
 
-  return {
-    host: h.get('host') || '',
-    xfh: h.get('x-forwarded-host') || '',
-    proto: h.get('x-forwarded-proto') || '',
-    cookiePresent: !!raw,
-    rawLen: raw.length,
-    payloadStart: payload.slice(0, 10),
-    payloadEnd: payload.slice(-6),
-    sigStart: sig.slice(0, 6),
-    sigEnd: sig.slice(-6),
-    sigOk,
-    parseOk,
-    reason,
+/**
+ * Efface toutes les variantes possibles du cookie de session.
+ */
+export function clearSessionCookies(res: NextResponse) {
+  const gone = {
+    httpOnly: true as const,
+    secure: true,
+    sameSite: 'none' as const,
+    path: '/',
+    expires: new Date(0),
+    maxAge: 0,
+  }
+  const dom = process.env.COOKIE_DOMAIN || ''
+  // 1) SameSite=None + domain
+  if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, domain: dom })
+  // 2) SameSite=None + host-only
+  res.cookies.set(AUTH_COOKIE_NAME, '', gone)
+  // 3) Lax + domain (anciens cookies)
+  if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax', domain: dom })
+  // 4) Lax + host-only
+  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax' })
+}
+
+/**
+ * Lecture de la session côté serveur (App Router).
+ * Retourne null si absent/invalide/expiré.
+ */
+export async function readSession(): Promise<SessionPayload | null> {
+  try {
+    const c = await cookies(); // ⬅️ ajouter await
+    const raw = c.get(AUTH_COOKIE_NAME)?.value
+    return parseSignedCookieValue(raw)
+  } catch {
+    return null
+  }
+}
+
+// ====== DB helpers ======
+
+/** Renvoie l'owner_id (string) pour un jour donné (YYYY-MM-DD ou ISO), ou null. */
+export async function ownerIdForDay(tsISO: string): Promise<string | null> {
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`
+    const { rows } = await pool.query(
+      `select owner_id from claims where date_trunc('day', ts) = $1::timestamptz`,
+      [tsISO]
+    )
+    if (!rows?.length) return null
+    return String(rows[0].owner_id)
+  } catch {
+    return null
+  }
+}
+
+/** Crée (si besoin) un owner par email et retourne son id. */
+export async function upsertOwnerByEmail(email: string, displayName?: string | null): Promise<string> {
+  const { rows } = await pool.query(
+    `insert into owners(email, display_name)
+     values($1,$2)
+     on conflict(email) do update
+       set display_name = coalesce(excluded.display_name, owners.display_name)
+     returning id`,
+    [email.trim().toLowerCase(), displayName ?? null]
+  )
+  return String(rows[0].id)
+}
+
+// ====== Jeton de login (optionnel, pour "magic link") ======
+
+export type MagicTokenPayload = {
+  email: string
+  ownerId?: string
+  displayName?: string | null
+  exp?: number
+  iat?: number
+}
+
+/** Génère un token signé (à envoyer par mail). */
+export function makeLoginToken(p: MagicTokenPayload, ttlSec = 60 * 30): string {
+  const now = Math.floor(Date.now() / 1000)
+  const body = { ...p, iat: p.iat ?? now, exp: p.exp ?? now + ttlSec }
+  const p64 = b64url(JSON.stringify(body))
+  const sig = hmac(`login.${p64}`)
+  return `${p64}.${sig}`
+}
+
+/** Vérifie un token signé et retourne la charge utile ou null. */
+export function verifyLoginToken(token: string): MagicTokenPayload | null {
+  const [p64, sig] = String(token || '').split('.')
+  if (!p64 || !sig) return null
+  const good = hmac(`login.${p64}`)
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null
+  try {
+    const obj = JSON.parse(fromB64url(p64)) as MagicTokenPayload
+    if (obj?.exp && obj.exp < Math.floor(Date.now() / 1000)) return null
+    if (!obj?.email) return null
+    return obj
+  } catch {
+    return null
   }
 }
