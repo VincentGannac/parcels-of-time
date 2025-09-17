@@ -5,6 +5,7 @@ export const revalidate = 0
 
 import { redirect } from 'next/navigation'
 import { readSession, debugSessionSnapshot } from '@/lib/auth'
+import LoginForm from './LoginFormClient'
 
 type Params = { locale: 'fr' | 'en' }
 type Search = { next?: string; err?: string; debug?: string }
@@ -65,7 +66,7 @@ export default async function Page({
   const { next, err, debug } = searchParams
   const i18n = t(locale)
 
-  // Si déjà connecté, on redirige vers "next" ou /account
+  // Si déjà connecté (et pas d’erreur explicite), redirige vers next ou /account
   const sess = await readSession()
   if (sess && (!err || err === '')) {
     const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`
@@ -115,7 +116,9 @@ export default async function Page({
 
       <LoginForm locale={locale} nextParam={typeof next === 'string' ? next : undefined} />
 
-      <p style={{ fontSize: 13, opacity: 0.7, marginTop: 14 }}>{i18n.linkHelp}</p>
+      <p style={{ fontSize: 13, opacity: 0.7, marginTop: 14 }}>
+        {i18n.linkHelp}
+      </p>
 
       {dbg && (
         <details style={{ marginTop: 22 }}>
@@ -131,155 +134,12 @@ export default async function Page({
               <strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”
             </div>
             <div>
-              <strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} —{' '}
-              <strong>reason:</strong> {dbg.reason || '—'}
+              <strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} — <strong>reason:</strong> {dbg.reason || '—'}
             </div>
             <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(dbg.payload, null, 2)}</pre>
           </div>
         </details>
       )}
     </main>
-  )
-}
-
-// ===== Client form (POST JSON vers /api/auth/login) =====
-'use client'
-
-import { useState } from 'react'
-
-function LoginForm({ locale, nextParam }: { locale: 'fr' | 'en'; nextParam?: string }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [localErr, setLocalErr] = useState<string | null>(null)
-
-  const label = {
-    fr: { email: 'E-mail', password: 'Mot de passe', submit: 'Se connecter' },
-    en: { email: 'Email', password: 'Password', submit: 'Sign in' },
-  }[locale]
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLocalErr(null)
-    setLoading(true)
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, next: nextParam || `/${locale}/account` }),
-        redirect: 'follow',
-      })
-
-      // Si Next a renvoyé une redirection, on force la navigation
-      if (res.redirected) {
-        window.location.href = res.url
-        return
-      }
-
-      if (!res.ok) {
-        let code = 'server_error'
-        try {
-          const j = await res.json()
-          code = j?.error || code
-        } catch {}
-        const msg =
-          locale === 'fr'
-            ? {
-                missing_credentials: 'Veuillez renseigner un e-mail et un mot de passe.',
-                not_found: 'Compte introuvable (ou méthode de connexion inadaptée).',
-                bad_credentials: 'E-mail ou mot de passe incorrect.',
-                server_error: 'Erreur serveur. Réessayez.',
-              }[code] || 'Erreur.'
-            : {
-                missing_credentials: 'Please provide email and password.',
-                not_found: 'Account not found (or wrong sign-in method).',
-                bad_credentials: 'Incorrect email or password.',
-                server_error: 'Server error. Please try again.',
-              }[code] || 'Error.'
-        setLocalErr(msg)
-        setLoading(false)
-        return
-      }
-
-      // Si la redirection a été suivie côté fetch, on se base sur l’URL finale.
-      window.location.href = res.url
-    } catch (e) {
-      setLocalErr(locale === 'fr' ? 'Erreur réseau.' : 'Network error.')
-      setLoading(false)
-    }
-  }
-
-  return (
-    <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, marginTop: 10 }}>
-      <label style={{ display: 'grid', gap: 6 }}>
-        <span>{label.email}</span>
-        <input
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          style={{
-            padding: '12px 14px',
-            border: '1px solid #e5e7eb',
-            borderRadius: 10,
-            background: 'transparent',
-          }}
-        />
-      </label>
-
-      <label style={{ display: 'grid', gap: 6 }}>
-        <span>{label.password}</span>
-        <input
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="••••••••"
-          style={{
-            padding: '12px 14px',
-            border: '1px solid #e5e7eb',
-            borderRadius: 10,
-            background: 'transparent',
-          }}
-        />
-      </label>
-
-      <button
-        type="submit"
-        disabled={loading}
-        style={{
-          padding: '12px 14px',
-          borderRadius: 12,
-          fontWeight: 800,
-          border: 'none',
-          background: '#111827',
-          color: '#fff',
-          cursor: loading ? 'progress' : 'pointer',
-          boxShadow: loading ? '0 0 0 6px rgba(0,0,0,.06)' : 'none',
-        }}
-      >
-        {loading ? (locale === 'fr' ? 'Connexion…' : 'Signing in…') : label.submit}
-      </button>
-
-      {localErr && (
-        <div
-          role="alert"
-          style={{
-            marginTop: 4,
-            padding: '10px 12px',
-            border: '1px solid #FEE2E2',
-            background: '#FEF2F2',
-            color: '#991B1B',
-            borderRadius: 10,
-            fontSize: 14,
-          }}
-        >
-          {localErr}
-        </div>
-      )}
-    </form>
   )
 }
