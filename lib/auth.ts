@@ -1,6 +1,7 @@
 // lib/auth.ts
 // Runtime: nodejs
 // Outils d'auth côté serveur: signature HMAC, cookie SameSite=None; Secure, helpers DB.
+// + Support password optionnel (scrypt), avec détection dynamique des colonnes.
 
 import { cookies } from 'next/headers'
 import type { NextResponse } from 'next/server'
@@ -50,7 +51,10 @@ export function parseSignedCookieValue(value: string | undefined): SessionPayloa
   const [p64, sig] = value.split('.')
   if (!p64 || !sig) return null
   const good = hmac(p64)
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null
+  // timingSafeEqual demande des buffers de même longueur => harmoniser
+  const a = Buffer.from(sig)
+  const b = Buffer.from(good)
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null
   try {
     const obj = JSON.parse(fromB64url(p64))
     if (obj?.exp && typeof obj.exp === 'number' && obj.exp < Math.floor(Date.now() / 1000)) return null
@@ -111,11 +115,25 @@ export function clearSessionCookies(res: NextResponse) {
  */
 export async function readSession(): Promise<SessionPayload | null> {
   try {
-    const c = await cookies(); // ⬅️ ajouter await
+    const c = await cookies() // <= Next 15 peut retourner une Promise
     const raw = c.get(AUTH_COOKIE_NAME)?.value
     return parseSignedCookieValue(raw)
   } catch {
     return null
+  }
+}
+
+/**
+ * Petit utilitaire debug pour ta page /login?debug=1
+ */
+export async function debugSessionSnapshot() {
+  try {
+    const c = await cookies()
+    const raw = c.get(AUTH_COOKIE_NAME)?.value || ''
+    const payload = parseSignedCookieValue(raw)
+    return { present: !!raw, raw, payload }
+  } catch {
+    return { present: false, raw: '', payload: null }
   }
 }
 
@@ -149,6 +167,123 @@ export async function upsertOwnerByEmail(email: string, displayName?: string | n
   return String(rows[0].id)
 }
 
+// === Password optionnel (scrypt) ============================================
+
+/** Récupère le set des colonnes pour la table owners (cache minimal par process). */
+let OWNERS_COLS: Set<string> | null = null
+async function ownersColumns(): Promise<Set<string>> {
+  if (OWNERS_COLS) return OWNERS_COLS
+  try {
+    const { rows } = await pool.query(
+      `select column_name
+         from information_schema.columns
+        where table_schema='public' and table_name='owners'`
+    )
+    OWNERS_COLS = new Set<string>(rows.map((r: any) => String(r.column_name)))
+    return OWNERS_COLS
+  } catch {
+    OWNERS_COLS = new Set<string>(['email', 'display_name', 'id']) // fallback minimal
+    return OWNERS_COLS
+  }
+}
+
+function hashPassword(password: string, salt?: string) {
+  const s = salt || crypto.randomBytes(16).toString('hex')
+  const buf = crypto.scryptSync(password, s, 64)
+  return { salt: s, hash: buf.toString('hex') }
+}
+function verifyPassword(password: string, salt: string, expectedHash: string) {
+  const { hash } = hashPassword(password, salt)
+  const a = Buffer.from(hash, 'hex')
+  const b = Buffer.from(expectedHash, 'hex')
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
+/**
+ * Crée un owner avec mot de passe si les colonnes existent.
+ * - Si l'email existe déjà avec mot de passe: throw 'email_in_use'
+ * - Si l'email existe sans colonnes password: renvoie l'id tel quel (pas d’erreur).
+ * - Si les colonnes password n’existent pas: insert/update sans mot de passe (fallback).
+ */
+export async function createOwnerWithPassword(
+  email: string,
+  password: string,
+  displayName?: string | null
+): Promise<string> {
+  const mail = email.trim().toLowerCase()
+  const cols = await ownersColumns()
+
+  // Check existant
+  const { rows } = await pool.query(
+    `select id${cols.has('password_hash') ? ', password_hash, password_salt' : ''} from owners where email = $1`,
+    [mail]
+  )
+  const exists = rows[0]
+  if (exists && cols.has('password_hash')) {
+    if (exists.password_hash) {
+      // un compte password existe déjà
+      const err = new Error('email_in_use')
+      ;(err as any).code = 'email_in_use'
+      throw err
+    }
+    // Pas de password encore => on peut le définir
+    const { salt, hash } = hashPassword(password)
+    await pool.query(
+      `update owners set display_name = coalesce($2, owners.display_name),
+                          password_hash = $3, password_salt = $4
+        where id = $1`,
+      [exists.id, displayName ?? null, hash, salt]
+    )
+    return String(exists.id)
+  }
+
+  // Insert
+  if (cols.has('password_hash') && cols.has('password_salt')) {
+    const { salt, hash } = hashPassword(password)
+    const { rows: ins } = await pool.query(
+      `insert into owners(email, display_name, password_hash, password_salt)
+       values ($1,$2,$3,$4)
+       on conflict(email) do update
+         set display_name = coalesce(excluded.display_name, owners.display_name)
+       returning id`,
+      [mail, displayName ?? null, hash, salt]
+    )
+    return String(ins[0].id)
+  } else {
+    // Fallback: pas de colonnes password; on se contente d’un upsert standard
+    return upsertOwnerByEmail(mail, displayName ?? null)
+  }
+}
+
+/** Vérifie un login/password ; retourne l'ownerId si OK, sinon null. */
+export async function loginOwnerWithPassword(
+  email: string,
+  password: string
+): Promise<{ ownerId: string; email: string; displayName: string | null } | null> {
+  const mail = email.trim().toLowerCase()
+  const cols = await ownersColumns()
+  const fields = ['id', 'email', 'display_name']
+  if (cols.has('password_hash')) fields.push('password_hash')
+  if (cols.has('password_salt')) fields.push('password_salt')
+
+  const { rows } = await pool.query(
+    `select ${fields.join(', ')} from owners where email = $1`,
+    [mail]
+  )
+  if (!rows.length) return null
+
+  const r = rows[0]
+  if (cols.has('password_hash') && r.password_hash && r.password_salt) {
+    const ok = verifyPassword(password, String(r.password_salt), String(r.password_hash))
+    if (!ok) return null
+  } else {
+    // pas de colonnes password -> pas de vérification possible (considérer KO)
+    return null
+  }
+
+  return { ownerId: String(r.id), email: mail, displayName: r.display_name ?? null }
+}
+
 // ====== Jeton de login (optionnel, pour "magic link") ======
 
 export type MagicTokenPayload = {
@@ -173,7 +308,9 @@ export function verifyLoginToken(token: string): MagicTokenPayload | null {
   const [p64, sig] = String(token || '').split('.')
   if (!p64 || !sig) return null
   const good = hmac(`login.${p64}`)
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null
+  const a = Buffer.from(sig)
+  const b = Buffer.from(good)
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null
   try {
     const obj = JSON.parse(fromB64url(p64)) as MagicTokenPayload
     if (obj?.exp && obj.exp < Math.floor(Date.now() / 1000)) return null
