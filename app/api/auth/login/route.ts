@@ -3,85 +3,101 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import {
-  setSessionCookieOnResponse,
   verifyLoginToken,
   upsertOwnerByEmail,
-  makeSignedCookieValue,
+  getOwnerByEmail,
+  verifyPasswordHash,
+  setSessionCookieOnResponse,
 } from '@/lib/auth'
 
-function pickLocale(s?: string | null) {
-  return String(s || '').toLowerCase().startsWith('fr') ? 'fr' : 'en'
+function pickLocale(h: Headers) {
+  const acc = (h.get('accept-language') || '').toLowerCase()
+  return acc.startsWith('fr') ? 'fr' : 'en'
 }
 
-async function parseBody(req: Request) {
-  const ctype = req.headers.get('content-type') || ''
-  if (ctype.includes('application/json')) {
-    try {
-      return await req.json()
-    } catch {
-      return {}
-    }
+function redirectTo(base: string, locale: 'fr' | 'en', next?: string | null) {
+  const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`
+  return NextResponse.redirect(new URL(to, base), { status: 303 })
+}
+
+export async function GET(req: Request) {
+  const url = new URL(req.url)
+  const token = url.searchParams.get('token')
+  const next = url.searchParams.get('next')
+  const base = url.origin
+  const locale = pickLocale(req.headers)
+
+  if (!token) {
+    // Pas de token → redirect login
+    return NextResponse.redirect(new URL(`/${locale}/login`, base), { status: 302 })
   }
-  if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
-    try {
-      const fd = await req.formData()
-      const obj: Record<string, any> = {}
-      fd.forEach((v, k) => (obj[k] = v))
-      return obj
-    } catch {
-      return {}
-    }
+
+  const payload = verifyLoginToken(token)
+  if (!payload?.email) {
+    return NextResponse.redirect(new URL(`/${locale}/login?err=bad_token`, base), { status: 302 })
   }
-  return {}
+
+  // Crée/maj l'owner si besoin
+  const ownerId = await upsertOwnerByEmail(payload.email, payload.displayName ?? undefined)
+  const res = redirectTo(base, locale, next)
+  setSessionCookieOnResponse(res, {
+    ownerId,
+    email: payload.email,
+    displayName: payload.displayName ?? null,
+    iat: Math.floor(Date.now() / 1000),
+  })
+  return res
 }
 
 export async function POST(req: Request) {
-  const url = new URL(req.url)
-  const base = process.env.NEXT_PUBLIC_BASE_URL || url.origin
+  const base = new URL(req.url).origin
+  const locale = pickLocale(req.headers)
+  try {
+    const body = await req.json().catch(() => ({} as any))
+    const next: string | null = body?.next || null
 
-  const body = await parseBody(req)
-  const nextUrl = String(body.next || url.searchParams.get('next') || `/${pickLocale(body.locale)}/account`)
-  const locale = pickLocale(body.locale || url.searchParams.get('locale'))
-
-  // 1) Login via token magique (recommandé en prod)
-  const token = String(body.token || url.searchParams.get('token') || '')
-  if (token) {
-    const data = verifyLoginToken(token)
-    if (!data) {
-      return NextResponse.json({ error: 'invalid_token' }, { status: 400 })
+    // 1) Magic token dans le body ?
+    if (body?.token) {
+      const payload = verifyLoginToken(String(body.token))
+      if (!payload?.email) {
+        return NextResponse.json({ ok: false, error: 'bad_token' }, { status: 400 })
+      }
+      const ownerId = await upsertOwnerByEmail(payload.email, payload.displayName ?? undefined)
+      const res = redirectTo(base, locale, next)
+      setSessionCookieOnResponse(res, {
+        ownerId,
+        email: payload.email,
+        displayName: payload.displayName ?? null,
+        iat: Math.floor(Date.now() / 1000),
+      })
+      return res
     }
-    const email = data.email.trim().toLowerCase()
-    const ownerId = data.ownerId || (await upsertOwnerByEmail(email, data.displayName))
-    const res = NextResponse.redirect(new URL(nextUrl, base).toString(), { status: 303 })
+
+    // 2) Email + password (si colonne password_hash présente)
+    const email = String(body?.email || '').trim().toLowerCase()
+    const password = String(body?.password || '')
+    if (!email || !password) {
+      return NextResponse.json({ ok: false, error: 'missing_credentials' }, { status: 400 })
+    }
+
+    const owner = await getOwnerByEmail(email)
+    if (!owner || !owner.password_hash) {
+      return NextResponse.json({ ok: false, error: 'not_found' }, { status: 401 })
+    }
+    const ok = verifyPasswordHash(password, owner.password_hash)
+    if (!ok) {
+      return NextResponse.json({ ok: false, error: 'bad_credentials' }, { status: 401 })
+    }
+
+    const res = redirectTo(base, locale, next)
     setSessionCookieOnResponse(res, {
-      ownerId,
-      email,
-      displayName: data.displayName || null,
+      ownerId: owner.id,
+      email: owner.email,
+      displayName: owner.display_name ?? null,
       iat: Math.floor(Date.now() / 1000),
     })
-    res.headers.set('Cache-Control', 'no-store')
     return res
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: 'server_error', detail: String(e?.message || e) }, { status: 500 })
   }
-
-  // 2) Mode DEV: login par e-mail seul (désactivé par défaut)
-  const devAllowed =
-    process.env.ALLOW_PASSWORDLESS_DEV === '1' || process.env.NODE_ENV !== 'production'
-  if (devAllowed) {
-    const email = String(body.email || '').trim().toLowerCase()
-    if (!email) return NextResponse.json({ error: 'missing_email' }, { status: 400 })
-    const displayName = String(body.display_name || '') || null
-    const ownerId = await upsertOwnerByEmail(email, displayName)
-    const res = NextResponse.redirect(new URL(nextUrl, base).toString(), { status: 303 })
-    setSessionCookieOnResponse(res, { ownerId, email, displayName })
-    res.headers.set('Cache-Control', 'no-store')
-    return res
-  }
-
-  // 3) Sinon, on exige un token
-  return NextResponse.json({ error: 'missing_token' }, { status: 400 })
-}
-
-// Optionnel: GET avec token dans l'URL (utile depuis un lien e-mail)
-export async function GET(req: Request) {
-  return POST(req)
 }
