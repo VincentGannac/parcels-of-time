@@ -4,162 +4,282 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
 import { readSession, debugSessionSnapshot } from '@/lib/auth'
 
 type Params = { locale: 'fr' | 'en' }
-type Search = { next?: string; err?: string; info?: string; debug?: string }
+type Search = { next?: string; err?: string; debug?: string }
 
-export default async function LoginPage({
+function errMessage(locale: 'fr' | 'en', code?: string | null) {
+  if (!code) return ''
+  const FR: Record<string, string> = {
+    bad_token: 'Lien de connexion invalide ou expiré.',
+    missing_credentials: 'Veuillez renseigner un e-mail et un mot de passe.',
+    not_found: 'Compte introuvable (ou méthode de connexion inadaptée).',
+    bad_credentials: 'E-mail ou mot de passe incorrect.',
+    server_error: 'Erreur serveur. Réessayez.',
+    signed_out: 'Vous avez été déconnecté.',
+  }
+  const EN: Record<string, string> = {
+    bad_token: 'Invalid or expired sign-in link.',
+    missing_credentials: 'Please provide email and password.',
+    not_found: 'Account not found (or wrong sign-in method).',
+    bad_credentials: 'Incorrect email or password.',
+    server_error: 'Server error. Please try again.',
+    signed_out: 'You have been signed out.',
+  }
+  return (locale === 'fr' ? FR : EN)[code] || (locale === 'fr' ? 'Erreur.' : 'Error.')
+}
+
+function t(locale: 'fr' | 'en') {
+  const fr = {
+    title: 'Connexion',
+    email: 'E-mail',
+    password: 'Mot de passe',
+    submit: 'Se connecter',
+    or: 'ou',
+    withLink: 'Se connecter par lien magique',
+    linkHelp: 'Si vous avez reçu un e-mail avec un lien, cliquez-le directement.',
+    backHome: 'Retour à l’accueil',
+  }
+  const en = {
+    title: 'Sign in',
+    email: 'Email',
+    password: 'Password',
+    submit: 'Sign in',
+    or: 'or',
+    withLink: 'Sign in with magic link',
+    linkHelp: 'If you received a sign-in link by email, just click it.',
+    backHome: 'Back to home',
+  }
+  return locale === 'fr' ? fr : en
+}
+
+export default async function Page({
   params,
   searchParams,
 }: {
-  // Important: Promise types only (no union), per Next 15 PageProps constraint.
-  params: Promise<Params>
-  searchParams: Promise<Search>
+  params: Params
+  searchParams: Search
 }) {
-  const { locale } = await params
-  const sp = await searchParams
-  const next = sp?.next ?? ''
-  const showDebug = sp?.debug === '1'
+  const { locale } = params
+  const { next, err, debug } = searchParams
+  const i18n = t(locale)
 
+  // Si déjà connecté, on redirige vers "next" ou /account
   const sess = await readSession()
-  if (sess) redirect(next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`)
+  if (sess && (!err || err === '')) {
+    const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`
+    redirect(to)
+  }
 
-  const labels =
-    locale === 'fr'
-      ? {
-          title: 'Connexion',
-          email: 'Adresse email',
-          password: 'Mot de passe',
-          submit: 'Se connecter',
-          switch: "Pas de compte ? S'inscrire →",
-        }
-      : {
-          title: 'Sign in',
-          email: 'Email address',
-          password: 'Password',
-          submit: 'Sign in',
-          switch: 'No account? Sign up →',
-        }
-
-  const errKey = sp?.err
-  const errText =
-    errKey === 'missing'
-      ? locale === 'fr'
-        ? 'Email et mot de passe requis.'
-        : 'Email and password are required.'
-      : errKey === 'badcreds'
-      ? locale === 'fr'
-        ? 'Identifiants invalides. Vérifiez votre email et votre mot de passe.'
-        : 'Invalid credentials. Check your email and password.'
-      : errKey === 'server'
-      ? locale === 'fr'
-        ? 'Erreur serveur. Réessayez dans un instant.'
-        : 'Server error. Please try again.'
-      : null
-
-  const dbg = await debugSessionSnapshot()
-  const h = await headers()
-  const reqUrl = h.get('referer') || `/${locale}/login`
+  const dbg = debug === '1' ? await debugSessionSnapshot() : null
 
   return (
-    <main style={{ maxWidth: 520, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui' }}>
-      <h1 style={{ margin: '0 0 16px' }}>{labels.title}</h1>
-
-      {sp?.next && (
-        <div
+    <main style={{ maxWidth: 520, margin: '0 auto', padding: '36px 20px', fontFamily: 'Inter, system-ui' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+        <a href={`/${locale}`} style={{ textDecoration: 'none', opacity: 0.85 }}>
+          &larr; Parcels of Time
+        </a>
+        <a
+          href={`/${locale}`}
           style={{
-            margin: '0 0 12px',
-            padding: '10px 12px',
-            background: '#fff3bf',
-            border: '1px solid #ffe08a',
+            textDecoration: 'none',
+            border: '1px solid #e5e7eb',
+            padding: '8px 12px',
             borderRadius: 10,
-            fontSize: 13,
-            color: '#6b4e00',
-            fontWeight: 700,
+            color: 'inherit',
           }}
         >
-          Vous vous connectez pour accéder à : <code style={{ fontWeight: 800 }}>{sp.next}</code>
-        </div>
-      )}
+          {i18n.backHome}
+        </a>
+      </header>
 
-      {errText && (
+      <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 34, margin: '0 0 8px' }}>{i18n.title}</h1>
+
+      {err && (
         <div
           role="alert"
-          aria-live="assertive"
           style={{
-            marginBottom: 8,
+            margin: '12px 0 16px',
             padding: '12px 14px',
-            borderRadius: 10,
-            border: '1px solid #f19999',
-            background: '#ffecec',
-            color: '#8a1f1f',
-            fontWeight: 600,
+            border: '1px solid #FEE2E2',
+            background: '#FEF2F2',
+            color: '#991B1B',
+            borderRadius: 12,
+            fontSize: 14,
           }}
         >
-          {errText}
+          {errMessage(locale, err)}
         </div>
       )}
 
-      {sp?.info === 'magic_disabled' && (
-        <p style={{ background: '#eef7ff', border: '1px solid #cbe4ff', padding: 10, borderRadius: 8 }}>
-          {locale === 'fr'
-            ? "La connexion par lien magique n'est plus disponible. Connectez-vous avec votre mot de passe."
-            : 'Magic link sign-in is disabled. Please sign in with your password.'}
-        </p>
+      <LoginForm locale={locale} nextParam={typeof next === 'string' ? next : undefined} />
+
+      <p style={{ fontSize: 13, opacity: 0.7, marginTop: 14 }}>{i18n.linkHelp}</p>
+
+      {dbg && (
+        <details style={{ marginTop: 22 }}>
+          <summary style={{ cursor: 'pointer' }}>debug</summary>
+          <div style={{ marginTop: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12 }}>
+            <div>
+              <strong>cookie present:</strong> {String(dbg.cookiePresent)} — <strong>rawLen:</strong> {dbg.rawLen}
+            </div>
+            <div>
+              <strong>host:</strong> {dbg.host} — <strong>xfh:</strong> {dbg.xfh} — <strong>proto:</strong> {dbg.proto}
+            </div>
+            <div>
+              <strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”
+            </div>
+            <div>
+              <strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} —{' '}
+              <strong>reason:</strong> {dbg.reason || '—'}
+            </div>
+            <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(dbg.payload, null, 2)}</pre>
+          </div>
+        </details>
       )}
-
-      {/* Relative action to avoid host bounce */}
-      <form action="/api/auth/login" method="post" style={{ display: 'grid', gap: 12, marginTop: 12 }}>
-        <input type="hidden" name="next" value={next} />
-        <input type="hidden" name="locale" value={locale} />
-
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>{labels.email}</span>
-          <input name="email" type="email" required autoComplete="email" style={{ padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8 }} />
-        </label>
-
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>{labels.password}</span>
-          <input
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            style={{ padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8 }}
-          />
-        </label>
-
-        <button type="submit" style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #0B0B0C', background: '#0B0B0C', color: '#fff' }}>
-          {labels.submit}
-        </button>
-      </form>
-
-      <p style={{ marginTop: 12 }}>
-        <a href={`/${locale}/signup?next=${encodeURIComponent(next || `/${locale}/account`)}`}>{labels.switch}</a>
-      </p>
-
-      <details open={showDebug} style={{ marginTop: 18, border: '1px dashed #ccc', borderRadius: 10, padding: 12 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 700 }}>DEBUG — côté serveur</summary>
-        <div style={{ fontSize: 12, lineHeight: '18px', marginTop: 8 }}>
-          <div>
-            <strong>Request referer:</strong> {reqUrl}
-          </div>
-          <div>
-            <strong>host:</strong> {dbg.host} — <strong>xfh:</strong> {dbg.xfh} — <strong>proto:</strong> {dbg.proto}
-          </div>
-          <div>
-            <strong>cookie present:</strong> {String(dbg.cookiePresent)} — <strong>rawLen:</strong> {dbg.rawLen}
-          </div>
-          <div>
-            <strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”
-          </div>
-          <div>
-            <strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} — <strong>reason:</strong> {dbg.reason || '—'}
-          </div>
-        </div>
-      </details>
     </main>
+  )
+}
+
+// ===== Client form (POST JSON vers /api/auth/login) =====
+'use client'
+
+import { useState } from 'react'
+
+function LoginForm({ locale, nextParam }: { locale: 'fr' | 'en'; nextParam?: string }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [localErr, setLocalErr] = useState<string | null>(null)
+
+  const label = {
+    fr: { email: 'E-mail', password: 'Mot de passe', submit: 'Se connecter' },
+    en: { email: 'Email', password: 'Password', submit: 'Sign in' },
+  }[locale]
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setLocalErr(null)
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, next: nextParam || `/${locale}/account` }),
+        redirect: 'follow',
+      })
+
+      // Si Next a renvoyé une redirection, on force la navigation
+      if (res.redirected) {
+        window.location.href = res.url
+        return
+      }
+
+      if (!res.ok) {
+        let code = 'server_error'
+        try {
+          const j = await res.json()
+          code = j?.error || code
+        } catch {}
+        const msg =
+          locale === 'fr'
+            ? {
+                missing_credentials: 'Veuillez renseigner un e-mail et un mot de passe.',
+                not_found: 'Compte introuvable (ou méthode de connexion inadaptée).',
+                bad_credentials: 'E-mail ou mot de passe incorrect.',
+                server_error: 'Erreur serveur. Réessayez.',
+              }[code] || 'Erreur.'
+            : {
+                missing_credentials: 'Please provide email and password.',
+                not_found: 'Account not found (or wrong sign-in method).',
+                bad_credentials: 'Incorrect email or password.',
+                server_error: 'Server error. Please try again.',
+              }[code] || 'Error.'
+        setLocalErr(msg)
+        setLoading(false)
+        return
+      }
+
+      // Si la redirection a été suivie côté fetch, on se base sur l’URL finale.
+      window.location.href = res.url
+    } catch (e) {
+      setLocalErr(locale === 'fr' ? 'Erreur réseau.' : 'Network error.')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, marginTop: 10 }}>
+      <label style={{ display: 'grid', gap: 6 }}>
+        <span>{label.email}</span>
+        <input
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          style={{
+            padding: '12px 14px',
+            border: '1px solid #e5e7eb',
+            borderRadius: 10,
+            background: 'transparent',
+          }}
+        />
+      </label>
+
+      <label style={{ display: 'grid', gap: 6 }}>
+        <span>{label.password}</span>
+        <input
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+          style={{
+            padding: '12px 14px',
+            border: '1px solid #e5e7eb',
+            borderRadius: 10,
+            background: 'transparent',
+          }}
+        />
+      </label>
+
+      <button
+        type="submit"
+        disabled={loading}
+        style={{
+          padding: '12px 14px',
+          borderRadius: 12,
+          fontWeight: 800,
+          border: 'none',
+          background: '#111827',
+          color: '#fff',
+          cursor: loading ? 'progress' : 'pointer',
+          boxShadow: loading ? '0 0 0 6px rgba(0,0,0,.06)' : 'none',
+        }}
+      >
+        {loading ? (locale === 'fr' ? 'Connexion…' : 'Signing in…') : label.submit}
+      </button>
+
+      {localErr && (
+        <div
+          role="alert"
+          style={{
+            marginTop: 4,
+            padding: '10px 12px',
+            border: '1px solid #FEE2E2',
+            background: '#FEF2F2',
+            color: '#991B1B',
+            borderRadius: 10,
+            fontSize: 14,
+          }}
+        >
+          {localErr}
+        </div>
+      )}
+    </form>
   )
 }
