@@ -1,139 +1,91 @@
-// app/[locale]/login/LoginFormClient.tsx
 'use client'
 
 import { useState } from 'react'
 
-export default function LoginForm({ locale, nextParam }: { locale: 'fr' | 'en'; nextParam?: string }) {
+export default function LoginForm({
+  locale,
+  nextParam,
+}: {
+  locale: 'fr' | 'en'
+  nextParam?: string
+}) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [localErr, setLocalErr] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
 
-  const label = {
-    fr: { email: 'E-mail', password: 'Mot de passe', submit: 'Se connecter' },
-    en: { email: 'Email', password: 'Password', submit: 'Sign in' },
-  }[locale]
+  const t = (fr: string, en: string) => (locale === 'fr' ? fr : en)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLocalErr(null)
-    setLoading(true)
+    setErr(null); setLoading(true)
     try {
       const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, next: nextParam || `/${locale}/account` }),
-        redirect: 'follow',
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ email, password }),
       })
-
-      if (res.redirected) {
-        window.location.href = res.url
-        return
-      }
-
       if (!res.ok) {
-        let code = 'server_error'
-        try {
-          const j = await res.json()
-          code = j?.error || code
-        } catch {}
-        const msg =
-          locale === 'fr'
-            ? {
-                missing_credentials: 'Veuillez renseigner un e-mail et un mot de passe.',
-                not_found: 'Compte introuvable (ou méthode de connexion inadaptée).',
-                bad_credentials: 'E-mail ou mot de passe incorrect.',
-                server_error: 'Erreur serveur. Réessayez.',
-              }[code] || 'Erreur.'
-            : {
-                missing_credentials: 'Please provide email and password.',
-                not_found: 'Account not found (or wrong sign-in method).',
-                bad_credentials: 'Incorrect email or password.',
-                server_error: 'Server error. Please try again.',
-              }[code] || 'Error.'
-        setLocalErr(msg)
+        const j = await res.json().catch(()=> ({}))
+        const map: Record<string,string> = {
+          missing_credentials: t('Veuillez renseigner e-mail et mot de passe.', 'Please provide email and password.'),
+          not_found: t('Compte introuvable. Créez un compte.', 'Account not found. Please sign up.'),
+          bad_credentials: t('E-mail ou mot de passe incorrect.', 'Incorrect email or password.'),
+          server_error: t('Erreur serveur. Réessayez.', 'Server error. Try again.'),
+        }
+        setErr(map[j.error] || t('Erreur.', 'Error.'))
         setLoading(false)
         return
       }
-
-      window.location.href = res.url
+      const next = nextParam && /^\/(fr|en)\//.test(nextParam) ? nextParam : `/${locale}/account`
+      window.location.href = next
     } catch {
-      setLocalErr(locale === 'fr' ? 'Erreur réseau.' : 'Network error.')
+      setErr(t('Erreur réseau.', 'Network error.'))
       setLoading(false)
     }
   }
 
   return (
-    <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, marginTop: 10 }}>
-      <label style={{ display: 'grid', gap: 6 }}>
-        <span>{label.email}</span>
+    <form onSubmit={onSubmit} style={{ display:'grid', gap:12 }}>
+      <label style={{ display:'grid', gap:6 }}>
+        <span>{t('E-mail', 'Email')}</span>
         <input
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="email" required value={email} onChange={e=>setEmail(e.target.value)}
           placeholder="you@example.com"
-          style={{
-            padding: '12px 14px',
-            border: '1px solid #e5e7eb',
-            borderRadius: 10,
-            background: 'transparent',
-          }}
+          style={{ padding:'12px 14px', border:'1px solid #e5e7eb', borderRadius:10 }}
         />
       </label>
-
-      <label style={{ display: 'grid', gap: 6 }}>
-        <span>{label.password}</span>
+      <label style={{ display:'grid', gap:6 }}>
+        <span>{t('Mot de passe', 'Password')}</span>
         <input
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          type="password" required value={password} onChange={e=>setPassword(e.target.value)}
           placeholder="••••••••"
-          style={{
-            padding: '12px 14px',
-            border: '1px solid #e5e7eb',
-            borderRadius: 10,
-            background: 'transparent',
-          }}
+          style={{ padding:'12px 14px', border:'1px solid #e5e7eb', borderRadius:10 }}
         />
       </label>
 
-      <button
-        type="submit"
-        disabled={loading}
-        style={{
-          padding: '12px 14px',
-          borderRadius: 12,
-          fontWeight: 800,
-          border: 'none',
-          background: '#111827',
-          color: '#fff',
-          cursor: loading ? 'progress' : 'pointer',
-          boxShadow: loading ? '0 0 0 6px rgba(0,0,0,.06)' : 'none',
-        }}
-      >
-        {loading ? (locale === 'fr' ? 'Connexion…' : 'Signing in…') : label.submit}
-      </button>
-
-      {localErr && (
-        <div
-          role="alert"
-          style={{
-            marginTop: 4,
-            padding: '10px 12px',
-            border: '1px solid #FEE2E2',
-            background: '#FEF2F2',
-            color: '#991B1B',
-            borderRadius: 10,
-            fontSize: 14,
-          }}
-        >
-          {localErr}
+      {err && (
+        <div role="alert" style={{ marginTop:2, padding:'10px 12px', border:'1px solid #FEE2E2', background:'#FEF2F2', color:'#991B1B', borderRadius:10, fontSize:14 }}>
+          {err}
         </div>
       )}
+
+      <button
+        type="submit" disabled={loading}
+        style={{
+          padding:'12px 14px', borderRadius:12, fontWeight:800, cursor: loading ? 'progress' : 'pointer',
+          background:'#E4B73D', color:'#0B0E14', border:'1px solid transparent',
+        }}
+      >
+        {loading ? t('Connexion…', 'Signing in…') : t('Se connecter', 'Sign in')}
+      </button>
+
+      <p style={{ marginTop:8, fontSize:14 }}>
+        {t('Pas de compte ?', 'No account?')}{' '}
+        <a href={`/${locale}/signup${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ''}`}>
+          {t('Créer un compte', 'Create one')}
+        </a>
+      </p>
     </form>
   )
 }

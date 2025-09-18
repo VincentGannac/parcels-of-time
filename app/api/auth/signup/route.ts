@@ -4,38 +4,44 @@ export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import {
   createOwnerWithPassword,
+  findOwnerByEmailWithPassword,
   setSessionCookieOnResponse,
 } from '@/lib/auth'
 
-function pickLocale(h: Headers) {
-  const acc = (h.get('accept-language') || '').toLowerCase()
-  return acc.startsWith('fr') ? 'fr' : 'en'
+function isValidEmail(e: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
 }
 
 export async function POST(req: Request) {
-  const base = new URL(req.url).origin
-  const locale = pickLocale(req.headers)
   try {
-    const body = await req.json()
-    const email = String(body?.email || '').trim().toLowerCase()
-    const password = String(body?.password || '')
-    const displayName = body?.display_name ? String(body.display_name) : null
-    const next = typeof body?.next === 'string' ? body.next : null
-
+    const { email, password, display_name } = await req.json()
     if (!email || !password) {
-      return NextResponse.json({ ok: false, error: 'missing_fields' }, { status: 400 })
+      return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
+    }
+    if (!isValidEmail(String(email))) {
+      return NextResponse.json({ error: 'bad_email' }, { status: 400 })
+    }
+    if (String(password).length < 8) {
+      return NextResponse.json({ error: 'weak_password' }, { status: 400 })
     }
 
-    const ownerId = await createOwnerWithPassword(email, password, displayName)
-    const res = NextResponse.redirect(new URL(next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`, base), { status: 303 })
+    const existing = await findOwnerByEmailWithPassword(email)
+    if (existing?.password_hash) {
+      return NextResponse.json({ error: 'email_taken' }, { status: 409 })
+    }
+
+    const rec = await createOwnerWithPassword(String(email), String(password), display_name || null)
+
+    const res = NextResponse.json({ ok: 1, ownerId: rec.id })
     setSessionCookieOnResponse(res, {
-      ownerId,
-      email,
-      displayName,
+      ownerId: String(rec.id),
+      email: String(rec.email),
+      displayName: rec.display_name,
       iat: Math.floor(Date.now() / 1000),
     })
     return res
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: 'server_error', detail: String(e?.message || e) }, { status: 500 })
+    console.error('[signup] error:', e?.message || e)
+    return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }
