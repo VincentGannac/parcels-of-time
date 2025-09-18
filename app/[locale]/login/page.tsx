@@ -48,7 +48,8 @@ export default async function Page({
 
   const sess = await readSession()
   if (sess && (!err || err === '')) {
-    redirect(next && /^\/(fr|en)\//.test(next) && !/^\/(fr|en)\/login/.test(next) ? next : `/${locale}/account`)
+    const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`
+    redirect(to) // ⬅️ on sort
   }
 
   const dbg = debug === '1' ? await debugSessionSnapshot() : null

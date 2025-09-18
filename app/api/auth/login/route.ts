@@ -1,4 +1,3 @@
-// app/api/auth/login/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -6,88 +5,82 @@ import {
   verifyPassword,
   findOwnerByEmailWithPassword,
   setSessionCookieOnResponse,
-  clearSessionCookies,
 } from '@/lib/auth'
 
-// Détermine la langue à partir du header
 function pickLocale(h: Headers) {
-  const acc = (h.get('accept-language') || '').toLowerCase()
-  return acc.startsWith('fr') ? 'fr' : 'en'
+  const a = (h.get('accept-language') || '').toLowerCase()
+  return a.startsWith('fr') ? 'fr' : 'en'
 }
 
-// Ne laisse passer que des chemins internes valides et jamais /login
-function safeNext(nxt: string | null | undefined, locale: 'fr' | 'en') {
-  if (!nxt) return `/${locale}/account`
-  if (!/^\/(fr|en)\//.test(nxt)) return `/${locale}/account`
-  if (/^\/(fr|en)\/login/.test(nxt)) return `/${locale}/account`
-  return nxt
-}
-
-// Support JSON et form-urlencoded
-async function readBody(req: Request): Promise<{ email?: string; password?: string; next?: string }> {
-  const ct = (req.headers.get('content-type') || '').toLowerCase()
-  if (ct.includes('application/json')) {
-    try { return await req.json() } catch { return {} }
-  }
-  if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart/form-data')) {
-    const f = await req.formData()
-    return {
-      email: String(f.get('email') || ''),
-      password: String(f.get('password') || ''),
-      next: String(f.get('next') || ''),
-    }
-  }
-  return {}
-}
-
-// ---------- POST (connexion classique email + mot de passe) ----------
 export async function POST(req: Request) {
-  const base = new URL(req.url).origin
-  const url = new URL(req.url)
-  const locale = pickLocale(req.headers)
-  const qsNext = url.searchParams.get('next') || undefined
-
   try {
-    const { email, password, next } = await readBody(req)
-    const wantedNext = safeNext(next ?? qsNext, locale)
+    const ctype = req.headers.get('content-type') || ''
+    const base = new URL(req.url).origin
+    const locale = pickLocale(req.headers)
 
+    // === 1) POST via <form> (x-www-form-urlencoded) ===
+    if (ctype.includes('application/x-www-form-urlencoded')) {
+      const form = await req.formData()
+      const email = String(form.get('email') || '')
+      const password = String(form.get('password') || '')
+      const next = String(form.get('next') || `/${locale}/account`)
+
+      if (!email || !password) {
+        const url = new URL(`/${locale}/login`, base)
+        url.searchParams.set('err', 'missing_credentials')
+        url.searchParams.set('next', next)
+        return NextResponse.redirect(url, { status: 303 })
+      }
+
+      const rec = await findOwnerByEmailWithPassword(email)
+      if (!rec?.password_hash) {
+        const url = new URL(`/${locale}/login`, base)
+        url.searchParams.set('err', 'not_found')
+        url.searchParams.set('next', next)
+        return NextResponse.redirect(url, { status: 303 })
+      }
+      const ok = await verifyPassword(password, rec.password_hash)
+      if (!ok) {
+        const url = new URL(`/${locale}/login`, base)
+        url.searchParams.set('err', 'bad_credentials')
+        url.searchParams.set('next', next)
+        return NextResponse.redirect(url, { status: 303 })
+      }
+
+      const to = new URL(next, base)
+      const res = NextResponse.redirect(to, { status: 303 })
+      setSessionCookieOnResponse(res, {
+        ownerId: String(rec.id),
+        email: String(rec.email),
+        displayName: rec.display_name,
+        iat: Math.floor(Date.now() / 1000),
+      })
+      return res
+    }
+
+    // === 2) Fallback JSON (si quelqu’un appelle en XHR) ===
+    const { email, password } = await req.json()
     if (!email || !password) {
-      return NextResponse.redirect(
-        `${base}/${locale}/login?err=missing_credentials&next=${encodeURIComponent(wantedNext)}`,
-        { status: 303 }
-      )
+      return NextResponse.json({ error: 'missing_credentials' }, { status: 400 })
     }
-
     const rec = await findOwnerByEmailWithPassword(String(email))
-    if (!rec || !rec.password_hash) {
-      return NextResponse.redirect(
-        `${base}/${locale}/login?err=not_found&next=${encodeURIComponent(wantedNext)}`,
-        { status: 303 }
-      )
+    if (!rec?.password_hash) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
-
     const ok = await verifyPassword(String(password), rec.password_hash)
     if (!ok) {
-      return NextResponse.redirect(
-        `${base}/${locale}/login?err=bad_credentials&next=${encodeURIComponent(wantedNext)}`,
-        { status: 303 }
-      )
+      return NextResponse.json({ error: 'bad_credentials' }, { status: 401 })
     }
-
-    // Succès : purge agressive des anciens cookies puis pose la nouvelle session.
-    const res = NextResponse.redirect(new URL(wantedNext, base), { status: 303 })
-    clearSessionCookies(res)
+    const res = NextResponse.json({ ok: 1, ownerId: rec.id })
     setSessionCookieOnResponse(res, {
       ownerId: String(rec.id),
       email: String(rec.email),
       displayName: rec.display_name,
       iat: Math.floor(Date.now() / 1000),
     })
-    // Aide certains navigateurs / proxies à suivre la redirection immédiatement
-    res.headers.set('Refresh', `0;url=${wantedNext}`)
     return res
   } catch (e: any) {
     console.error('[login] error:', e?.message || e)
-    return NextResponse.redirect(`${base}/${locale}/login?err=server_error`, { status: 303 })
+    return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }

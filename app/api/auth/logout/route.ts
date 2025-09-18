@@ -1,4 +1,3 @@
-//api/auth/logout
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -12,12 +11,13 @@ function pickLocale(h: Headers) {
 export async function POST(req: Request) {
   const base = new URL(req.url).origin
   const locale = pickLocale(req.headers)
-  const url = new URL(req.url)
-  const next = url.searchParams.get('next')
-  const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/login?err=signed_out`
-  const res = NextResponse.redirect(new URL(to, base), { status: 303 })
-  clearSessionCookies(res) // 🧹 purge toutes les variantes
-  res.headers.set('Refresh', `0;url=${to}`)
+  const url = new URL(`/${locale}/?logged_out=1`, base)
+
+  const res = NextResponse.redirect(url, { status: 303 })
+  clearSessionCookies(res)
   return res
 }
-export async function GET(req: Request) { return POST(req) }
+
+export async function GET(req: Request) {
+  return POST(req)
+}
