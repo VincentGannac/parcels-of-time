@@ -2,14 +2,10 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'pot_sess'
-const AUTH_SECRET = process.env.AUTH_SECRET || process.env.SECRET_SALT || 'dev_salt'
 
-function base64UrlEncode(bytes: Uint8Array): string {
-  let bin = ''
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-}
-function base64UrlDecodeToString(input: string): string {
+// -------- lecture "loose" du payload (PAS de HMAC ici) --------
+type SessionPayload = { ownerId: string; email: string; displayName?: string | null; iat?: number; exp?: number }
+function base64UrlToString(input: string): string {
   const b64 = input.replace(/-/g, '+').replace(/_/g, '/')
   const pad = b64.length % 4 ? 4 - (b64.length % 4) : 0
   const s = b64 + '='.repeat(pad)
@@ -18,78 +14,59 @@ function base64UrlDecodeToString(input: string): string {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
   return new TextDecoder().decode(bytes)
 }
-async function hmacSha256Base64Url(secret: string, data: string): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data))
-  return base64UrlEncode(new Uint8Array(sig))
-}
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let out = 0
-  for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  return out === 0
-}
-
-type SessionPayload = { ownerId: string; email: string; displayName?: string | null; iat?: number; exp?: number }
-
-async function readSessionFromCookie(req: NextRequest): Promise<SessionPayload | null> {
-  try {
-    // Préférer la variante __Host (host-only) si présente
-    const raw = req.cookies.get(`__Host-${AUTH_COOKIE_NAME}`)?.value || req.cookies.get(AUTH_COOKIE_NAME)?.value
-    if (!raw) return null
-    const [p64, sig] = raw.split('.')
-    if (!p64 || !sig) return null
-    const good = await hmacSha256Base64Url(AUTH_SECRET, p64)
-    if (!timingSafeEqual(sig, good)) return null
-    const json = base64UrlDecodeToString(p64)
-    const obj = JSON.parse(json) as SessionPayload
-    if (obj?.exp && typeof obj.exp === 'number') {
-      const now = Math.floor(Date.now() / 1000)
-      if (obj.exp < now) return null
-    }
-    return obj
-  } catch {
-    return null
-  }
-}
-
-const REQUIRE_AUTH = [/^\/(fr|en)\/account$/, /^\/(fr|en)\/m\/.+$/]
-const AUTH_FORMS = [/^\/(fr|en)\/login$/, /^\/(fr|en)\/signup$/]
-
-function isFile(pathname: string) { return /\.[a-zA-Z0-9]+$/.test(pathname) }
 function getLocale(pathname: string): 'fr' | 'en' {
   if (pathname.startsWith('/fr')) return 'fr'
   if (pathname.startsWith('/en')) return 'en'
   return 'en'
 }
+function isFile(pathname: string) { return /\.[a-zA-Z0-9]+$/.test(pathname) }
 function safeNext(nxt: string | null, locale: 'fr' | 'en') {
   if (!nxt) return `/${locale}/account`
   if (!/^\/(fr|en)\//.test(nxt)) return `/${locale}/account`
   if (/^\/(fr|en)\/login/.test(nxt)) return `/${locale}/account`
   return nxt
 }
+function readSessionLoose(req: NextRequest): SessionPayload | null {
+  const raw =
+    req.cookies.get(`__Host-${AUTH_COOKIE_NAME}`)?.value ||
+    req.cookies.get(AUTH_COOKIE_NAME)?.value ||
+    ''
+  if (!raw) return null
+  const [p64] = raw.split('.')
+  if (!p64) return null
+  try {
+    const json = base64UrlToString(p64)
+    const obj = JSON.parse(json) as SessionPayload
+    // on ne fait qu’un filtrage grossier d’expiration
+    if (obj?.exp && typeof obj.exp === 'number' && obj.exp < Math.floor(Date.now() / 1000)) return null
+    return obj
+  } catch { return null }
+}
+
+// -------- règles --------
+// ✅ on protège /account et /claim (PAS /m/[ts] → lecture publique)
+const REQUIRE_AUTH = [/^\/(fr|en)\/account$/, /^\/(fr|en)\/claim$/]
+const AUTH_FORMS   = [/^\/(fr|en)\/login$/, /^\/(fr|en)\/signup$/]
 
 export async function middleware(req: NextRequest) {
-  const { pathname, searchParams } = req.nextUrl
-
+  const { pathname } = req.nextUrl
   if (pathname.startsWith('/_next')) return NextResponse.next()
-  if (isFile(pathname)) return NextResponse.next()
   if (pathname.startsWith('/api')) return NextResponse.next()
+  if (isFile(pathname)) return NextResponse.next()
 
   const locale = getLocale(pathname)
-  const session = await readSessionFromCookie(req)
+  const session = readSessionLoose(req)
 
-  // Déjà connecté → empêcher d’ouvrir login/signup, mais RESPECTER ?next=
+  // Déjà connecté sur /login ou /signup → on RESPECTE ?next=
   if (session && AUTH_FORMS.some(rx => rx.test(pathname))) {
-    const wanted = safeNext(searchParams.get('next'), locale)
+    const wanted = safeNext(req.nextUrl.searchParams.get('next'), locale)
     return NextResponse.redirect(new URL(wanted, req.url))
   }
 
-  // Anonyme sur page protégée → envoyer vers login?next=
+  // Anonyme sur page protégée → /login?next=
   if (!session && REQUIRE_AUTH.some(rx => rx.test(pathname))) {
     const url = new URL(`/${locale}/login`, req.url)
-    const next = pathname + (req.nextUrl.search || '')
-    url.searchParams.set('next', next)
+    url.searchParams.set('next', pathname + (req.nextUrl.search || ''))
     return NextResponse.redirect(url)
   }
 

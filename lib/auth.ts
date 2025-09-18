@@ -42,30 +42,33 @@ export function parseSignedCookieValue(value: string | undefined): SessionPayloa
 export function setSessionCookieOnResponse(res: NextResponse, payload: SessionPayload, ttlSec?: number) {
   const value = makeSignedCookieValue(payload, ttlSec)
   const maxAge = ttlSec ?? 60 * 60 * 24 * 90
-  const baseCommon = { httpOnly: true as const, secure: true, path: '/', maxAge }
+  const common = { httpOnly: true as const, secure: true, path: '/', maxAge, sameSite: 'none' as const }
 
-  // 1) __Host-<name> (host-only, recommandé)
-  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, value, { ...baseCommon, sameSite: 'none' })
+  // 🧹 purge agressive avant d’écrire les nouveaux
+  clearSessionCookies(res)
 
-  // 2) <name> avec domain (pour apex + www)
+  // 1) __Host- (host-only)
+  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, value, common)
+
+  // 2) domain / host-only (afin de couvrir apex + www)
   const dom = process.env.COOKIE_DOMAIN || ''
-  if (dom) res.cookies.set(AUTH_COOKIE_NAME, value, { ...baseCommon, sameSite: 'none', domain: dom })
-  else     res.cookies.set(AUTH_COOKIE_NAME, value, { ...baseCommon, sameSite: 'none' })
+  if (dom) res.cookies.set(AUTH_COOKIE_NAME, value, { ...common, domain: dom })
+  res.cookies.set(AUTH_COOKIE_NAME, value, common)
 }
 
 export function clearSessionCookies(res: NextResponse) {
   const gone = { httpOnly: true as const, secure: true, path: '/', expires: new Date(0), maxAge: 0 }
   const dom = process.env.COOKIE_DOMAIN || ''
 
-  // __Host-*
-  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'none' })
-  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'lax' }) // par précaution
+  // __Host- (None et Lax pour couvrir anciens cookies)
+  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'none' as const })
+  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'lax' as const })
 
-  // name (domain + host-only) — nettoyer anciennes variantes Lax/None
-  if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none', domain: dom })
-  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none' })
-  if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax', domain: dom })
-  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax' })
+  // Nom “nu” host-only et domain (None + Lax)
+  if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none' as const, domain: dom })
+  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none' as const })
+  if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax' as const, domain: dom })
+  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax' as const })
 }
 
 /** Next 15 : cookies() potentiellement async */

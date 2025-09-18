@@ -15,8 +15,8 @@ export async function POST(req: Request) {
   const next = url.searchParams.get('next')
   const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/login?err=signed_out`
   const res = NextResponse.redirect(new URL(to, base), { status: 303 })
-  clearSessionCookies(res)
+  clearSessionCookies(res) // 🧹 purge toutes les variantes
+  res.headers.set('Refresh', `0;url=${to}`)
   return res
 }
-
 export async function GET(req: Request) { return POST(req) }

@@ -143,16 +143,13 @@ export default async function Page({
   const sp = await searchParams
   const decodedTs = safeDecode(tsParam)
 
-  // 1) Auth obligatoire
-  const session = await readSession()
-  if (!session) {
-    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
-  }
+  // 1) Auth optionnelle 
+  const session = await readSession().catch(() => null)
+  const sessionOwnerId = session?.ownerId || null
   
-  // 2) Ownership obligatoire
+  // 2) Ownership optionnel → édition seulement si propriétaire
   const ownerId = await ownerIdForDay(decodedTs)
-  if (!ownerId) redirect(`/${locale}/account?not_found=1`)
-  if (ownerId !== session.ownerId) redirect(`/${locale}/account?denied=1`)
+  const canEdit = !!sessionOwnerId && !!ownerId && ownerId === sessionOwnerId
 
   // 3) État public + autopub après vérif d’ownership
   const isPublicDb = await getPublicStateDb(decodedTs)
