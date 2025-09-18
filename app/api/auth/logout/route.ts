@@ -1,4 +1,3 @@
-// app/api/auth/logout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -14,14 +13,10 @@ export async function POST(req: Request) {
   const locale = pickLocale(req.headers)
   const url = new URL(req.url)
   const next = url.searchParams.get('next')
-
-  const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/login`
+  const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/login?err=signed_out`
   const res = NextResponse.redirect(new URL(to, base), { status: 303 })
   clearSessionCookies(res)
   return res
 }
 
-export async function GET(req: Request) {
-  // Support GET pour facilité (lien direct)
-  return POST(req)
-}
+export async function GET(req: Request) { return POST(req) }

@@ -1,7 +1,4 @@
-// lib/auth.ts
 // Runtime: nodejs
-// Outils d'auth côté serveur: signature HMAC, cookie SameSite=None; Secure, helpers DB + mot de passe (scrypt).
-
 import { cookies } from 'next/headers'
 import type { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
@@ -10,7 +7,6 @@ import { pool } from '@/lib/db'
 export const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'pot_sess'
 const AUTH_SECRET = process.env.AUTH_SECRET || process.env.SECRET_SALT || 'dev_salt'
 
-// ===== Base64url =====
 function b64url(input: Buffer | string) {
   return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
@@ -20,17 +16,8 @@ function fromB64url(input: string) {
   return Buffer.from(input + '='.repeat(pad), 'base64').toString('utf8')
 }
 
-// ===== Session signée (JWT-light HMAC) =====
-export type SessionPayload = {
-  ownerId: string
-  email: string
-  displayName?: string | null
-  iat?: number
-  exp?: number
-}
-function hmac(input: string) {
-  return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('base64url')
-}
+export type SessionPayload = { ownerId: string; email: string; displayName?: string | null; iat?: number; exp?: number }
+function hmac(input: string) { return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('base64url') }
 export function makeSignedCookieValue(payload: SessionPayload, ttlSec = 60 * 60 * 24 * 90) {
   const now = Math.floor(Date.now() / 1000)
   const body = { ...payload, iat: payload.iat ?? now, exp: payload.exp ?? now + ttlSec }
@@ -48,78 +35,73 @@ export function parseSignedCookieValue(value: string | undefined): SessionPayloa
     const obj = JSON.parse(fromB64url(p64))
     if (obj?.exp && typeof obj.exp === 'number' && obj.exp < Math.floor(Date.now() / 1000)) return null
     return obj
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
-// ===== Cookies helpers =====
+// --- Cookies helpers (pose 2 variantes: __Host-* et domain .parcelsoftime.com) ---
 export function setSessionCookieOnResponse(res: NextResponse, payload: SessionPayload, ttlSec?: number) {
   const value = makeSignedCookieValue(payload, ttlSec)
-  const base = {
-    httpOnly: true as const,
-    secure: true,
-    sameSite: 'none' as const,
-    path: '/',
-    maxAge: ttlSec ?? 60 * 60 * 24 * 90,
-  }
+  const maxAge = ttlSec ?? 60 * 60 * 24 * 90
+  const baseCommon = { httpOnly: true as const, secure: true, path: '/', maxAge }
+
+  // 1) __Host-<name> (host-only, recommandé)
+  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, value, { ...baseCommon, sameSite: 'none' })
+
+  // 2) <name> avec domain (pour apex + www)
   const dom = process.env.COOKIE_DOMAIN || ''
-  if (dom) res.cookies.set(AUTH_COOKIE_NAME, value, { ...base, domain: dom })
-  res.cookies.set(AUTH_COOKIE_NAME, value, base)
+  if (dom) res.cookies.set(AUTH_COOKIE_NAME, value, { ...baseCommon, sameSite: 'none', domain: dom })
+  else     res.cookies.set(AUTH_COOKIE_NAME, value, { ...baseCommon, sameSite: 'none' })
 }
+
 export function clearSessionCookies(res: NextResponse) {
-  const gone = {
-    httpOnly: true as const,
-    secure: true,
-    sameSite: 'none' as const,
-    path: '/',
-    expires: new Date(0),
-    maxAge: 0,
-  }
+  const gone = { httpOnly: true as const, secure: true, path: '/', expires: new Date(0), maxAge: 0 }
   const dom = process.env.COOKIE_DOMAIN || ''
-  if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, domain: dom })
-  res.cookies.set(AUTH_COOKIE_NAME, '', gone)
+
+  // __Host-*
+  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'none' })
+  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'lax' }) // par précaution
+
+  // name (domain + host-only) — nettoyer anciennes variantes Lax/None
+  if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none', domain: dom })
+  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none' })
   if (dom) res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax', domain: dom })
   res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax' })
 }
 
-/** Lecture session (compatible Next 15 avec cookies() possiblement async) */
+/** Next 15 : cookies() potentiellement async */
 export async function readSession(): Promise<SessionPayload | null> {
   const cAny = cookies as any
   const bag = typeof cAny === 'function' ? cAny() : cAny
   const jar = bag?.then ? await bag : bag
-  const raw = jar?.get?.(AUTH_COOKIE_NAME)?.value
+  const raw =
+    jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value ||
+    jar?.get?.(AUTH_COOKIE_NAME)?.value
   return parseSignedCookieValue(raw)
 }
 
-// ===== DB helpers =====
+// ===== DB & password (inchangé de ta version fournie) =====
+type PWRecord = { id: string; email: string; display_name: string | null; password_hash: string | null; password_algo: string | null }
+
 export async function ownerIdForDay(tsISO: string): Promise<string | null> {
   try {
     if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`
-    const { rows } = await pool.query(
-      `select owner_id from claims where date_trunc('day', ts) = $1::timestamptz`,
-      [tsISO]
-    )
+    const { rows } = await pool.query(`select owner_id from claims where date_trunc('day', ts) = $1::timestamptz`, [tsISO])
     if (!rows?.length) return null
     return String(rows[0].owner_id)
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
+
 export async function upsertOwnerByEmail(email: string, displayName?: string | null): Promise<string> {
   const { rows } = await pool.query(
     `insert into owners(email, display_name)
      values($1,$2)
-     on conflict(email) do update
-       set display_name = coalesce(excluded.display_name, owners.display_name)
+     on conflict(email) do update set display_name = coalesce(excluded.display_name, owners.display_name)
      returning id`,
     [email.trim().toLowerCase(), displayName ?? null]
   )
   return String(rows[0].id)
 }
 
-// ===== Password (scrypt) =====
-type PWRecord = { id: string; email: string; display_name: string | null; password_hash: string | null; password_algo: string | null }
 const SCRYPT_N = 16384, SCRYPT_r = 8, SCRYPT_p = 1, KEYLEN = 64
 export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16)
@@ -158,38 +140,13 @@ export async function createOwnerWithPassword(email: string, password: string, d
 }
 export async function findOwnerByEmailWithPassword(email: string) {
   const { rows } = await pool.query<PWRecord>(
-    `select id, email, display_name, password_hash, password_algo
-       from owners where email = $1`,
+    `select id, email, display_name, password_hash, password_algo from owners where email = $1`,
     [email.trim().toLowerCase()]
   )
   return rows[0] || null
 }
 
-// ===== Magic Link optionnel =====
-export type MagicTokenPayload = { email: string; ownerId?: string; displayName?: string | null; exp?: number; iat?: number }
-export function makeLoginToken(p: MagicTokenPayload, ttlSec = 60 * 30): string {
-  const now = Math.floor(Date.now() / 1000)
-  const body = { ...p, iat: p.iat ?? now, exp: p.exp ?? now + ttlSec }
-  const p64 = b64url(JSON.stringify(body))
-  const sig = hmac(`login.${p64}`)
-  return `${p64}.${sig}`
-}
-export function verifyLoginToken(token: string): MagicTokenPayload | null {
-  const [p64, sig] = String(token || '').split('.')
-  if (!p64 || !sig) return null
-  const good = hmac(`login.${p64}`)
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null
-  try {
-    const obj = JSON.parse(fromB64url(p64)) as MagicTokenPayload
-    if (obj?.exp && obj.exp < Math.floor(Date.now() / 1000)) return null
-    if (!obj?.email) return null
-    return obj
-  } catch {
-    return null
-  }
-}
-
-// ===== Debug (utilisé par la page login avec ?debug=1) =====
+// Debug (si tu l’utilises dans /login?debug=1)
 export type DebugSnapshot = {
   cookiePresent: boolean
   rawLen: number
@@ -210,9 +167,8 @@ export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
     const cAny = cookies as any
     const bag = typeof cAny === 'function' ? cAny() : cAny
     const jar = bag?.then ? await bag : bag
-    const raw = jar?.get?.(AUTH_COOKIE_NAME)?.value || ''
+    const raw = jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value || jar?.get?.(AUTH_COOKIE_NAME)?.value || ''
     const [p64, sig] = raw.split('.')
-    const host = jar?.get?.('host')?.value || ''
     const headers = (await import('next/headers')).headers
     const hs = headers as any
     const hbag = hs?.then ? await hs() : hs()
@@ -224,7 +180,7 @@ export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
     return {
       cookiePresent: !!raw,
       rawLen: raw.length,
-      host,
+      host: hbag.get('host') || '',
       xfh,
       proto,
       payload,
@@ -236,10 +192,6 @@ export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
       parseOk: !!payload,
     }
   } catch (e: any) {
-    return {
-      cookiePresent: false, rawLen: 0, host: '', xfh: '', proto: '',
-      payload: null, payloadStart: '', payloadEnd: '', sigStart: '', sigEnd: '',
-      sigOk: false, parseOk: false, reason: String(e?.message || e),
-    }
+    return { cookiePresent: false, rawLen: 0, host: '', xfh: '', proto: '', payload: null, payloadStart: '', payloadEnd: '', sigStart: '', sigEnd: '', sigOk: false, parseOk: false, reason: String(e?.message || e) }
   }
 }
