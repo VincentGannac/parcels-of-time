@@ -77,14 +77,29 @@ export function clearSessionCookies(res: NextResponse) {
 }
 
 /** Next 15 : cookies() possiblement async */
+// --- Lecture robuste de session : essaie __Host- puis normal, et RETIENT le premier VALIDE ---
 export async function readSession(): Promise<SessionPayload | null> {
   const cAny = cookies as any
   const bag = typeof cAny === 'function' ? cAny() : cAny
   const jar = bag?.then ? await bag : bag
-  const raw =
-    jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value ||
-    jar?.get?.(AUTH_COOKIE_NAME)?.value
-  return parseSignedCookieValue(raw)
+
+  const rawHost = jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value
+  const rawNorm = jar?.get?.(AUTH_COOKIE_NAME)?.value
+
+  // 1) Essaie le __Host-*
+  if (rawHost) {
+    const p = parseSignedCookieValue(rawHost)
+    if (p) return p
+    // ⚠️ si invalide, on NE s'arrête PAS : on tente l'autre variante.
+  }
+
+  // 2) Essaie le cookie normal
+  if (rawNorm) {
+    const p = parseSignedCookieValue(rawNorm)
+    if (p) return p
+  }
+
+  return null
 }
 
 // ===== DB & password
@@ -170,36 +185,84 @@ export type DebugSnapshot = {
   parseOk: boolean
   reason?: string
 }
+// --- Debug enrichi : montre les deux variantes et laquelle est valide ---
 export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
   try {
     const cAny = cookies as any
     const bag = typeof cAny === 'function' ? cAny() : cAny
     const jar = bag?.then ? await bag : bag
-    const raw = jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value || jar?.get?.(AUTH_COOKIE_NAME)?.value || ''
-    const [p64, sig] = raw.split('.')
-    const headers = (await import('next/headers')).headers
-    const hs = headers as any
+
+    const rawHost = jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value || ''
+    const rawNorm = jar?.get?.(AUTH_COOKIE_NAME)?.value || ''
+
+    // helper
+    const inspect = (raw: string) => {
+      if (!raw) return { rawLen: 0, payload: null, payloadStart: '', payloadEnd: '', sigStart: '', sigEnd: '', sigOk: false, parseOk: false }
+      const [p64, sig] = raw.split('.')
+      if (!p64 || !sig) return { rawLen: raw.length, payload: null, payloadStart: '', payloadEnd: '', sigStart: (sig||'').slice(0,8), sigEnd: (sig||'').slice(-8), sigOk: false, parseOk: false }
+      const payloadStr = fromB64url(p64)
+      let payload: any = null
+      let parseOk = false
+      try { payload = JSON.parse(payloadStr); parseOk = true } catch {}
+      const good = hmac(p64)
+      const sigOk = !!(sig && good && sig === good)
+      return {
+        rawLen: raw.length,
+        payload,
+        payloadStart: payloadStr.slice(0, 24),
+        payloadEnd: payloadStr.slice(-12),
+        sigStart: sig.slice(0, 8),
+        sigEnd: sig.slice(-8),
+        sigOk,
+        parseOk,
+      }
+    }
+
+    const hostView = inspect(rawHost)
+    const normView = inspect(rawNorm)
+
+    // "valide" = parseOk && sigOk && (exp non passée si présente)
+    const isValid = (v: any) => {
+      if (!v.parseOk || !v.sigOk || !v.payload) return false
+      if (typeof v.payload.exp === 'number' && v.payload.exp < Math.floor(Date.now()/1000)) return false
+      return true
+    }
+
+    const chosen =
+      isValid(hostView) ? '__Host-' + AUTH_COOKIE_NAME
+      : isValid(normView) ? AUTH_COOKIE_NAME
+      : '(none)'
+
+    const headersMod = (await import('next/headers')).headers
+    const hs = headersMod as any
     const hbag = hs?.then ? await hs() : hs()
     const xfh = hbag.get('x-forwarded-host') || ''
     const proto = hbag.get('x-forwarded-proto') || ''
-    const payloadStr = p64 ? fromB64url(p64) : ''
-    const payload = payloadStr ? JSON.parse(payloadStr) : null
-    const good = p64 ? hmac(p64) : ''
+
+    // Pour compat avec ton type DebugSnapshot existant :
+    // on "merge" l'aperçu choisi dans le top-level, tout en exposant lequel a été retenu.
+    const picked = chosen === '__Host-' + AUTH_COOKIE_NAME ? hostView : normView
+
     return {
-      cookiePresent: !!raw,
-      rawLen: raw.length,
+      cookiePresent: !!(rawHost || rawNorm),
+      rawLen: picked.rawLen,
       host: hbag.get('host') || '',
       xfh,
       proto,
-      payload,
-      payloadStart: payloadStr.slice(0, 24),
-      payloadEnd: payloadStr.slice(-12),
-      sigStart: (sig || '').slice(0, 8),
-      sigEnd: (sig || '').slice(-8),
-      sigOk: !!(sig && good && sig === good),
-      parseOk: !!payload,
+      payload: picked.payload,
+      payloadStart: picked.payloadStart,
+      payloadEnd: picked.payloadEnd,
+      sigStart: picked.sigStart,
+      sigEnd: picked.sigEnd,
+      sigOk: picked.sigOk,
+      parseOk: picked.parseOk,
+      reason: `chosen=${chosen}; hostValid=${isValid(hostView)}; normValid=${isValid(normView)}`,
     }
   } catch (e: any) {
-    return { cookiePresent: false, rawLen: 0, host: '', xfh: '', proto: '', payload: null, payloadStart: '', payloadEnd: '', sigStart: '', sigEnd: '', sigOk: false, parseOk: false, reason: String(e?.message || e) }
+    return {
+      cookiePresent: false, rawLen: 0, host: '', xfh: '', proto: '',
+      payload: null, payloadStart: '', payloadEnd: '', sigStart: '', sigEnd: '',
+      sigOk: false, parseOk: false, reason: String(e?.message || e),
+    }
   }
 }
