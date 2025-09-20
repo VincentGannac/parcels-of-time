@@ -1,4 +1,4 @@
-// PAS de "use client" ici
+//app/[locale]/login/LoginFormClient.tsx
 export default function LoginForm({
   locale,
   nextParam,

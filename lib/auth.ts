@@ -1,4 +1,4 @@
-// Runtime: nodejs
+// lib/auth.ts
 import { cookies } from 'next/headers'
 import type { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
@@ -38,31 +38,23 @@ export function parseSignedCookieValue(value: string | undefined): SessionPayloa
   } catch { return null }
 }
 
-// --- Cookies helpers (pose 2 variantes: __Host-* et domain .parcelsoftime.com) ---
-export function setSessionCookieOnResponse(
-  res: NextResponse,
-  payload: SessionPayload,
-  ttlSec?: number
-) {
+// --- pose 1 cookie « source de vérité » ---
+export function setSessionCookieOnResponse(res: NextResponse, payload: SessionPayload, ttlSec?: number) {
   const value = makeSignedCookieValue(payload, ttlSec)
   const maxAge = ttlSec ?? 60 * 60 * 24 * 90
-
-  // 1 seul cookie « source de vérité »
-  const common = {
-    httpOnly: true as const,
-    secure: true,
-    sameSite: 'lax' as const, // suffisant pour les navigations top-level
-    path: '/',
-    maxAge,
-  }
   const dom = process.env.COOKIE_DOMAIN || undefined
 
-  res.cookies.set(AUTH_COOKIE_NAME, value, { ...common, domain: dom })
-
-  // NOTE: NE PLUS dupliquer en host-only / SameSite=None
+  res.cookies.set(AUTH_COOKIE_NAME, value, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',   // navigation top-level
+    path: '/',
+    maxAge,
+    domain: dom,       // ex: .parcelsoftime.com
+  })
 }
 
-// --- remplace clearSessionCookies ---
+// --- nettoyage agressif (nouvelles & anciennes variantes) ---
 export function clearSessionCookies(res: NextResponse) {
   const gone = {
     httpOnly: true as const,
@@ -73,10 +65,10 @@ export function clearSessionCookies(res: NextResponse) {
   }
   const dom = process.env.COOKIE_DOMAIN || undefined
 
-  // cookie « source de vérité »
+  // cookie « vérité »
   res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax', domain: dom })
 
-  // 🔥 nettoyage agressif des vieux cookies (compat)
+  // variantes historiques possibles
   res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax' })        // host-only legacy
   res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none', domain: dom })
   res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none' })
@@ -84,7 +76,7 @@ export function clearSessionCookies(res: NextResponse) {
   res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'none' })
 }
 
-/** Next 15 : cookies() potentiellement async */
+/** Next 15 : cookies() possiblement async */
 export async function readSession(): Promise<SessionPayload | null> {
   const cAny = cookies as any
   const bag = typeof cAny === 'function' ? cAny() : cAny
@@ -95,7 +87,7 @@ export async function readSession(): Promise<SessionPayload | null> {
   return parseSignedCookieValue(raw)
 }
 
-// ===== DB & password (inchangé de ta version fournie) =====
+// ===== DB & password
 type PWRecord = { id: string; email: string; display_name: string | null; password_hash: string | null; password_algo: string | null }
 
 export async function ownerIdForDay(tsISO: string): Promise<string | null> {
@@ -162,7 +154,7 @@ export async function findOwnerByEmailWithPassword(email: string) {
   return rows[0] || null
 }
 
-// Debug (si tu l’utilises dans /login?debug=1)
+// Debug (login?debug=1)
 export type DebugSnapshot = {
   cookiePresent: boolean
   rawLen: number

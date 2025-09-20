@@ -1,3 +1,4 @@
+// app/api/auth/login/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -18,33 +19,30 @@ export async function POST(req: Request) {
     const base = new URL(req.url).origin
     const locale = pickLocale(req.headers)
 
-    // === 1) POST via <form> (x-www-form-urlencoded) ===
+    // === 1) Form POST
     if (ctype.includes('application/x-www-form-urlencoded')) {
       const form = await req.formData()
       const email = String(form.get('email') || '')
       const password = String(form.get('password') || '')
       const next = String(form.get('next') || `/${locale}/account`)
 
+      const urlBack = new URL(`/${locale}/login`, base)
+      urlBack.searchParams.set('next', next)
+
       if (!email || !password) {
-        const url = new URL(`/${locale}/login`, base)
-        url.searchParams.set('err', 'missing_credentials')
-        url.searchParams.set('next', next)
-        return NextResponse.redirect(url, { status: 303 })
+        urlBack.searchParams.set('err', 'missing_credentials')
+        return NextResponse.redirect(urlBack, { status: 303 })
       }
 
       const rec = await findOwnerByEmailWithPassword(email)
       if (!rec?.password_hash) {
-        const url = new URL(`/${locale}/login`, base)
-        url.searchParams.set('err', 'not_found')
-        url.searchParams.set('next', next)
-        return NextResponse.redirect(url, { status: 303 })
+        urlBack.searchParams.set('err', 'not_found')
+        return NextResponse.redirect(urlBack, { status: 303 })
       }
       const ok = await verifyPassword(password, rec.password_hash)
       if (!ok) {
-        const url = new URL(`/${locale}/login`, base)
-        url.searchParams.set('err', 'bad_credentials')
-        url.searchParams.set('next', next)
-        return NextResponse.redirect(url, { status: 303 })
+        urlBack.searchParams.set('err', 'bad_credentials')
+        return NextResponse.redirect(urlBack, { status: 303 })
       }
 
       const to = new URL(next, base)
@@ -58,7 +56,7 @@ export async function POST(req: Request) {
       return res
     }
 
-    // === 2) Fallback JSON (si quelqu’un appelle en XHR) ===
+    // === 2) Fallback JSON (XHR)
     const { email, password } = await req.json()
     if (!email || !password) {
       return NextResponse.json({ error: 'missing_credentials' }, { status: 400 })

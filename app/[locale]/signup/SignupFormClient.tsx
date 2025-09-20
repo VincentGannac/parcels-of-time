@@ -1,3 +1,5 @@
+//app/[locale]/signup/SignupFormClient.tsx
+
 'use client'
 
 import { useState } from 'react'

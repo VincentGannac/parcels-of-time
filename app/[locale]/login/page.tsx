@@ -1,3 +1,4 @@
+// app/[locale]/login/page.tsx
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -46,10 +47,11 @@ export default async function Page({
   const { next, err, debug } = await searchParams
   const i18n = t(locale)
 
+  // Si déjà connecté (et pas d’erreur explicite), redirige vers next ou /account
   const sess = await readSession()
   if (sess && (!err || err === '')) {
     const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`
-    redirect(to) // ⬅️ on sort
+    redirect(to)
   }
 
   const dbg = debug === '1' ? await debugSessionSnapshot() : null
@@ -69,16 +71,16 @@ export default async function Page({
         </div>
       )}
 
-      {/* ✅ Formulaire HTML: POST vers /api/auth/login (pas de JS, redirection 303 atomique) */}
+      {/* Formulaire HTML → API login */}
       <form method="POST" action="/api/auth/login" style={{ display: 'grid', gap: 12 }}>
         <input type="hidden" name="next" value={typeof next === 'string' ? next : `/${locale}/account`} />
         <label style={{ display: 'grid', gap: 6 }}>
           <span>{i18n.email}</span>
-          <input name="email" type="email" required placeholder="you@example.com" style={{ padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 10 }} />
+          <input name="email" type="email" required autoComplete="email" placeholder="you@example.com" style={{ padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 10 }} />
         </label>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>{i18n.password}</span>
-          <input name="password" type="password" required placeholder="••••••••" style={{ padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 10 }} />
+          <input name="password" type="password" required autoComplete="current-password" placeholder="••••••••" style={{ padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 10 }} />
         </label>
         <button type="submit" style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#111827', color: 'white', fontWeight: 800, cursor: 'pointer' }}>
           {i18n.cta}
