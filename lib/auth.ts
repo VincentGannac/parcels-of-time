@@ -1,4 +1,3 @@
-// lib/auth.ts
 import { cookies } from 'next/headers'
 import type { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
@@ -17,7 +16,9 @@ function fromB64url(input: string) {
 }
 
 export type SessionPayload = { ownerId: string; email: string; displayName?: string | null; iat?: number; exp?: number }
+
 function hmac(input: string) { return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('base64url') }
+
 export function makeSignedCookieValue(payload: SessionPayload, ttlSec = 60 * 60 * 24 * 90) {
   const now = Math.floor(Date.now() / 1000)
   const body = { ...payload, iat: payload.iat ?? now, exp: payload.exp ?? now + ttlSec }
@@ -25,6 +26,7 @@ export function makeSignedCookieValue(payload: SessionPayload, ttlSec = 60 * 60 
   const sig = hmac(p64)
   return `${p64}.${sig}`
 }
+
 export function parseSignedCookieValue(value: string | undefined): SessionPayload | null {
   if (!value) return null
   const [p64, sig] = value.split('.')
@@ -38,46 +40,74 @@ export function parseSignedCookieValue(value: string | undefined): SessionPayloa
   } catch { return null }
 }
 
-// --- pose 1 cookie « source de vérité » ---
-export function setSessionCookieOnResponse(res: NextResponse, payload: SessionPayload, ttlSec?: number) {
+/** Détermine le Domain à utiliser pour ce host (sinon host-only) */
+export function computeCookieDomainForHost(host?: string): string | undefined {
+  const conf = (process.env.COOKIE_DOMAIN || '').trim()
+  if (!conf) return undefined
+  const clean = conf.replace(/^\./, '')
+  if (!host) return undefined
+  const h = host.toLowerCase()
+  if (h === clean || h.endsWith('.' + clean)) return '.' + clean
+  return undefined // host-only
+}
+
+/** Pose 1 seule variante (source de vérité) : domain si couvert, sinon host-only */
+export function setSessionCookieOnResponse(
+  res: NextResponse,
+  payload: SessionPayload,
+  ttlSec?: number,
+  hostForDomainDecision?: string,
+) {
   const value = makeSignedCookieValue(payload, ttlSec)
   const maxAge = ttlSec ?? 60 * 60 * 24 * 90
-  const dom = process.env.COOKIE_DOMAIN || undefined
-
+  const domain = computeCookieDomainForHost(hostForDomainDecision)
   res.cookies.set(AUTH_COOKIE_NAME, value, {
     httpOnly: true,
     secure: true,
-    sameSite: 'lax',   // navigation top-level
+    sameSite: 'lax',
     path: '/',
     maxAge,
-    domain: dom,       // ex: .parcelsoftime.com
+    ...(domain ? { domain } : {}),
   })
 }
 
-// --- nettoyage agressif (nouvelles & anciennes variantes) ---
-export function clearSessionCookies(res: NextResponse) {
-  const gone = {
+/** Efface agressivement toutes les variantes possibles pour ce host */
+export function clearSessionCookies(
+  res: NextResponse,
+  hostForDomainDecision?: string,
+) {
+  const domain = computeCookieDomainForHost(hostForDomainDecision)
+  const baseGone = {
     httpOnly: true as const,
     secure: true,
     path: '/',
     expires: new Date(0),
     maxAge: 0,
   }
-  const dom = process.env.COOKIE_DOMAIN || undefined
 
-  // cookie « vérité »
-  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax', domain: dom })
+  // Variante effective (domain si couvert, sinon host-only)
+  res.cookies.set(AUTH_COOKIE_NAME, '', { ...baseGone, sameSite: 'lax', ...(domain ? { domain } : {}) })
 
-  // variantes historiques possibles
-  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'lax' })        // host-only legacy
-  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none', domain: dom })
-  res.cookies.set(AUTH_COOKIE_NAME, '', { ...gone, sameSite: 'none' })
-  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'lax' })
-  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...gone, sameSite: 'none' })
+  // Compat : tout raser (anciennes variantes)
+  // host-only
+  res.cookies.set(AUTH_COOKIE_NAME, '', { ...baseGone, sameSite: 'lax' })
+  res.cookies.set(AUTH_COOKIE_NAME, '', { ...baseGone, sameSite: 'none' })
+
+  // domain explicites .example.com et example.com (certaines stacks sont tatillonnes)
+  const conf = (process.env.COOKIE_DOMAIN || '').trim().replace(/^\./, '')
+  if (conf) {
+    res.cookies.set(AUTH_COOKIE_NAME, '', { ...baseGone, sameSite: 'lax', domain: '.' + conf })
+    res.cookies.set(AUTH_COOKIE_NAME, '', { ...baseGone, sameSite: 'none', domain: '.' + conf })
+    res.cookies.set(AUTH_COOKIE_NAME, '', { ...baseGone, sameSite: 'lax', domain: conf })
+    res.cookies.set(AUTH_COOKIE_NAME, '', { ...baseGone, sameSite: 'none', domain: conf })
+  }
+
+  // anciens __Host-*
+  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...baseGone, sameSite: 'lax' })
+  res.cookies.set(`__Host-${AUTH_COOKIE_NAME}`, '', { ...baseGone, sameSite: 'none' })
 }
 
-/** Next 15 : cookies() possiblement async */
-// --- Lecture robuste de session : essaie __Host- puis normal, et RETIENT le premier VALIDE ---
+/** Lecture robuste : tente __Host-* puis normal, garde la 1re VALIDE */
 export async function readSession(): Promise<SessionPayload | null> {
   const cAny = cookies as any
   const bag = typeof cAny === 'function' ? cAny() : cAny
@@ -86,23 +116,18 @@ export async function readSession(): Promise<SessionPayload | null> {
   const rawHost = jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value
   const rawNorm = jar?.get?.(AUTH_COOKIE_NAME)?.value
 
-  // 1) Essaie le __Host-*
   if (rawHost) {
     const p = parseSignedCookieValue(rawHost)
     if (p) return p
-    // ⚠️ si invalide, on NE s'arrête PAS : on tente l'autre variante.
   }
-
-  // 2) Essaie le cookie normal
   if (rawNorm) {
     const p = parseSignedCookieValue(rawNorm)
     if (p) return p
   }
-
   return null
 }
 
-// ===== DB & password
+// ===== DB & password =====
 type PWRecord = { id: string; email: string; display_name: string | null; password_hash: string | null; password_algo: string | null }
 
 export async function ownerIdForDay(tsISO: string): Promise<string | null> {
@@ -169,7 +194,7 @@ export async function findOwnerByEmailWithPassword(email: string) {
   return rows[0] || null
 }
 
-// Debug (login?debug=1)
+// ===== Debug enrichi =====
 export type DebugSnapshot = {
   cookiePresent: boolean
   rawLen: number
@@ -185,7 +210,6 @@ export type DebugSnapshot = {
   parseOk: boolean
   reason?: string
 }
-// --- Debug enrichi : montre les deux variantes et laquelle est valide ---
 export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
   try {
     const cAny = cookies as any
@@ -195,7 +219,6 @@ export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
     const rawHost = jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value || ''
     const rawNorm = jar?.get?.(AUTH_COOKIE_NAME)?.value || ''
 
-    // helper
     const inspect = (raw: string) => {
       if (!raw) return { rawLen: 0, payload: null, payloadStart: '', payloadEnd: '', sigStart: '', sigEnd: '', sigOk: false, parseOk: false }
       const [p64, sig] = raw.split('.')
@@ -220,14 +243,11 @@ export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
 
     const hostView = inspect(rawHost)
     const normView = inspect(rawNorm)
-
-    // "valide" = parseOk && sigOk && (exp non passée si présente)
     const isValid = (v: any) => {
       if (!v.parseOk || !v.sigOk || !v.payload) return false
       if (typeof v.payload.exp === 'number' && v.payload.exp < Math.floor(Date.now()/1000)) return false
       return true
     }
-
     const chosen =
       isValid(hostView) ? '__Host-' + AUTH_COOKIE_NAME
       : isValid(normView) ? AUTH_COOKIE_NAME
@@ -239,8 +259,6 @@ export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
     const xfh = hbag.get('x-forwarded-host') || ''
     const proto = hbag.get('x-forwarded-proto') || ''
 
-    // Pour compat avec ton type DebugSnapshot existant :
-    // on "merge" l'aperçu choisi dans le top-level, tout en exposant lequel a été retenu.
     const picked = chosen === '__Host-' + AUTH_COOKIE_NAME ? hostView : normView
 
     return {

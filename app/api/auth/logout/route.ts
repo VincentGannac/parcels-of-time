@@ -1,4 +1,3 @@
-// app/api/auth/logout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -11,11 +10,12 @@ function pickLocale(h: Headers) {
 
 export async function POST(req: Request) {
   const base = new URL(req.url).origin
+  const host = new URL(req.url).hostname
   const locale = pickLocale(req.headers)
   const url = new URL(`/${locale}/?logged_out=1`, base)
 
   const res = NextResponse.redirect(url, { status: 303 })
-  clearSessionCookies(res)
+  clearSessionCookies(res, host)
   return res
 }
 
