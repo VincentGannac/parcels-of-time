@@ -1,8 +1,7 @@
-// app/[locale]/sitemap.ts
 import type { MetadataRoute } from 'next'
 
-// canonical sans www
-const BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://parcelsoftime.com'
+// Canonique = WWW (cohérent avec le reste)
+const BASE = 'https://www.parcelsoftime.com'
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const paths = ['', '/claim', '/company', '/legal/terms', '/legal/privacy', '/legal/refund', '/legal/mentions-legales']
