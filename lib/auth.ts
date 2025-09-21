@@ -72,7 +72,7 @@ export function setSessionCookieOnResponse(
   })
 }
 
-/** Efface agressivement toutes les variantes possibles pour ce host */
+/** Efface toutes les variantes possibles pour ce host */
 export function clearSessionCookies(
   res: NextResponse,
   hostForDomainDecision?: string,
