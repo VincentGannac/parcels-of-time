@@ -197,14 +197,14 @@ export default function SignupForm({
 
       {/* Username / Pseudo */}
       <label style={{ display: 'grid', gap: 6 }}>
-        <span>{t('Pseudo (unique)', 'Username (unique)')}</span>
+        <span>{t('Pseudo', 'Username')}</span>
         <input
           type="text"
           required
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoComplete="username"
-          placeholder={t('Ex. “Camille_Jonas”', 'e.g. “Camille_Jonas”')}
+          placeholder={('')}
           aria-invalid={!!username && !usernameLooksValid}
           style={{ padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 10 }}
         />
