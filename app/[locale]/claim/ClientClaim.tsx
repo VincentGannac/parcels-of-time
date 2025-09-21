@@ -742,7 +742,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
               <label style={{display:'grid', gap:6}}>
                 <span>{isGift ? 'Nom du·de la destinataire (sur le certificat)' : 'Nom sur le certificat'}</span>
                 <input type="text" value={form.display_name}
-                  onChange={e=>setForm(f=>({...f, cert_name:e.target.value}))}
+                  onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
                   placeholder={isGift ? 'Ex. “Camille & Jonas”' : 'Ex. “Camille D.”'}
                    style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                  />
