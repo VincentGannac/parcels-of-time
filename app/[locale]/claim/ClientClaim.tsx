@@ -113,7 +113,7 @@ function makeMeasurer(scale:number){
   return { wrap }
 }
 
-export default function ClientClaim() {
+export default function ClientClaim({ prefillEmail }: { prefillEmail?: string }) {
   const params = useSearchParams()
   const prefillRaw = params.get('ts') || ''
   const prefillTs = prefillRaw ? safeDecode(prefillRaw) : ''
@@ -193,8 +193,8 @@ export default function ClientClaim() {
 
   /** Form principal */
   const [form, setForm] = useState({
-    email: '',
-    display_name: '',
+    email: prefillEmail || '',
+    cert_name: '',
     title: '',
     message: '',
     // cadeau
@@ -426,7 +426,7 @@ export default function ClientClaim() {
     }
 
     // 🔧 Prépare les champs selon la visibilité choisie
-    const finalDisplayName = show.ownedBy ? (form.display_name || undefined) : undefined
+    const finalDisplayName = show.ownedBy ? (form.cert_name || undefined) : undefined
     const finalTitle = show.title ? (form.title || undefined) : undefined
 
     // “Offert par” : injecté dans le message (pour compat PDF)
@@ -531,7 +531,8 @@ export default function ClientClaim() {
   const showM = show.message
 
   const nameForPreview = showOwned
-    ? (form.display_name.trim() || L.anon)
+  ? (form.cert_name.trim() || L.anon)
+
     : ''
 
   const giftedByStr = showGifted
@@ -738,13 +739,14 @@ export default function ClientClaim() {
               </label>
 
               <label style={{display:'grid', gap:6}}>
-                <span>{isGift ? 'Nom du·de la destinataire (public sur le certificat)' : 'Nom affiché (public sur le certificat)'}</span>
-                <input type="text" value={form.display_name}
-                  onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
+                <span>{isGift ? 'Nom du·de la destinataire (sur le certificat)' : 'Nom sur le certificat'}</span>
+                <input type="text" value={form.cert_name}
+                  onChange={e=>setForm(f=>({...f, cert_name:e.target.value}))}
                   placeholder={isGift ? 'Ex. “Camille & Jonas”' : 'Ex. “Camille D.”'}
-                  style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                />
-              </label>
+                   style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                 />
+               </label>
+
 
               {/* 🎁 Offert par / Gifted by */}
               {isGift && (

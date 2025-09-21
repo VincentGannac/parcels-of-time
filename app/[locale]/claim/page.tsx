@@ -19,7 +19,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
 
   return (
     <Suspense fallback={<main style={{ padding: 24 }}>Loading…</main>}>
-      <ClientClaim />
+      <ClientClaim prefillEmail={session.email} />
     </Suspense>
   )
 }
