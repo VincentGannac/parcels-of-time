@@ -1,3 +1,4 @@
+// app/api/auth/login/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -19,6 +20,7 @@ export async function POST(req: Request) {
     const host = new URL(req.url).hostname
     const locale = pickLocale(req.headers)
 
+    // 1) Form POST
     if (ctype.includes('application/x-www-form-urlencoded')) {
       const form = await req.formData()
       const email = String(form.get('email') || '')
@@ -49,16 +51,19 @@ export async function POST(req: Request) {
 
       const to = new URL(next, base)
       const res = NextResponse.redirect(to, { status: 303 })
+      // Cookie => domain si couvert, sinon host-only (preview)
       setSessionCookieOnResponse(res, {
         ownerId: String(rec.id),
         email: String(rec.email),
         displayName: rec.display_name,
         iat: Math.floor(Date.now() / 1000),
       }, undefined, host)
+      // Évite tout cache « intermediaire »
+      res.headers.set('Cache-Control', 'no-store')
       return res
     }
 
-    // JSON fallback
+    // 2) JSON fallback
     const { email, password } = await req.json()
     if (!email || !password) {
       return NextResponse.json({ error: 'missing_credentials' }, { status: 400 })
@@ -78,6 +83,7 @@ export async function POST(req: Request) {
       displayName: rec.display_name,
       iat: Math.floor(Date.now() / 1000),
     }, undefined, host)
+    res.headers.set('Cache-Control', 'no-store')
     return res
   } catch (e: any) {
     console.error('[login] error:', e?.message || e)

@@ -1,3 +1,4 @@
+// app/api/auth/logout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -15,7 +16,8 @@ export async function POST(req: Request) {
   const url = new URL(`/${locale}/?logged_out=1`, base)
 
   const res = NextResponse.redirect(url, { status: 303 })
-  clearSessionCookies(res, host)
+  clearSessionCookies(res, host)           // ← efface domain/host/__Host-* / SameSite variants
+  res.headers.set('Cache-Control', 'no-store')
   return res
 }
 

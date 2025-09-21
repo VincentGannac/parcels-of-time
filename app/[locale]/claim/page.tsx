@@ -5,7 +5,7 @@ export const revalidate = 0
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import ClientClaim from './ClientClaim'
-import { readSession } from '@/lib/auth' // <- on n’utilise plus redirectToLogin
+import { readSession } from '@/lib/auth' // contrôle d’auth côté Node
 
 type Params = { locale: 'fr' | 'en' }
 
