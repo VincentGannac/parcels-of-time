@@ -1,4 +1,5 @@
 // app/[locale]/claim/ClientClaim.tsx
+//wxcv
 'use client'
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
