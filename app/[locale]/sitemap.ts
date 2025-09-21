@@ -1,4 +1,4 @@
-// app/routes/sitemap.ts
+// app/[locale]/sitemap.ts
 import type { MetadataRoute } from 'next'
 
 // canonical sans www

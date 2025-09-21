@@ -5,6 +5,7 @@ export const revalidate = 0
 
 import { redirect } from 'next/navigation'
 import { readSession, debugSessionSnapshot } from '@/lib/auth'
+import ClientAutoRedirect from './ClientAutoRedirect'
 
 type Params = { locale: 'fr' | 'en' }
 type Search = { next?: string; err?: string; debug?: string }
@@ -47,17 +48,21 @@ export default async function Page({
   const { next, err, debug } = await searchParams
   const i18n = t(locale)
 
+  const nextSafe = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`
+
   // Si déjà connecté (et pas d’erreur explicite), redirige vers next ou /account
   const sess = await readSession()
   if (sess && (!err || err === '')) {
-    const to = next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`
-    redirect(to)
+    redirect(nextSafe)
   }
 
   const dbg = debug === '1' ? await debugSessionSnapshot() : null
 
   return (
     <main style={{ maxWidth: 520, margin: '0 auto', padding: '36px 20px', fontFamily: 'Inter, system-ui' }}>
+      {/* Filet client : si la session est présente mais pas encore détectée côté SSR sur ce hit */}
+      <ClientAutoRedirect next={nextSafe} />
+
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <a href={`/${locale}`} style={{ textDecoration: 'none', opacity: 0.85 }}>&larr; Parcels of Time</a>
         <a href={`/${locale}`} style={{ textDecoration: 'none', border: '1px solid #e5e7eb', padding: '8px 12px', borderRadius: 10, color: 'inherit' }}>{i18n.backHome}</a>
@@ -71,9 +76,8 @@ export default async function Page({
         </div>
       )}
 
-      {/* Formulaire HTML → API login */}
       <form method="POST" action="/api/auth/login" style={{ display: 'grid', gap: 12 }}>
-        <input type="hidden" name="next" value={typeof next === 'string' ? next : `/${locale}/account`} />
+        <input type="hidden" name="next" value={nextSafe} />
         <label style={{ display: 'grid', gap: 6 }}>
           <span>{i18n.email}</span>
           <input name="email" type="email" required autoComplete="email" placeholder="you@example.com" style={{ padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 10 }} />
@@ -88,7 +92,7 @@ export default async function Page({
       </form>
 
       <div style={{ marginTop: 10, fontSize: 14 }}>
-        {i18n.noAccount} — <a href={`/${locale}/signup${next ? `?next=${encodeURIComponent(next)}` : ''}`}>{i18n.signup}</a>
+        {i18n.noAccount} — <a href={`/${locale}/signup${next ? `?next=${encodeURIComponent(nextSafe)}` : ''}`}>{i18n.signup}</a>
       </div>
 
       <p style={{ fontSize: 13, opacity: 0.7, marginTop: 14 }}>{i18n.linkHelp}</p>
