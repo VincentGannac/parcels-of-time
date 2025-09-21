@@ -1,4 +1,3 @@
-// app/api/auth/login/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -8,16 +7,66 @@ import {
   setSessionCookieOnResponse,
 } from '@/lib/auth'
 
+/** Origin fiable pour cette requête */
 function getOrigin(req: Request): string {
   return new URL(req.url).origin
 }
+
+/** On n'autorise que des chemins internes /fr/... ou /en/... */
 function sanitizeNext(next: unknown, fallback: string) {
   const s = typeof next === 'string' ? next : ''
-  return /^\/(fr|en)\/.+/.test(s) ? s : fallback
+  if (/^\/(fr|en)\/.+/.test(s)) return s
+  return fallback
 }
+
 function pickLocaleFromHeader(h: Headers): 'fr' | 'en' {
   const a = (h.get('accept-language') || '').toLowerCase()
   return a.startsWith('fr') ? 'fr' : 'en'
+}
+
+/** Petite page 200 qui redirige immédiatement (meta refresh + JS) */
+function htmlAfterLogin(toHref: string) {
+  // Echappe l’attribut HTML
+  const esc = toHref.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+  return (
+    '<!doctype html><html><head>' +
+    '<meta charset="utf-8">' +
+    `<meta http-equiv="refresh" content="0; url=${esc}">` +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Redirecting…</title>' +
+    '</head><body style="font:16px system-ui; padding:24px">' +
+    '<p>Redirecting…</p>' +
+    `<p><a href="${esc}">Continue</a></p>` +
+    `<script>location.replace(${JSON.stringify(toHref)})</script>` +
+    '</body></html>'
+  )
+}
+
+/** Réponse “bridge” : pose le cookie + renvoie la page 200 qui redirige */
+function loginSuccessHTML(nextAbsUrl: string, hostHint: string, payload: {
+  ownerId: string
+  email: string
+  displayName: string | null
+}) {
+  const res = new NextResponse(htmlAfterLogin(nextAbsUrl), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  })
+  setSessionCookieOnResponse(
+    res,
+    {
+      ownerId: String(payload.ownerId),
+      email: String(payload.email),
+      displayName: payload.displayName,
+      iat: Math.floor(Date.now() / 1000),
+    },
+    /* ttlSec */ undefined,
+    /* hostForDomainDecision */ hostHint
+  )
+  return res
 }
 
 export async function POST(req: Request) {
@@ -27,12 +76,13 @@ export async function POST(req: Request) {
     const hostname = new URL(req.url).hostname
     const locale = pickLocaleFromHeader(req.headers)
 
-    // ---- 1) Form POST
+    // ---- 1) Form POST (HTML)
     if (ctype.includes('application/x-www-form-urlencoded')) {
       const form = await req.formData()
       const email = String(form.get('email') ?? '')
       const password = String(form.get('password') ?? '')
-      const next = sanitizeNext(form.get('next'), `/${locale}/account`)
+      const requestedNext = form.get('next')
+      const next = sanitizeNext(requestedNext, `/${locale}/account`)
 
       if (!email || !password) {
         const back = new URL(`/${locale}/login`, origin)
@@ -57,25 +107,16 @@ export async function POST(req: Request) {
         return NextResponse.redirect(back, { status: 303 })
       }
 
-      // ✅ Pose cookie
-      const to = new URL(next, origin)
-      // cache-buster contre d'anciens 302/303 mis en cache par un CDN
-      to.searchParams.set('_r', Date.now().toString(36))
-
-      const res = NextResponse.redirect(to, { status: 303 })
-      setSessionCookieOnResponse(res, {
+      // ✅ FIX Safari : on renvoie une page 200 HTML qui redirige
+      const toAbs = new URL(next, origin).toString()
+      return loginSuccessHTML(toAbs, hostname, {
         ownerId: String(rec.id),
         email: String(rec.email),
         displayName: rec.display_name,
-        iat: Math.floor(Date.now() / 1000),
-      }, undefined, hostname)
-
-      res.headers.set('Cache-Control', 'no-store, private')
-      res.headers.set('Vary', 'Cookie')
-      return res
+      })
     }
 
-    // ---- 2) JSON fallback
+    // ---- 2) JSON fallback (clients XHR/SPA)
     const body = await req.json().catch(() => ({}))
     const email = String(body.email ?? '')
     const password = String(body.password ?? '')
@@ -88,20 +129,25 @@ export async function POST(req: Request) {
     if (!rec?.password_hash) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
+
     const ok = await verifyPassword(password, rec.password_hash)
     if (!ok) {
       return NextResponse.json({ error: 'bad_credentials' }, { status: 401 })
     }
 
     const res = NextResponse.json({ ok: true, ownerId: rec.id })
-    setSessionCookieOnResponse(res, {
-      ownerId: String(rec.id),
-      email: String(rec.email),
-      displayName: rec.display_name,
-      iat: Math.floor(Date.now() / 1000),
-    }, undefined, hostname)
-    res.headers.set('Cache-Control', 'no-store, private')
-    res.headers.set('Vary', 'Cookie')
+    setSessionCookieOnResponse(
+      res,
+      {
+        ownerId: String(rec.id),
+        email: String(rec.email),
+        displayName: rec.display_name,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      undefined,
+      new URL(req.url).hostname,
+    )
+    res.headers.set('Cache-Control', 'no-store')
     return res
   } catch (e) {
     console.error('[login] error:', e)
