@@ -1,11 +1,12 @@
 // app/[locale]/claim/page.tsx
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import ClientClaim from './ClientClaim'
-import { readSession } from '@/lib/auth' // contrôle d’auth côté Node
+import { readSession } from '@/lib/auth'
 
 type Params = { locale: 'fr' | 'en' }
 

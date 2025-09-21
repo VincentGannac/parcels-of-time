@@ -33,13 +33,20 @@ export async function POST(req: Request) {
     const rec = await createOwnerWithPassword(String(email), String(password), display_name || null)
 
     const res = NextResponse.json({ ok: 1, ownerId: rec.id })
-    setSessionCookieOnResponse(res, {
-      ownerId: String(rec.id),
-      email: String(rec.email),
-      displayName: rec.display_name,
-      iat: Math.floor(Date.now() / 1000),
-    })
+    setSessionCookieOnResponse(
+      res,
+      {
+        ownerId: String(rec.id),
+        email: String(rec.email),
+        displayName: rec.display_name,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      /* ttl */ undefined,
+      /* host */ new URL(req.url).hostname,   // ✅ important
+    )
+    res.headers.set('Cache-Control', 'no-store') // optionnel mais conseillé
     return res
+    
   } catch (e: any) {
     console.error('[signup] error:', e?.message || e)
     return NextResponse.json({ error: 'server_error' }, { status: 500 })

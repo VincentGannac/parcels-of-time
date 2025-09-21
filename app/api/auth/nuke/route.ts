@@ -1,3 +1,4 @@
+//app/api/auth/nuke/route.ts
 export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import { clearSessionCookies } from '@/lib/auth'
