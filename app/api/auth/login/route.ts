@@ -61,6 +61,7 @@ function loginSuccessHTML(nextAbsUrl: string, hostHint: string | undefined, payl
   setSessionCookieOnResponse(res, {
     ownerId: String(payload.ownerId),
     email: String(payload.email),
+    displayName: payload.displayName,
     iat: Math.floor(Date.now() / 1000),
   }, undefined, hostHint)
   return res
@@ -137,7 +138,7 @@ export async function POST(req: Request) {
     setSessionCookieOnResponse(res, {
       ownerId: String(rec.id),
       email: String(rec.email),
-      username: rec.username,
+      displayName: rec.display_name,
       iat: Math.floor(Date.now() / 1000),
     }, undefined, hostHint)
     res.headers.set('Cache-Control', 'no-store')
