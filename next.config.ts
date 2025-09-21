@@ -25,6 +25,15 @@ const config: NextConfig = {
           { key: 'Vary', value: 'Cookie' },
         ],
       },
+
+      {
+          source: '/:locale(fr|en)/forgot',
+          headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
+        },
+        {
+          source: '/:locale(fr|en)/reset',
+          headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
+        },
     ]
   },
 }

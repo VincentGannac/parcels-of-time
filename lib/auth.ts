@@ -187,6 +187,21 @@ export async function createOwnerWithPassword(email: string, password: string, d
   )
   return rows[0]
 }
+
+/** Met à jour le mot de passe d’un owner (et l’algo). */
+export async function setOwnerPassword(ownerId: string, newPassword: string): Promise<void> {
+    const passHash = await hashPassword(newPassword)
+    await pool.query(
+      `update owners
+          set password_hash = $2,
+              password_algo = 'scrypt'
+        where id = $1`,
+      [ownerId, passHash]
+    )
+  }
+
+
+
 export async function findOwnerByEmailWithPassword(email: string) {
   const { rows } = await pool.query<PWRecord>(
     `select id, email, display_name, password_hash, password_algo from owners where email = $1`,

@@ -90,7 +90,11 @@ export default async function Page({
           {i18n.cta}
         </button>
       </form>
-
+      <div style={{ marginTop: 10, fontSize: 14 }}>
+        <a href={`/${locale}/forgot`} style={{ textDecoration: 'none' }}>
+          {locale === 'fr' ? 'Mot de passe oublié ?' : 'Forgot password?'}
+        </a>
+      </div>
       <div style={{ marginTop: 10, fontSize: 14 }}>
         {i18n.noAccount} — <a href={`/${locale}/signup${next ? `?next=${encodeURIComponent(nextSafe)}` : ''}`}>{i18n.signup}</a>
       </div>
