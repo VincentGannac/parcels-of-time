@@ -194,7 +194,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   /** Form principal */
   const [form, setForm] = useState({
     email: prefillEmail || '',
-    cert_name: '',
+    display_name: '',
     title: '',
     message: '',
     // cadeau
@@ -426,7 +426,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     }
 
     // 🔧 Prépare les champs selon la visibilité choisie
-    const finalDisplayName = show.ownedBy ? (form.cert_name || undefined) : undefined
+    const finalDisplayName = show.ownedBy ? (form.display_name || undefined) : undefined
     const finalTitle = show.title ? (form.title || undefined) : undefined
 
     // “Offert par” : injecté dans le message (pour compat PDF)
@@ -531,7 +531,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const showM = show.message
 
   const nameForPreview = showOwned
-  ? (form.cert_name.trim() || L.anon)
+  ? (form.display_name.trim() || L.anon)
 
     : ''
 
@@ -740,7 +740,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
               <label style={{display:'grid', gap:6}}>
                 <span>{isGift ? 'Nom du·de la destinataire (sur le certificat)' : 'Nom sur le certificat'}</span>
-                <input type="text" value={form.cert_name}
+                <input type="text" value={form.display_name}
                   onChange={e=>setForm(f=>({...f, cert_name:e.target.value}))}
                   placeholder={isGift ? 'Ex. “Camille & Jonas”' : 'Ex. “Camille D.”'}
                    style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}

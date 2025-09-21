@@ -16,16 +16,7 @@ function fromB64url(input: string) {
   return Buffer.from(input + '='.repeat(pad), 'base64').toString('utf8')
 }
 
-export type SessionPayload = {
-    ownerId: string
-    email: string
-    /** Nom affiché sur le CERTIFICAT (hérité du passé / claims) */
-    displayName?: string | null
-    /** Pseudo de COMPTE (nouvelle colonne owners.username) */
-    username?: string | null
-    iat?: number
-    exp?: number
-  }
+export type SessionPayload = { ownerId: string; email: string; displayName?: string | null; iat?: number; exp?: number }
 
 function hmac(input: string) { return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('base64url') }
 
@@ -138,15 +129,7 @@ export async function readSession(): Promise<SessionPayload | null> {
 }
 
 // ===== DB & password =====
-type PWRecord = {
-    id: string
-    email: string
-    username: string | null
-    display_name: string | null
-    password_hash: string | null
-    password_algo: string | null
-  }
-
+type PWRecord = { id: string; email: string; display_name: string | null; password_hash: string | null; password_algo: string | null }
 
 export async function ownerIdForDay(tsISO: string): Promise<string | null> {
   try {
@@ -191,33 +174,22 @@ export async function verifyPassword(password: string, stored: string | null): P
   })
   return crypto.timingSafeEqual(dk, expected)
 }
-
-export async function createOwnerWithPassword(
-    email: string,
-    password: string,
-    username?: string | null,
-    displayName?: string | null, // ← reste réservé au “nom de certificat” par défaut si besoin
-  ) {
-     const emailNorm = email.trim().toLowerCase()
-     const passHash = await hashPassword(password)
-     const { rows } = await pool.query<PWRecord>(
-  
-      `insert into owners(email, username, display_name, password_hash, password_algo)
-       values ($1,$2,$3,$4,'scrypt')
-       on conflict (email) do update
-         set username = coalesce(excluded.username, owners.username),
-             display_name = coalesce(excluded.display_name, owners.display_name)
-       returning id, email, username, display_name, password_hash, password_algo`,
-    [emailNorm, username ?? null, displayName ?? null, passHash]
-     )
-     return rows[0]
-   }
-
+export async function createOwnerWithPassword(email: string, password: string, displayName?: string | null) {
+  const emailNorm = email.trim().toLowerCase()
+  const passHash = await hashPassword(password)
+  const { rows } = await pool.query<PWRecord>(
+    `insert into owners(email, display_name, password_hash, password_algo)
+     values ($1,$2,$3,'scrypt')
+     on conflict (email) do update
+       set display_name = coalesce(excluded.display_name, owners.display_name)
+     returning id, email, display_name, password_hash, password_algo`,
+    [emailNorm, displayName ?? null, passHash]
+  )
+  return rows[0]
+}
 export async function findOwnerByEmailWithPassword(email: string) {
   const { rows } = await pool.query<PWRecord>(
-    `select id, email, username, display_name, password_hash, password_algo
-      from owners
-    where email = $1`,
+    `select id, email, display_name, password_hash, password_algo from owners where email = $1`,
     [email.trim().toLowerCase()]
   )
   return rows[0] || null

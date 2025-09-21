@@ -17,10 +17,10 @@ function isValidUsername(u: string) {
 
 export async function POST(req: Request) {
   try {
-    const { email, password, username } = await req.json()
-    const uname = String(username || '').trim()
+    const { email, password, display_name } = await req.json()
+    const username = String(display_name || '').trim()
 
-    if (!email || !password || !uname) {
+    if (!email || !password || !username) {
       return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
     }
     if (!isValidEmail(String(email))) {
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     if (String(password).length < 8) {
       return NextResponse.json({ error: 'weak_password' }, { status: 400 })
     }
-    if (!isValidUsername(uname)) {
+    if (!isValidUsername(username)) {
       return NextResponse.json({ error: 'bad_username' }, { status: 400 })
     }
 
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     // Pseudo déjà pris ? (case-insensitive)
     const chk = await pool.query(
       `select 1 from owners where lower(display_name) = lower($1) limit 1`,
-      [uname],
+      [username],
     )
     if (chk.rows.length) {
       return NextResponse.json({ error: 'username_taken' }, { status: 409 })
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     // Création (gère collision DB via 23505)
     let rec
     try {
-      rec = await createOwnerWithPassword(String(email), String(password), uname, null)
+      rec = await createOwnerWithPassword(String(email), String(password), username)
     } catch (e: any) {
       if (e?.code === '23505') {
         return NextResponse.json({ error: 'username_taken' }, { status: 409 })
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     setSessionCookieOnResponse(res, {
       ownerId: String(rec.id),
       email: String(rec.email),
-      username: rec.username,
+      displayName: rec.display_name, // pseudo affiché dans /account
       iat: Math.floor(Date.now() / 1000),
     }, undefined, hostname)
     res.headers.set('Cache-Control', 'no-store')
