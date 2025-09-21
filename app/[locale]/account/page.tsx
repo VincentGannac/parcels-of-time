@@ -60,7 +60,7 @@ export default async function Page({ params }: { params: Promise<Params> }) {
         {locale === 'fr' ? 'Mon compte' : 'My account'}
       </h1>
       <p style={{opacity:.8, marginTop:0}}>
-        {sess.username ? `${sess.username} — ` : ''}{sess.email}
+        {sess.displayName ? `${sess.displayName} — ` : ''}{sess.email}
       </p>
 
       <section style={{marginTop:18}}>
