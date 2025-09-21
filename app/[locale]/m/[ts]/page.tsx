@@ -143,24 +143,28 @@ export default async function Page({
   const sp = await searchParams
   const decodedTs = safeDecode(tsParam)
 
-  // 1) Auth optionnelle 
-  const session = await readSession().catch(() => null)
-  const sessionOwnerId = session?.ownerId || null
+    // 1) Auth OBLIGATOIRE
+    const session = await readSession()
+    if (!session) {
+      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
+    }
   
-  // 2) Ownership optionnel → édition seulement si propriétaire
-  const ownerId = await ownerIdForDay(decodedTs)
-  const canEdit = !!sessionOwnerId && !!ownerId && ownerId === sessionOwnerId
-
-  // 3) État public + autopub après vérif d’ownership
-  const isPublicDb = await getPublicStateDb(decodedTs)
-  const wantsAutopub = sp?.autopub === '1'
-  const isPublic = isPublicDb || wantsAutopub
-
-  if (wantsAutopub && !isPublicDb) {
-    await setPublicDb(decodedTs, true)
-    revalidatePath(`/${locale}/m/${encodeURIComponent(decodedTs)}`)
-    redirect(`/${locale}/m/${encodeURIComponent(decodedTs)}?ok=1`)
-  }
+    // 2) Ownership STRICT : seul·e le/la propriétaire peut voir cette page
+    const ownerId = await ownerIdForDay(decodedTs)
+    if (!ownerId || ownerId !== session.ownerId) {
+      redirect(`/${locale}/account?err=not_owner`)
+   }
+  
+    // 3) État public (autopub possible car ownership déjà validé)
+    const isPublicDb = await getPublicStateDb(decodedTs)
+    const wantsAutopub = sp?.autopub === '1'
+    const isPublic = isPublicDb
+  
+    if (wantsAutopub && !isPublicDb) {
+      await setPublicDb(decodedTs, true)
+      revalidatePath(`/${locale}/m/${encodeURIComponent(decodedTs)}`)
+      redirect(`/${locale}/m/${encodeURIComponent(decodedTs)}?ok=1`)
+    }
 
   const meta = await getClaimMeta(decodedTs)
   const claim = await getClaimForEdit(decodedTs)
@@ -177,8 +181,20 @@ export default async function Page({
 
   const togglePublic = async (formData: FormData) => {
     'use server'
+    
     const ts = String(formData.get('ts') || '')
     const next = String(formData.get('next') || '0') === '1'
+
+    // 🔐 Re-valide session + ownership côté action serveur
+    const s = await readSession()
+    const oid = await ownerIdForDay(ts)
+    if (!s) {
+      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(ts)}`)}`)
+    }
+    if (!oid || oid !== s.ownerId) {
+      redirect(`/${locale}/account?err=not_owner`)
+    }
+    
     const ok = await setPublicDb(ts, next)
     revalidatePath(`/${locale}/m/${encodeURIComponent(ts)}`)
     redirect(`/${locale}/m/${encodeURIComponent(ts)}?ok=${ok ? '1' : '0'}`)
