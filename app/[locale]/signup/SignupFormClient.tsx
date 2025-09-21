@@ -120,7 +120,7 @@ export default function SignupForm({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // On envoie le pseudo dans display_name pour réutiliser sess.displayName dans /account
-        body: JSON.stringify({ email, password, display_name: usernameClean }),
+        body: JSON.stringify({ email, password, username: usernameClean }),
       })
 
       if (!res.ok) {
