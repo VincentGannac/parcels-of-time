@@ -1,3 +1,4 @@
+//lib/auth.ts
 import { cookies } from 'next/headers'
 import type { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
