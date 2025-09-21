@@ -11,14 +11,11 @@ function validUsername(u: string) {
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const raw = (url.searchParams.get('u') || '').trim()
-
-  // invalide => “non disponible” (on évite de divulguer trop d’info)
   if (!validUsername(raw)) {
     return NextResponse.json({ available: false, reason: 'invalid' }, {
       headers: { 'Cache-Control': 'no-store' },
     })
   }
-
   const { rows } = await pool.query(
     `select 1 from owners where lower(display_name) = lower($1) limit 1`,
     [raw],

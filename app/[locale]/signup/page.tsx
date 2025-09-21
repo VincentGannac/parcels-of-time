@@ -1,78 +1,65 @@
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-import { NextResponse } from 'next/server'
-import {
-  createOwnerWithPassword,
-  findOwnerByEmailWithPassword,
-  setSessionCookieOnResponse,
-} from '@/lib/auth'
-import { pool } from '@/lib/db'
+import { redirect } from 'next/navigation'
+import { readSession } from '@/lib/auth'
+import SignupForm from './SignupFormClient'
 
-function isValidEmail(e: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
+type Params = { locale: 'fr' | 'en' }
+type Search = { next?: string; err?: string }
+
+function t(locale: 'fr' | 'en') {
+  const fr = { title: 'Créer un compte', backHome: 'Retour à l’accueil' }
+  const en = { title: 'Create an account', backHome: 'Back to home' }
+  return locale === 'fr' ? fr : en
 }
-function isValidUsername(u: string) {
-  return /^[a-zA-Z0-9._-]{3,20}$/.test(u)
-}
 
-export async function POST(req: Request) {
-  try {
-    const { email, password, display_name } = await req.json()
-    const username = String(display_name || '').trim()
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<Params>
+  searchParams: Promise<Search>
+}) {
+  const { locale } = await params
+  const { next } = await searchParams
+  const i18n = t(locale)
 
-    if (!email || !password || !username) {
-      return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-    }
-    if (!isValidEmail(String(email))) {
-      return NextResponse.json({ error: 'bad_email' }, { status: 400 })
-    }
-    if (String(password).length < 8) {
-      return NextResponse.json({ error: 'weak_password' }, { status: 400 })
-    }
-    if (!isValidUsername(username)) {
-      return NextResponse.json({ error: 'bad_username' }, { status: 400 })
-    }
-
-    // E-mail déjà pris ?
-    const existing = await findOwnerByEmailWithPassword(email)
-    if (existing?.password_hash) {
-      return NextResponse.json({ error: 'email_taken' }, { status: 409 })
-    }
-
-    // Pseudo déjà pris ? (comparaison case-insensitive)
-    const chk = await pool.query(
-      `select 1 from owners where lower(display_name) = lower($1) limit 1`,
-      [username],
-    )
-    if (chk.rows.length) {
-      return NextResponse.json({ error: 'username_taken' }, { status: 409 })
-    }
-
-    // Création (on gère aussi une collision DB éventuelle via 23505)
-    let rec
-    try {
-      rec = await createOwnerWithPassword(String(email), String(password), username)
-    } catch (e: any) {
-      if (e?.code === '23505') {
-        // collision sur contrainte UNIQUE côté DB
-        return NextResponse.json({ error: 'username_taken' }, { status: 409 })
-      }
-      console.error('[signup] db error:', e)
-      return NextResponse.json({ error: 'server_error' }, { status: 500 })
-    }
-
-    const hostname = new URL(req.url).hostname
-    const res = NextResponse.json({ ok: 1, ownerId: rec.id })
-    setSessionCookieOnResponse(res, {
-      ownerId: String(rec.id),
-      email: String(rec.email),
-      displayName: rec.display_name, // ← ton “pseudo” affiché dans /account
-      iat: Math.floor(Date.now() / 1000),
-    }, undefined, hostname)
-    res.headers.set('Cache-Control', 'no-store')
-    return res
-  } catch (e: any) {
-    console.error('[signup] error:', e?.message || e)
-    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+  // Déjà connecté ? → redirige
+  const sess = await readSession()
+  if (sess) {
+    redirect(next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`)
   }
+
+  return (
+    <main style={{ maxWidth: 520, margin: '0 auto', padding: '36px 20px', fontFamily: 'Inter, system-ui' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+        <a href={`/${locale}`} style={{ textDecoration: 'none', opacity: 0.85 }}>
+          &larr; Parcels of Time
+        </a>
+        <a
+          href={`/${locale}`}
+          style={{
+            textDecoration: 'none',
+            border: '1px solid #e5e7eb',
+            padding: '8px 12px',
+            borderRadius: 10,
+            color: 'inherit',
+          }}
+        >
+          {i18n.backHome}
+        </a>
+      </header>
+
+      <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 34, margin: '0 0 12px' }}>{i18n.title}</h1>
+      <SignupForm locale={locale} nextParam={typeof next === 'string' ? next : undefined} />
+      <p style={{ marginTop: 12, fontSize: 14 }}>
+        {locale === 'fr' ? 'Déjà un compte ?' : 'Already have an account?'}{' '}
+        <a href={`/${locale}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`}>
+          {locale === 'fr' ? 'Se connecter' : 'Sign in'}
+        </a>
+      </p>
+    </main>
+  )
 }
