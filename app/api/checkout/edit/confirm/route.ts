@@ -72,6 +72,7 @@ export async function GET(req: Request) {
       const message = (s.metadata?.message || '') || null
       const link_url = (s.metadata?.link_url || '') || null
       const cert_style = safeStyle(s.metadata?.cert_style)
+      const custom_bg_key = String(s.metadata?.custom_bg_key || '')
       const time_display = ((): 'utc'|'utc+local'|'local+utc' => {
         const td = String(s.metadata?.time_display || 'local+utc')
         return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc'
@@ -95,6 +96,24 @@ export async function GET(req: Request) {
         await client.query('ROLLBACK')
         return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsISO)}?updated=0`, { status:303 })
       }
+
+          // --- Si style custom & key fournie : persiste le nouveau fond ---
+    if (cert_style === 'custom' && custom_bg_key) {
+      // mêmes gardes que dans /api/checkout/confirm
+      const { rows: tmp } = await client.query(
+        'select data_url from custom_bg_temp where key = $1',
+        [custom_bg_key]
+      )
+      if (tmp.length) {
+        await client.query(
+          `insert into claim_custom_bg (ts, data_url)
+           values ($1::timestamptz, $2)
+           on conflict (ts) do update set data_url = excluded.data_url, created_at = now()`,
+          [tsISO, tmp[0].data_url]
+        )
+        await client.query('delete from custom_bg_temp where key = $1', [custom_bg_key])
+      }
+    }
 
       // 3) Recalcul cert_hash (avec price_cents & created_at déjà présents)
       const { rows: cur } = await client.query(

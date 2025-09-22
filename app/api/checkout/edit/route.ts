@@ -14,6 +14,7 @@ type Body = {
   message?: string
   link_url?: string
   cert_style?: string
+  custom_bg_data_url?: string
   time_display?: 'utc'|'utc+local'|'local+utc'
   local_date_only?: string | boolean
   text_color?: string
@@ -60,6 +61,21 @@ export async function POST(req: Request) {
     const currency = 'eur'
 
     const origin = new URL(req.url).origin
+
+      // --- Stash éventuel de l'image custom comme lors du checkout initial ---
+      let custom_bg_key = ''
+      if (String((body.cert_style || 'neutral')).toLowerCase() === 'custom' && body.custom_bg_data_url) {
+      const m = /^data:image\/(png|jpe?g);base64,/.exec(body.custom_bg_data_url)
+        if (!m) return NextResponse.json({ error: 'custom_bg_invalid' }, { status: 400 })
+        custom_bg_key = `cbg_${crypto.randomUUID()}`
+        await pool.query(
+          `insert into custom_bg_temp(key, data_url)
+           values ($1,$2)
+           on conflict (key) do update set data_url = excluded.data_url, created_at = now()`,
+          [custom_bg_key, body.custom_bg_data_url]
+        )
+      }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{
@@ -74,7 +90,7 @@ export async function POST(req: Request) {
         },
       }],
       customer_email: body.email,
-      metadata: {
+        metadata: {
         kind: 'edit',
         ts: tsISO.slice(0,10),
         email: body.email,
@@ -83,6 +99,7 @@ export async function POST(req: Request) {
         message: body.message ?? '',
         link_url: body.link_url ?? '',
         cert_style: (body.cert_style || 'neutral').toLowerCase(),
+        custom_bg_key, 
         time_display: body.time_display || 'local+utc',
         local_date_only: (String(body.local_date_only) === '1' || body.local_date_only === true) ? '1' : '0',
         text_color: (/^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'),
