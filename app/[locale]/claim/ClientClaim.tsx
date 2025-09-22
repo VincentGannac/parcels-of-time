@@ -1,5 +1,4 @@
 // app/[locale]/claim/ClientClaim.tsx
-//wxcv
 'use client'
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -329,21 +328,74 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     ctx.drawImage(img, 0, 0, w, h)
     return { dataUrl: canvas.toDataURL('image/png', 0.92), w: canvas.width, h: canvas.height }
   }
-  async function normalizeToPng(original: File) {
-    const { file: afterHeic } = await heicToPngIfNeeded(original)
-    const orientation = await getExifOrientation(original)
-    const tmpUrl = URL.createObjectURL(afterHeic)
-    try {
-      const img = new Image()
-      const done = new Promise<{dataUrl:string; w:number; h:number}>((resolve, reject) => {
-        img.onload = () => resolve(drawNormalized(img, orientation || 1))
-        img.onerror = reject
-      })
-      img.src = tmpUrl
-      const out = await done
-      return out
-    } finally { URL.revokeObjectURL(tmpUrl) }
-  }
+  
+  function looks(exts:string[], name:string, type:string){
+      const low = name.toLowerCase()
+      const t   = type.toLowerCase()
+      return exts.some(ext => low.endsWith('.'+ext) || t.includes(ext))
+    }
+  
+    async function decodeTiffToPngDataUrl(file: File): Promise<{dataUrl:string; w:number; h:number}> {
+      const mod: any = await import('utif')        // <= ne tape plus sur .default directement
+      const UTIF = mod.default ?? mod               // <= compat CJS/ESM
+      const buf = new Uint8Array(await file.arrayBuffer())
+      const ifds = UTIF.decode(buf)
+      if (!ifds || !ifds.length) throw new Error('TIFF decode failed')
+      UTIF.decodeImage(buf, ifds[0])
+      const rgba = UTIF.toRGBA8(ifds[0])
+      const w = ifds[0].width || ifds[0].t256 || ifds[0].tImageWidth
+      const h = ifds[0].height || ifds[0].t257 || ifds[0].tImageLength
+      if (!w || !h) throw new Error('TIFF size missing')
+      const c = document.createElement('canvas')
+      c.width = w; c.height = h
+      const ctx = c.getContext('2d')!
+      const img = ctx.createImageData(w, h)
+      img.data.set(rgba)
+      ctx.putImageData(img, 0, 0)
+      return { dataUrl: c.toDataURL('image/png', 0.92), w, h }
+    }    
+  
+    async function rasterizeVectorOrBitmap(file: File, orientation = 1){
+      const tmpUrl = URL.createObjectURL(file)
+      try {
+        const img = new Image()
+        const done = new Promise<{dataUrl:string; w:number; h:number}>((resolve, reject) => {
+          img.onload = () => resolve(drawNormalized(img, orientation || 1))
+          img.onerror = reject
+        })
+        img.src = tmpUrl
+        return await done
+      } finally { URL.revokeObjectURL(tmpUrl) }
+    }
+  
+    async function normalizeToPng(original: File) {
+      const name = original.name || ''
+      const type = (original.type || '')
+  
+      // 1) HEIC/HEIF → PNG (via lib)
+      if (looks(['heic','heif'], name, type)) {
+        const { file: afterHeic } = await heicToPngIfNeeded(original)
+        const orientation = await getExifOrientation(original)
+        return rasterizeVectorOrBitmap(afterHeic, orientation)
+      }
+  
+      // 2) TIFF → PNG (via utif)
+      if (looks(['tif','tiff'], name, type)) {
+        return decodeTiffToPngDataUrl(original)
+      }
+  
+      // 3) SVG (vectoriel) → canvas
+      if (looks(['svg'], name, type)) {
+        // Pas d’EXIF; on dessine tel quel
+        return rasterizeVectorOrBitmap(original, 1)
+      }
+  
+      // 4) WEBP/AVIF/GIF/BMP/PNG/JPEG : navigateur décode → canvas + EXIF si JPEG
+      const orientation = looks(['jpg','jpeg'], name, type) ? (await getExifOrientation(original)) : 1
+      return rasterizeVectorOrBitmap(original, orientation)
+    }
+
+
   function bytesFromDataURL(u: string) {
     const i = u.indexOf(',')
     const b64 = i >= 0 ? u.slice(i + 1) : u
@@ -702,7 +754,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/jpg,image/heic,image/heif,.heic,.heif"
+        accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.webp,.avif"
         style={{display:'none'}}
         onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
       />

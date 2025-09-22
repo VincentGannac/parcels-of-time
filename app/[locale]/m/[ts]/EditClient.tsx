@@ -1,6 +1,7 @@
-//app/locale]/m/[ts]/EditClient.tsx
+// app/[locale]/m/[ts]/EditClient.tsx
 'use client'
 
+import type React from 'react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 type CertStyle =
@@ -148,8 +149,33 @@ export default function EditClient({
   useEffect(() => {
     const m = /^(?:offert par|gifted by)\s*:\s*(.+)$/i.exec(form.message || '')
     if (m) setForm(f => ({ ...f, gifted_by: m[1].trim() }))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Image custom (chargée depuis l'API) — placé APRÈS la déclaration de `form`
+  const [customBgUrl, setCustomBgUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let ignore = false
+    let objectUrl: string | null = null
+
+    if (form.cert_style === 'custom') {
+      const url = `/api/claim-bg/${encodeURIComponent(tsISO)}`
+      fetch(url)
+        .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+        .then(b => {
+          objectUrl = URL.createObjectURL(b)
+          if (!ignore) setCustomBgUrl(objectUrl)
+        })
+        .catch(() => { if (!ignore) setCustomBgUrl(null) })
+
+      return () => {
+        ignore = true
+        if (objectUrl) URL.revokeObjectURL(objectUrl)
+      }
+    } else {
+      setCustomBgUrl(null)
+    }
+  }, [tsISO, form.cert_style])
 
   // Visibilité (on présente les mêmes toggles que ClientClaim)
   const [show, setShow] = useState({
@@ -237,6 +263,7 @@ export default function EditClient({
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
   const centerStyle: React.CSSProperties = { position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre', color: form.text_color }
 
+  // Séquence identique au PDF (baselines)
   y -= (tsSize + 6); const topMainTime = toTopPx(y, tsSize)
 
   let ownedLabelTop:number|null = null, ownedNameTop:number|null = null
@@ -339,7 +366,7 @@ export default function EditClient({
     window.location.href = data.url
   }
 
-  // UI styles (tokens hérités depuis la page)
+  // UI palette
   const SWATCHES = [
     '#000000','#111111','#1A1F2A','#222831','#2E3440','#37474F','#3E3E3E','#4B5563',
     '#5E452A','#6D4C41','#795548','#8D6E63',
@@ -573,19 +600,24 @@ export default function EditClient({
       <aside aria-label="Aperçu du certificat"
         style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
         <div ref={previewWrapRef} style={{position:'relative', width:'100%', aspectRatio: `${A4_W_PT}/${A4_H_PT}`, borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
+          {/* Fond : custom via API sinon style statique */}
           <img
-            key={form.cert_style}
-            src={`/cert_bg/${form.cert_style}.png`}
+            key={form.cert_style === 'custom' ? `custom-${tsISO}-${!!customBgUrl}` : form.cert_style}
+            src={form.cert_style === 'custom'
+              ? (customBgUrl || '/cert_bg/neutral.png')
+              : `/cert_bg/${form.cert_style}.png`}
             alt={`Aperçu fond certificat — ${form.cert_style}`}
             style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', background:'#0E1017'}}
           />
+
+          {/* Filigrane */}
           <div aria-hidden style={{position:'absolute', inset:0, pointerEvents:'none', display:'grid', placeItems:'center', transform:'rotate(-22deg)', opacity:.14, mixBlendMode:'multiply'}}>
             <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>PARCELS OF TIME — PREVIEW</div>
           </div>
 
           {/* Header */}
           <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topBrand, fontWeight:800, fontSize: 18*scale, color: form.text_color }}>{L.brand}</div>
-          <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topCert,  fontWeight:400, fontSize: 12*scale, color: lightenTowardWhite(form.text_color, 0.45) }}>{L.title}</div>
+          <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topCert,  fontWeight:400, fontSize: 12*scale, color: subtleColor }}>{L.title}</div>
 
           {/* Date */}
           <div style={{ ...centerStyle, top: topMainTime, fontWeight:800, fontSize: tsSize*scale }}>
@@ -595,7 +627,7 @@ export default function EditClient({
           {/* Owned by */}
           {showOwned && (
             <>
-              <div style={{...centerStyle, top: ownedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: lightenTowardWhite(form.text_color, 0.45)}}>{ownedByLabel}</div>
+              <div style={{...centerStyle, top: ownedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>{ownedByLabel}</div>
               <div style={{...centerStyle, top: ownedNameTop!, fontWeight:800, fontSize: nameSize*scale}}>{nameForPreview}</div>
             </>
           )}
@@ -603,7 +635,7 @@ export default function EditClient({
           {/* Gifted by */}
           {showGifted && (
             <>
-              <div style={{...centerStyle, top: giftedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: lightenTowardWhite(form.text_color, 0.45)}}>{giftLabel}</div>
+              <div style={{...centerStyle, top: giftedLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>{giftLabel}</div>
               <div style={{...centerStyle, top: giftedNameTop!, fontWeight:800, fontSize: nameSize*scale}}>{giftedByStr}</div>
             </>
           )}
@@ -611,7 +643,7 @@ export default function EditClient({
           {/* Title */}
           {titleForPreview && (
             <>
-              <div style={{...centerStyle, top: titleLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: lightenTowardWhite(form.text_color, 0.45)}}>{titleLabel}</div>
+              <div style={{...centerStyle, top: titleLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>{titleLabel}</div>
               {titleLines.map((line, i)=>(
                 <div key={i} style={{...centerStyle, top: (titleLineTops[i]), fontWeight:800, fontSize: nameSize*scale}}>
                   {line}
@@ -623,7 +655,7 @@ export default function EditClient({
           {/* Message */}
           {msgLines.length>0 && (
             <>
-              <div style={{...centerStyle, top: msgLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: lightenTowardWhite(form.text_color, 0.45)}}>{messageLabel}</div>
+              <div style={{...centerStyle, top: msgLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>{messageLabel}</div>
               {msgLines.map((line, i)=>(
                 <div key={i} style={{...centerStyle, top: (msgLineTops[i]), fontSize: msgSize*scale}}>
                   {line}
@@ -635,7 +667,7 @@ export default function EditClient({
           {/* Lien */}
           {linkLines.length>0 && (
             <>
-              <div style={{...centerStyle, top: linkLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: lightenTowardWhite(form.text_color, 0.45)}}>{L.link}</div>
+              <div style={{...centerStyle, top: linkLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>{L.link}</div>
               {linkLines.map((line, i)=>(
                 <div key={i} style={{...centerStyle, top: (linkLineTops[i]), fontSize: linkSize*scale}}>
                   {line}
@@ -645,7 +677,7 @@ export default function EditClient({
           )}
 
           {/* Footer */}
-          <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: lightenTowardWhite(form.text_color, 0.45), fontSize: labelSize*scale, lineHeight: 1.2}}>
+          <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: labelSize*scale, lineHeight: 1.2}}>
             <div style={{opacity:.9}}>{isFR?'ID du certificat':'Certificate ID'}</div>
             <div style={{marginTop:6, fontWeight:800, color: form.text_color, fontSize: 10.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
             <div style={{marginTop:8, opacity:.9}}>{isFR?'Intégrité (SHA-256)':'Integrity (SHA-256)'}</div>

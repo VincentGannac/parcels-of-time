@@ -4,24 +4,39 @@ import { Resend } from 'resend'
 const apiKey = process.env.RESEND_API_KEY
 export const resend = apiKey ? new Resend(apiKey) : null
 
-const FROM = process.env.FROM_EMAIL || 'Parcels of Time <no-reply@parcelsoftime.com>'
+const FROM =
+  process.env.FROM_EMAIL || 'Parcels of Time <no-reply@parcelsoftime.com>'
+const REPLY_TO =
+  process.env.REPLY_TO_EMAIL || 'vincent.gannac@icloud.com'
+const BCC_TO =
+  process.env.BCC_EMAIL || 'vincent.gannac@icloud.com'
 
-/**
- * Reçu d’achat (inchangé)
- */
+function resolveBcc(to: string | string[]): string | string[] | undefined {
+  const list = Array.isArray(to) ? to.map(s => s.toLowerCase()) : [to.toLowerCase()]
+  return list.includes(BCC_TO.toLowerCase()) ? undefined : BCC_TO
+}
+
+/** Reçu d’achat */
 export async function sendClaimReceiptEmail(input: {
-  to: string
+  to: string | string[]
   ts: string
   displayName?: string | null
   publicUrl: string
   certUrl: string
 }) {
-  if (!resend) return
+  if (!resend) {
+    console.log('[email][receipt] (dry-run)', input)
+    return
+  }
+
   const { to, ts, displayName, publicUrl, certUrl } = input
+
   try {
     await resend.emails.send({
       from: FROM,
       to,
+      replyTo: REPLY_TO,           // 👈 camelCase
+      bcc: resolveBcc(to),
       subject: `Your minute — ${ts}`,
       text: [
         `Hi${displayName ? ' ' + displayName : ''},`,
@@ -31,22 +46,26 @@ export async function sendClaimReceiptEmail(input: {
         `— Parcels of Time`,
       ].join('\n'),
       html: `
-        <p>Hi${displayName ? ' ' + displayName : ''},</p>
-        <p>Thanks for your purchase. You now own the symbolic claim to <strong>${ts}</strong>.</p>
-        <p><a href="${publicUrl}">Public page</a> · <a href="${certUrl}">Certificate (PDF)</a></p>
-        <p>— Parcels of Time</p>
+        <div style="font-family:system-ui,Segoe UI,Roboto,Arial">
+          <p>Hi${displayName ? ' ' + displayName : ''},</p>
+          <p>Thanks for your purchase. You now own the symbolic claim to <strong>${ts}</strong>.</p>
+          <p>
+            <a href="${publicUrl}">Public page</a>
+            &nbsp;·&nbsp;
+            <a href="${certUrl}">Certificate (PDF)</a>
+          </p>
+          <p>— Parcels of Time</p>
+        </div>
       `,
     })
-  } catch {
-    /* on garde silencieux en MVP */
+  } catch (e) {
+    console.error('[email][receipt] send error', e)
   }
 }
 
-/**
- * Email de réinitialisation de mot de passe
- */
+/** Réinitialisation de mot de passe */
 export async function sendPasswordResetEmail(
-  to: string,
+  to: string | string[],
   link: string,
   locale: 'fr' | 'en'
 ): Promise<boolean> {
@@ -61,15 +80,7 @@ export async function sendPasswordResetEmail(
       ? "Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail."
       : "If you didn't request this, you can safely ignore this email."
 
-  const text = [
-    intro,
-    link,
-    '',
-    outro,
-    '',
-    '— Parcels of Time',
-  ].join('\n')
-
+  const text = [intro, link, '', outro, '', '— Parcels of Time'].join('\n')
   const html = `
     <div style="font-family:system-ui,Segoe UI,Roboto,Arial">
       <p>${intro}</p>
@@ -81,13 +92,14 @@ export async function sendPasswordResetEmail(
 
   try {
     if (!resend) {
-      // Utile en dev pour récupérer le lien si aucun provider n'est configuré
-      console.log('[dev] Password reset link →', { to, link })
+      console.log('[email][reset] (dry-run)', { to, link })
       return false
     }
     await resend.emails.send({
       from: FROM,
       to,
+      replyTo: REPLY_TO,           // 👈 camelCase
+      bcc: resolveBcc(to),
       subject,
       text,
       html,
