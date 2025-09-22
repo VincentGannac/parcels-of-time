@@ -218,8 +218,11 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     ownedBy: true,
     title: true,
     message: true,
+    attestation: true,   // ✅ nouveau bloc non essentiel
     giftedBy: true, // seulement si isGift
   })
+
+  
 
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
@@ -485,6 +488,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     // “Offert par” : injecté dans le message (pour compat PDF)
     const msgParts: string[] = []
     if (show.message && form.message.trim()) msgParts.push(form.message.trim())
+    if (show.message && show.attestation) msgParts.push(attestationText)
     if (isGift && show.giftedBy && form.gifted_by.trim()) {
       msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
     }
@@ -577,6 +581,9 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     return ()=>ro.disconnect()
   }, [])
 
+  const ownerForText = (form.display_name || '').trim() || L.anon
+  const attestationText = `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${chosenDateStr}. Cette date est officiellement inscrite comme faisant partie de sa collection personnelle de journées de l'Histoire. Le présent document confirme la validité et l'authenticité de cette acquisition.`
+
   // données d'entrée pour la préview
   const showOwned = show.ownedBy
   const showGifted = isGift && show.giftedBy
@@ -596,9 +603,12 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     ? (form.title.trim() || L.placeholders.title)
     : ''
 
-  const messageForPreview = showM
-    ? (form.message.trim() || L.placeholders.message)
-    : ''
+   const messageForPreview = showM
+   ? [
+       (form.message.trim() || L.placeholders.message),
+       ...(show.attestation ? [attestationText] : []),
+     ].filter(Boolean).join(' ')
+   : ''
 
   const mainTime = chosenDateStr // toujours AAAA-MM-JJ
 
@@ -865,6 +875,14 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
                       onChange={e=>setShow(s=>({...s, message:e.target.checked}))}
                     />
                     <span>{messageLabel}</span>
+                  </label>
+                    <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                    <input
+                      type="checkbox"
+                      checked={show.attestation}
+                      onChange={e=>setShow(s=>({...s, attestation:e.target.checked}))}
+                    />
+                    <span>Texte d’attestation</span>
                   </label>
                   {isGift && (
                     <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
@@ -1144,13 +1162,13 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
               )}
 
               {/* Title */}
-              {titleForPreview && (
+                   {titleForPreview && (
                 <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: titleLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                <div style={{ ...centerStyle, top: titleLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {titleLabel}
                   </div>
                   {titleLines.map((line, i)=>(
-                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: titleLineTops[i], fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
+                     <div key={i} style={{ ...centerStyle, top: titleLineTops[i], fontWeight:800, fontSize: 15*scale }}>
                       {line}
                     </div>
                   ))}
@@ -1160,11 +1178,11 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
               {/* Message (Regular, pas d’italique pour coller au PDF) */}
               {msgLines.length>0 && (
                 <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: msgLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                  <div style={{ ...centerStyle, top: msgLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {messageLabel}
                   </div>
                   {msgLines.map((line, i)=>(
-                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: msgLineTops[i], fontSize: 12.5*scale, color: form.text_color }}>
+                    <div key={i} style={{ ...centerStyle, top: msgLineTops[i], fontSize: 12.5*scale }}>
                       {line}
                     </div>
                   ))}

@@ -344,8 +344,13 @@ export default function EditClient({
     ownedBy: true,
     title: true,
     message: true,
+    attestation: true,  // ✅ nouveau
     giftedBy: isGift,
   })
+
+  const ownerForText = (form.display_name || '').trim() || L.anon
+  const chosenDateStr = ymdUTC(parsedDate)   // déjà présent plus bas ; garde une seule définition
+  const attestationText = `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${chosenDateStr}. Cette date est officiellement inscrite comme faisant partie de sa collection personnelle de journées de l'Histoire. Le présent document confirme la validité et l'authenticité de cette acquisition.`
 
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
@@ -369,7 +374,7 @@ export default function EditClient({
   const subtleColor = lightenTowardWhite(mainColor, 0.45)
   const ratio = contrastRatio(mainColor)
   const ratioMeta = ratioLabel(ratio)
-  const chosenDateStr = ymdUTC(parsedDate)
+
 
   const meas = useMemo(()=>makeMeasurer(scale), [scale])
   const SA = getSafeArea(form.cert_style)
@@ -395,7 +400,12 @@ export default function EditClient({
   const nameForPreview = showOwned ? (form.display_name.trim() || L.anon) : ''
   const giftedByStr = showGifted ? (form.gifted_by.trim() || L.placeholders.giftedName) : ''
   const titleForPreview = showT ? (form.title.trim() || L.placeholders.title) : ''
-  const messageForPreview = showM ? (form.message.trim() || L.placeholders.message) : ''
+  const messageForPreview = showM
+   ? [
+       (form.message.trim() || L.placeholders.message),
+       ...(show.attestation ? [attestationText] : []),
+     ].filter(Boolean).join(' ')
+   : ''
 
   const titleLines = titleForPreview ? meas.wrap(titleForPreview, nameSize, COLW, true).slice(0, 2) : []
   const msgLinesAll = messageForPreview ? meas.wrap('“' + messageForPreview + '”', msgSize, COLW, false) : []
@@ -482,7 +492,8 @@ export default function EditClient({
     // Compose message final (avec Gifted by si activé)
     const msgParts: string[] = []
     if (show.message && form.message.trim()) msgParts.push(form.message.trim())
-    if (isGift && show.giftedBy && form.gifted_by.trim()) {
+      if (show.message && show.attestation) msgParts.push(attestationText)
+      if (isGift && show.giftedBy && form.gifted_by.trim()) {
       msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
     }
     if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
@@ -637,6 +648,10 @@ export default function EditClient({
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
                 <input type="checkbox" checked={show.message} onChange={e=>setShow(s=>({...s, message:e.target.checked}))}/>
                 <span>{messageLabel}</span>
+              </label>
+              <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                <input type="checkbox" checked={show.attestation} onChange={e=>setShow(s=>({...s, attestation:e.target.checked}))}/>
+                <span>Texte d’attestation</span>
               </label>
               {isGift && (
                 <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
