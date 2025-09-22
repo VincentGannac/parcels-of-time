@@ -438,8 +438,15 @@ export default function EditClient({
   let y = by + blockH
 
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
-  const centerStyle: React.CSSProperties = { position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre-wrap', color: form.text_color }
-
+  const centerStyle: React.CSSProperties = {
+      position:'absolute',
+      left:'50%',
+      transform:'translateX(-50%)',
+      textAlign:'center',
+      whiteSpace:'pre',      // idem : pas de re-wrap
+      wordBreak:'normal',
+      color: form.text_color
+    }
 
   // Séquence identique au PDF (baselines)
   y -= (tsSize + 6); const topMainTime = toTopPx(y, tsSize)
@@ -925,8 +932,8 @@ export default function EditClient({
           {linkLines.length>0 && (
             <>
               <div style={{...centerStyle, top: linkLabelTop!, fontWeight:400, fontSize: labelSize*scale, color: subtleColor}}>{L.link}</div>
-              {linkLines.map((line, i)=>(
-                <div key={i} style={{...centerStyle, top: (linkLineTops[i]), fontSize: linkSize*scale}}>
+                {linkLines.map((line, i)=>(
+                <div key={i} style={{ ...centerStyle, top: linkLineTops[i], fontSize: linkSize*scale }}>
                   {line}
                 </div>
               ))}

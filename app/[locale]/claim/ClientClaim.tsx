@@ -692,7 +692,15 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   // Helpers: convertir baseline PDF -> CSS top px
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
-  const centerStyle: React.CSSProperties = { position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre-wrap', color: form.text_color }
+  const centerStyle: React.CSSProperties = {
+      position:'absolute',
+      left:'50%',
+      transform:'translateX(-50%)',
+      textAlign:'center',
+      whiteSpace:'pre',      // ⚠️ empêcher un second wrapping
+      wordBreak:'normal',
+      color: form.text_color
+    }
 
   // === CALCUL des y (séquence STRICTEMENT identique au PDF) ===
   // 1) Date principale
@@ -1202,11 +1210,14 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
                   <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: linkLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                     {L.link}
                   </div>
-                  {linkLines.map((line, i)=>(
-                    <div key={i} style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: linkLineTops[i], fontSize: 10.5*scale, color: mixColorForLink(form.text_color) }}>
-                      {line}
-                    </div>
-                  ))}
+                    {linkLines.map((line, i)=>(
+                  <div
+                    key={i}
+                    style={{ ...centerStyle, top: linkLineTops[i], fontSize: 10.5*scale, color: mixColorForLink(form.text_color) }}
+                  >
+                    {line}
+                  </div>
+                ))}
                 </>
               )}
 
