@@ -1,3 +1,4 @@
+//app/types/utif.d.ts
 declare module 'utif' {
     const UTIF: any
     export default UTIF

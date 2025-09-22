@@ -4,6 +4,7 @@
 import type React from 'react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
+
 type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
@@ -70,6 +71,134 @@ function makeMeasurer(scale:number){
     if(line) lines.push(line); return lines
   }
   return { wrap }
+}
+
+/** ====== Pipeline import / normalisation image ====== */
+function looks(exts:string[], name:string, type:string){
+  const low = (name || '').toLowerCase()
+  const t   = (type || '').toLowerCase()
+  return exts.some(ext => low.endsWith('.'+ext) || t.includes(ext))
+}
+async function heicToPngIfNeeded(original: File): Promise<{file: File, wasHeic:boolean}> {
+  const type = (original.type || '').toLowerCase()
+  const looksHeic = /^image\/(heic|heif|heic-sequence|heif-sequence)$/.test(type) || /\.(heic|heif)$/i.test(original.name)
+  if (!looksHeic) return { file: original, wasHeic:false }
+  const heic2any = (await import('heic2any')).default as (opts:any)=>Promise<Blob>
+  const out = await heic2any({ blob: original, toType: 'image/png', quality: 0.92 })
+  return { file: new File([out], original.name.replace(/\.(heic|heif)\b/i, '.png'), { type:'image/png' }), wasHeic:true }
+}
+async function getExifOrientation(file: File): Promise<number> {
+  try {
+    const { parse } = (await import('exifr')) as any;
+    const meta = await parse(file, { pick: ['Orientation'] });
+    return meta?.Orientation || 1;
+  } catch { return 1 }
+}
+function drawNormalized(img: HTMLImageElement, orientation: number) {
+  const w = img.naturalWidth, h = img.naturalHeight
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')!
+  const swap = (o:number) => o >= 5 && o <= 8
+  canvas.width  = swap(orientation) ? h : w
+  canvas.height = swap(orientation) ? w : h
+  switch (orientation) {
+    case 2: ctx.transform(-1, 0, 0, 1, canvas.width, 0); break
+    case 3: ctx.transform(-1, 0, 0, -1, canvas.width, canvas.height); break
+    case 4: ctx.transform(1, 0, 0, -1, 0, canvas.height); break
+    case 5: ctx.transform(0, 1, 1, 0, 0, 0); break
+    case 6: ctx.transform(0, 1, -1, 0, canvas.height, 0); break
+    case 7: ctx.transform(0, -1, -1, 0, canvas.height, canvas.width); break
+    case 8: ctx.transform(0, -1, 1, 0, 0, canvas.width); break
+    default: break
+  }
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(img, 0, 0, w, h)
+  return { dataUrl: canvas.toDataURL('image/png', 0.92), w: canvas.width, h: canvas.height }
+}
+async function decodeTiffToPngDataUrl(file: File): Promise<{dataUrl:string; w:number; h:number}> {
+  const UTIF = (await import('utif')).default
+  const buf = new Uint8Array(await file.arrayBuffer())
+  const ifds = UTIF.decode(buf)
+  if (!ifds || !ifds.length) throw new Error('TIFF decode failed')
+  UTIF.decodeImage(buf, ifds[0])
+  const rgba = UTIF.toRGBA8(ifds[0])
+  const w = ifds[0].width || ifds[0].t256 || ifds[0].tImageWidth
+  const h = ifds[0].height || ifds[0].t257 || ifds[0].tImageLength
+  if (!w || !h) throw new Error('TIFF size missing')
+  const c = document.createElement('canvas')
+  c.width = w; c.height = h
+  const ctx = c.getContext('2d')!
+  const img = ctx.createImageData(w, h)
+  img.data.set(rgba)
+  ctx.putImageData(img, 0, 0)
+  return { dataUrl: c.toDataURL('image/png', 0.92), w, h }
+}
+async function rasterizeVectorOrBitmap(file: File, orientation = 1){
+  const tmpUrl = URL.createObjectURL(file)
+  try {
+    const img = new Image()
+    const done = new Promise<{dataUrl:string; w:number; h:number}>((resolve, reject) => {
+      img.onload = () => resolve(drawNormalized(img, orientation || 1))
+      img.onerror = reject
+    })
+    img.src = tmpUrl
+    return await done
+  } finally { URL.revokeObjectURL(tmpUrl) }
+}
+async function normalizeToPng(original: File) {
+  const name = original.name || ''
+  const type = (original.type || '')
+
+  // 1) HEIC/HEIF → PNG (via lib) + orientation EXIF du fichier d'origine
+  if (looks(['heic','heif'], name, type)) {
+    const { file: afterHeic } = await heicToPngIfNeeded(original)
+    const orientation = await getExifOrientation(original)
+    return rasterizeVectorOrBitmap(afterHeic, orientation)
+  }
+
+  // 2) TIFF → PNG (via utif)
+  if (looks(['tif','tiff'], name, type)) {
+    return decodeTiffToPngDataUrl(original)
+  }
+
+  // 3) SVG (vectoriel) → canvas (pas d’EXIF)
+  if (looks(['svg'], name, type)) {
+    return rasterizeVectorOrBitmap(original, 1)
+  }
+
+  // 4) WEBP/AVIF/GIF/BMP/PNG/JPEG : navigateur décode → canvas + EXIF si JPEG
+  const orientation = looks(['jpg','jpeg'], name, type) ? (await getExifOrientation(original)) : 1
+  return rasterizeVectorOrBitmap(original, orientation)
+}
+function bytesFromDataURL(u: string) {
+  const i = u.indexOf(',')
+  const b64 = i >= 0 ? u.slice(i + 1) : u
+  return Math.floor(b64.length * 0.75)
+}
+function coverToA4JPEG(dataUrl: string, srcW: number, srcH: number) {
+  const TARGET_W = 2480, TARGET_H = 3508
+  const MAX_BYTES = 3.5 * 1024 * 1024
+  return new Promise<{ dataUrl: string; w: number; h: number }>((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const c = document.createElement('canvas')
+      c.width = TARGET_W; c.height = TARGET_H
+      const ctx = c.getContext('2d')!
+      ctx.imageSmoothingQuality = 'high'
+      const scale = Math.max(TARGET_W / srcW, TARGET_H / srcH)
+      const dw = srcW * scale, dh = srcH * scale
+      const dx = (TARGET_W - dw) / 2, dy = (TARGET_H - dh) / 2
+      ctx.drawImage(img, dx, dy, dw, dh)
+      let q = 0.82
+      let out = c.toDataURL('image/jpeg', q)
+      while (bytesFromDataURL(out) > MAX_BYTES && q > 0.5) {
+        q -= 0.06
+        out = c.toDataURL('image/jpeg', q)
+      }
+      resolve({ dataUrl: out, w: TARGET_W, h: TARGET_H })
+    }
+    img.src = dataUrl
+  })
 }
 
 type Initial = {
@@ -152,13 +281,23 @@ export default function EditClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Image custom (chargée depuis l'API) — placé APRÈS la déclaration de `form`
+  /** ===== Custom background (édition) =====
+   * customBgUrl : l'image actuelle stockée (chargée depuis /api/claim-bg/<ts>)
+   * customBgLocal : nouvelle image choisie par l'utilisateur (prioritaire dans la preview & submit)
+   */
   const [customBgUrl, setCustomBgUrl] = useState<string | null>(null)
+  const [customBgLocal, setCustomBgLocal] = useState<{ dataUrl:string; w:number; h:number } | null>(null)
+  const [imgLoading, setImgLoading] = useState(false)
+  const [customErr, setCustomErr] = useState('')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const openFileDialog = () => fileInputRef.current?.click()
+
+  // Charger le fond déjà enregistré (sauf si on a une nouvelle image locale)
   useEffect(() => {
     let ignore = false
     let objectUrl: string | null = null
 
-    if (form.cert_style === 'custom') {
+    if (form.cert_style === 'custom' && !customBgLocal) {
       const url = `/api/claim-bg/${encodeURIComponent(tsISO)}`
       fetch(url)
         .then(r => r.ok ? r.blob() : Promise.reject(r.status))
@@ -173,9 +312,32 @@ export default function EditClient({
         if (objectUrl) URL.revokeObjectURL(objectUrl)
       }
     } else {
+      // autre style ou bien on a une image locale → pas besoin du fond serveur
       setCustomBgUrl(null)
     }
-  }, [tsISO, form.cert_style])
+  }, [tsISO, form.cert_style, customBgLocal])
+
+  async function onPickCustomBg(file?: File | null) {
+    try {
+      setCustomErr('')
+      if (!file) return
+      setImgLoading(true)
+      const { dataUrl: normalizedUrl, w, h } = await normalizeToPng(file)
+      const { dataUrl: a4Url, w: tw, h: th } = await coverToA4JPEG(normalizedUrl, w, h)
+      if (bytesFromDataURL(a4Url) > 4 * 1024 * 1024) {
+        setCustomErr('Image trop lourde après préparation. Réessayez avec une photo plus légère.')
+        return
+      }
+      setCustomBgLocal({ dataUrl: a4Url, w: tw, h: th })
+      setForm(f => ({ ...f, cert_style: 'custom' }))
+    } catch (e) {
+      console.error('[Edit/CustomBG] onPickCustomBg', e)
+      setCustomErr('Erreur de lecture ou de conversion de l’image.')
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      setImgLoading(false)
+    }
+  }
 
   // Visibilité (on présente les mêmes toggles que ClientClaim)
   const [show, setShow] = useState({
@@ -342,6 +504,11 @@ export default function EditClient({
       message_public: form.message_public ? '1' : '0',
     }
 
+    // ⬇️ Nouvelle image locale ? on l’envoie au serveur
+    if (form.cert_style === 'custom' && customBgLocal?.dataUrl) {
+      payload.custom_bg_data_url = customBgLocal.dataUrl
+    }
+
     const res = await fetch('/api/checkout/edit', {
       method:'POST', headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify(payload)
@@ -378,6 +545,15 @@ export default function EditClient({
 
   return (
     <div style={{ display:'grid', gridTemplateColumns:'1.1fr 0.9fr', gap:18, alignItems:'start' }}>
+      {/* input fichier caché (tous formats) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.webp,.avif"
+        style={{display:'none'}}
+        onChange={(e)=>onPickCustomBg(e.currentTarget.files?.[0] || null)}
+      />
+
       {/* ---------- FORM EDIT ---------- */}
       <form onSubmit={onSubmit} style={{display:'grid', gap:14}}>
         {/* Infos */}
@@ -549,16 +725,33 @@ export default function EditClient({
 
         {/* Style */}
         <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-          <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>STYLE</div>
+          <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, marginBottom:8}}>
+            <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>STYLE</div>
+            {/* Bouton global pour (re)choisir un fond custom quand le style est custom */}
+            {form.cert_style === 'custom' && (
+              <button type="button" onClick={openFileDialog}
+                style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)', cursor:'pointer'}}>
+                {imgLoading ? (isFR ? 'Chargement…' : 'Loading…') : (isFR ? 'Importer une image' : 'Upload image')}
+              </button>
+            )}
+          </div>
+
+          {!!customErr && (
+            <div style={{marginBottom:8, padding:'8px 10px', borderRadius:10, border:'1px solid #ff8a8a', color:'#ffb2b2', background:'rgba(255,0,0,.06)'}}>
+              {customErr}
+            </div>
+          )}
+
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
             {STYLES.map(s => {
               const selected = form.cert_style === s.id
               const thumb = `/cert_bg/${s.id}_thumb.jpg`
               const full = `/cert_bg/${s.id}.png`
+              const isCustom = s.id === 'custom'
               return (
                 <div key={s.id} style={{position:'relative'}}>
                   <div
-                    onClick={()=>setForm(f => ({...f, cert_style: s.id}))}
+                    onClick={()=>setForm(f => ({...f, cert_style: s.id }))}
                     onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setForm(f => ({...f, cert_style: s.id})) } }}
                     role="button" tabIndex={0} aria-label={`Style ${s.label}`}
                     style={{
@@ -568,7 +761,13 @@ export default function EditClient({
                       boxShadow: selected ? 'var(--shadow-elev1)' : undefined
                     }}
                   >
-                    <div style={{height:110, borderRadius:12, border:'1px solid var(--color-border)', backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'}} aria-hidden />
+                    <div
+                      style={{
+                        height:110, borderRadius:12, border:'1px solid var(--color-border)',
+                        backgroundImage:`url(${thumb}), url(${full})`, backgroundSize:'cover', backgroundPosition:'center', backgroundColor:'#0E1017'
+                      }}
+                      aria-hidden
+                    />
                     <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                       <div>
                         <div style={{fontWeight:700}}>{s.label}</div>
@@ -577,10 +776,39 @@ export default function EditClient({
                       <span aria-hidden="true" style={{width:10, height:10, borderRadius:99, background:selected ? 'var(--color-primary)' : 'var(--color-border)'}} />
                     </div>
                   </div>
+
+                  {/* Actions spécifiques Custom */}
+                  {isCustom && (
+                    <>
+                      {imgLoading && (
+                        <div style={{position:'absolute', top:10, left:10, fontSize:11, padding:'4px 8px', borderRadius:999, background:'rgba(255,255,255,.08)', border:'1px solid var(--color-border)'}}>Chargement…</div>
+                      )}
+                      {(customBgLocal || customBgUrl) && (
+                        <div style={{position:'absolute', top:10, right:10, fontSize:11, padding:'4px 8px', borderRadius:999, background:'rgba(228,183,61,.14)', border:'1px solid var(--color-primary)'}}>
+                          Image chargée ✓ {customBgLocal?.w || 'A4'}×{customBgLocal?.h || 'A4'}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e)=>{ e.stopPropagation(); openFileDialog() }}
+                        style={{
+                          position:'absolute', bottom:12, right:12,
+                          padding:'6px 10px', borderRadius:10, border:'1px solid var(--color-border)',
+                          background:'var(--color-surface)', color:'var(--color-text)', cursor:'pointer', fontSize:12
+                        }}
+                      >
+                        {isFR ? 'Importer une image' : 'Upload image'}
+                      </button>
+                    </>
+                  )}
                 </div>
               )
             })}
           </div>
+
+          <p style={{margin:'10px 2px 0', fontSize:12, opacity:.7}}>
+            Formats acceptés : JPG, PNG, WEBP, AVIF, GIF, BMP, SVG, HEIC/HEIF, TIFF. L’image est adaptée au format A4 (2480×3508).
+          </p>
         </div>
 
         {/* Submit */}
@@ -600,12 +828,20 @@ export default function EditClient({
       <aside aria-label="Aperçu du certificat"
         style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
         <div ref={previewWrapRef} style={{position:'relative', width:'100%', aspectRatio: `${A4_W_PT}/${A4_H_PT}`, borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
-          {/* Fond : custom via API sinon style statique */}
+          {/* Fond : priorise l'image locale choisie, sinon l'image serveur, sinon style statique */}
           <img
-            key={form.cert_style === 'custom' ? `custom-${tsISO}-${!!customBgUrl}` : form.cert_style}
-            src={form.cert_style === 'custom'
-              ? (customBgUrl || '/cert_bg/neutral.png')
-              : `/cert_bg/${form.cert_style}.png`}
+            key={
+              form.cert_style === 'custom'
+                ? (customBgLocal
+                    ? `local-${customBgLocal.w}x${customBgLocal.h}`
+                    : `server-${tsISO}-${!!customBgUrl}`)
+                : form.cert_style
+            }
+            src={
+              form.cert_style === 'custom'
+                ? (customBgLocal?.dataUrl || customBgUrl || '/cert_bg/neutral.png')
+                : `/cert_bg/${form.cert_style}.png`
+            }
             alt={`Aperçu fond certificat — ${form.cert_style}`}
             style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', background:'#0E1017'}}
           />
