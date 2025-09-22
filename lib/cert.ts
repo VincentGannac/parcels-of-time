@@ -208,12 +208,22 @@ export async function generateCertificatePDF(opts: {
       if (mGift) { giftedName = mGift[2].trim(); continue }
       kept.push(l)
     }
-    messageClean = kept.join(' ')
+    messageClean = kept.join('\n')  // ← on conserve les paragraphes
   }
   const hasName = !forceHideOwned && !!(display_name && String(display_name).trim())
 
   // Wraps
-  const msgLinesAll = messageClean ? wrapText('“' + messageClean + '”', font, msgSize, COLW) : []
+  let msgLinesAll: string[] = []
+  if (messageClean) {
+    const paras = messageClean.split(/\n+/)
+    paras.forEach((p, i) => {
+      const lines = wrapText(p, font, msgSize, COLW)
+      msgLinesAll.push(...lines)
+      if (i < paras.length - 1) msgLinesAll.push('') // ligne vide entre paragraphes
+    })
+  }
+
+
   const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
 
   // Hauteurs des blocs optionnels
@@ -290,9 +300,10 @@ export async function generateCertificatePDF(opts: {
     page.drawText(L.message, { x: CX - font.widthOfTextAtSize(L.message, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
     y -= (labelSize + 6)
     for (const line of msgLines) {
-      page.drawText(line, { x: CX - font.widthOfTextAtSize(line, msgSize)/2, y: y - lineHMsg, size: msgSize, font, color: cMain })
-      y -= lineHMsg
-    }
+        if (line === '') { y -= lineHMsg; continue } // saute une ligne pour l’espace
+        page.drawText(line, { x: CX - font.widthOfTextAtSize(line, msgSize)/2, y: y - lineHMsg, size: msgSize, font, color: cMain })
+        y -= lineHMsg
+      }
   }
 
   // Lien

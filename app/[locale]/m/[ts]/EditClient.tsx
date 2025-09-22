@@ -401,14 +401,19 @@ export default function EditClient({
   const giftedByStr = showGifted ? (form.gifted_by.trim() || L.placeholders.giftedName) : ''
   const titleForPreview = showT ? (form.title.trim() || L.placeholders.title) : ''
   const messageForPreview = showM
-   ? [
-       (form.message.trim() || L.placeholders.message),
-       ...(show.attestation ? [attestationText] : []),
-     ].filter(Boolean).join(' ')
-   : ''
+    ? [
+        (form.message.trim() || L.placeholders.message),
+        ...(show.attestation ? [attestationText] : []),
+      ].filter(Boolean).join('\n\n')   // ← espace visuel entre perso & attestation
+    : ''
 
   const titleLines = titleForPreview ? meas.wrap(titleForPreview, nameSize, COLW, true).slice(0, 2) : []
-  const msgLinesAll = messageForPreview ? meas.wrap('“' + messageForPreview + '”', msgSize, COLW, false) : []
+  const msgLinesAll = messageForPreview
+  ? messageForPreview.split(/\n+/).flatMap((p, i, arr) => {
+      const lines = meas.wrap(p, msgSize, COLW, false)
+      return i < arr.length - 1 ? [...lines, ''] : lines   // '' = ligne vide
+    })
+  : []
   const linkLinesAll = form.link_url ? meas.wrap(form.link_url, linkSize, COLW, false) : []
   const ownedBlockH = showOwned ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
   const giftedBlockH = showGifted ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
@@ -433,7 +438,8 @@ export default function EditClient({
   let y = by + blockH
 
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
-  const centerStyle: React.CSSProperties = { position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre', color: form.text_color }
+  const centerStyle: React.CSSProperties = { position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre-wrap', color: form.text_color }
+
 
   // Séquence identique au PDF (baselines)
   y -= (tsSize + 6); const topMainTime = toTopPx(y, tsSize)

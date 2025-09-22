@@ -603,12 +603,12 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     ? (form.title.trim() || L.placeholders.title)
     : ''
 
-   const messageForPreview = showM
-   ? [
-       (form.message.trim() || L.placeholders.message),
-       ...(show.attestation ? [attestationText] : []),
-     ].filter(Boolean).join(' ')
-   : ''
+  const messageForPreview = showM
+    ? [
+        (form.message.trim() || L.placeholders.message),
+        ...(show.attestation ? [attestationText] : []),
+      ].filter(Boolean).join('\n\n')
+    : ''
 
   const mainTime = chosenDateStr // toujours AAAA-MM-JJ
 
@@ -644,7 +644,14 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const meas = useMemo(()=>makeMeasurer(scale), [scale])
 
   const titleLines = titleForPreview ? meas.wrap(titleForPreview, nameSize, COLW, true).slice(0, 2) : []
-  const msgLinesAll = messageForPreview ? meas.wrap('“' + messageForPreview + '”', msgSize, COLW, false) : []
+  
+  const msgLinesAll = messageForPreview
+  ? messageForPreview.split(/\n+/).flatMap((p, i, arr) => {
+      const lines = meas.wrap(p, msgSize, COLW, false)
+      return i < arr.length - 1 ? [...lines, ''] : lines
+    })
+  : []
+
   const linkLinesAll = form.link_url ? meas.wrap(form.link_url, linkSize, COLW, false) : []
 
   // Hauteurs des blocs optionnels — mêmes formules que le PDF
@@ -685,7 +692,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   // Helpers: convertir baseline PDF -> CSS top px
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
-  const centerStyle: React.CSSProperties = { position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre', color: form.text_color }
+  const centerStyle: React.CSSProperties = { position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre-wrap', color: form.text_color }
 
   // === CALCUL des y (séquence STRICTEMENT identique au PDF) ===
   // 1) Date principale
