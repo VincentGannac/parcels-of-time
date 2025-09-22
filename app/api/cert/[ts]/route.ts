@@ -88,12 +88,15 @@ export async function GET(req: Request, ctx: any) {
 
   const row = rows[0]
 
-  // Fond custom éventuel (sur la minute normalisée)
-  const { rows: bgRows } = await pool.query(
-    'select data_url from claim_custom_bg where ts=$1::timestamptz',
-    [tsISO]
-  )
-  const customBgDataUrl = bgRows[0]?.data_url
+    // Fond custom uniquement si le style courant est "custom"
+  let customBgDataUrl: string | undefined
+  if ((row.cert_style || '').toLowerCase() === 'custom') {
+    const { rows: bgRows } = await pool.query(
+      'select data_url from claim_custom_bg where ts=$1::timestamptz',
+      [tsISO]
+    )
+    customBgDataUrl = bgRows[0]?.data_url
+  }
 
   // Mode d’affichage de l’heure (legacy → conservé)
   const td: string = row.time_display || 'local+utc'

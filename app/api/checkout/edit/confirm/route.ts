@@ -97,6 +97,30 @@ export async function GET(req: Request) {
         return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsISO)}?updated=0`, { status:303 })
       }
 
+        // ⛏️ Si on quitte le style "custom", on supprime le fond persistant
+      if (cert_style !== 'custom') {
+        await client.query(
+          'delete from claim_custom_bg where ts = $1::timestamptz',
+          [tsISO]
+        )
+      } else if (custom_bg_key) {
+        // (logique existante) si on reste en custom avec une nouvelle image, on persiste
+        const { rows: tmp } = await client.query(
+          'select data_url from custom_bg_temp where key = $1',
+          [custom_bg_key]
+        )
+        if (tmp.length) {
+          await client.query(
+            `insert into claim_custom_bg (ts, data_url)
+            values ($1::timestamptz, $2)
+            on conflict (ts) do update
+              set data_url = excluded.data_url, created_at = now()`,
+            [tsISO, tmp[0].data_url]
+          )
+          await client.query('delete from custom_bg_temp where key = $1', [custom_bg_key])
+        }
+      }
+
           // --- Si style custom & key fournie : persiste le nouveau fond ---
     if (cert_style === 'custom' && custom_bg_key) {
       // mêmes gardes que dans /api/checkout/confirm
