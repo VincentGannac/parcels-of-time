@@ -192,6 +192,7 @@ export async function generateCertificatePDF(opts: {
   const gapSection = 14, gapSmall = 8
   const lineHMsg = 16, lineHLink = 14
 
+  
   // Date label — AAAA-MM-JJ
   const mainTime = ymdFromUTC(ts)
 
@@ -257,7 +258,9 @@ export async function generateCertificatePDF(opts: {
   const titleBlock = titleText ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
 
   // Consommation avant le message : GiftedBy + Title
-  const beforeMsgConsumed = giftedBlockH + (titleBlock ? (gapSection + titleBlock) : 0)
+
+  const gapBeforeTitle = giftedName ? 8 : gapSection
+  const beforeMsgConsumed = giftedBlockH + (titleBlock ? (gapBeforeTitle + titleBlock) : 0)
   const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
   const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
   const msgLines = msgLinesAll.slice(0, maxMsgLines)
@@ -271,10 +274,15 @@ export async function generateCertificatePDF(opts: {
     + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
     + (linkLines.length ? (gapSection + linkLines.length * lineHLink) : 0)
 
+  /*
+
   const biasUp = 22
   let by = contentBottomMin + (availH - blockH) / 2 + biasUp
   let y = by + blockH
-
+  
+  */
+  // ancrage haut
+  let y = contentTopMax
   // Render — time
   y -= (tsSize + 6)
   page.drawText(mainTime, { x: CX - fontBold.widthOfTextAtSize(mainTime, tsSize)/2, y, size: tsSize, font: fontBold, color: cMain })
@@ -301,6 +309,7 @@ export async function generateCertificatePDF(opts: {
   // Title
   if (titleText) {
     y -= (nameSize + 4)
+    y -= (giftedName ? 8 : gapSection)
     y -= gapSection
     page.drawText(L.titleLabel, { x: CX - font.widthOfTextAtSize(L.titleLabel, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
     y -= (labelSize + 6)

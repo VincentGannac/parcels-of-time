@@ -378,7 +378,6 @@ export default function EditClient({
   const ratio = contrastRatio(mainColor)
   const ratioMeta = ratioLabel(ratio)
 
-
   const meas = useMemo(()=>makeMeasurer(scale), [scale])
   const SA = getSafeArea(form.cert_style)
   const LEFT = SA.left, RIGHT = A4_W_PT - SA.right, TOP_Y = A4_H_PT - SA.top, BOT_Y = SA.bottom
@@ -424,7 +423,8 @@ export default function EditClient({
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
   const titleBlockNoGap = titleForPreview ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
-  const beforeMsgConsumed = giftedBlockH + (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
+  const gapBeforeTitle = showGifted ? 8 : gapSection
+  const beforeMsgConsumed = giftedBlockH + (titleBlockNoGap ? (gapBeforeTitle + titleBlockNoGap) : 0)
   const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
   const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (form.link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
   const msgLines = msgLinesAll.slice(0, maxMsgLines)
@@ -436,10 +436,13 @@ export default function EditClient({
     + (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
     + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
     + (linkLines.length ? (gapSection + linkLines.length * lineHLink) : 0)
+  /*
   const biasUp = 22
   const by = contentBottomMin + (availH - blockH) / 2 + biasUp
   let y = by + blockH
-
+  */
+ 
+  let y = contentTopMax
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
   const centerStyle: React.CSSProperties = {
       position:'absolute',
@@ -451,6 +454,66 @@ export default function EditClient({
       color: form.text_color
     }
 
+  // lignes dispo totales pour Message (tel que déjà calculé)
+  const TOTAL_MSG_LINES = maxMsgLines
+
+  // nombre de lignes consommées par l’attestation (si cochée)
+  const attestLinesAll = show.attestation
+    ? meas.wrap(attestationText, msgSize, COLW, false)
+    : []
+  // + une ligne vide entre message perso et attestation si les deux existent
+  const attestExtraBlank = (show.attestation ? 1 : 0)
+
+  // capacité lignes pour le message perso seulement :
+  const LINES_FOR_USER = Math.max(0, TOTAL_MSG_LINES - attestLinesAll.length - attestExtraBlank)
+
+
+  function maxCharsByLines(text: string, linesBudget: number): number {
+    if (linesBudget <= 0) return 0
+    const words = (text || '').trim().split(/\s+/).filter(Boolean)
+    let usedLines = 0, line = '', usedChars = 0
+  
+    // on doit re-mesurer : on réutilise meas.wrap mais on avance mot à mot
+    const setFont = (sizePt:number, bold=false)=>{} // noop ici, déjà configuré
+    const maxPx = COLW * scale
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')!
+    ctx.font = `${msgSize * scale}px Helvetica, Arial, sans-serif`
+  
+    const w = (s:string)=>ctx.measureText(s).width
+  
+    for (let i=0;i<words.length;i++){
+      const wtest = line ? (line + ' ' + words[i]) : words[i]
+      if (w(wtest) <= maxPx) {
+        line = wtest
+        // si c’est le dernier mot, on compte la ligne finale
+        if (i === words.length - 1) {
+          usedLines++
+          usedChars += line.length + (usedLines>1?1:0) // +1 pour le saut de ligne précédent si besoin
+        }
+      } else {
+        // on commit la ligne actuelle
+        usedLines++
+        usedChars += line.length + (usedLines>1?1:0)
+        if (usedLines >= linesBudget) return usedChars - (usedLines>1?1:0)
+        line = words[i]
+        // si dernier mot après retour à la ligne
+        if (i === words.length - 1) {
+          usedLines++
+          usedChars += line.length + 1
+        }
+      }
+      if (usedLines >= linesBudget) break
+    }
+    return Math.min(usedChars, (text || '').trim().length)
+  }
+
+  const userMsgMaxChars = useMemo(() => {
+    return maxCharsByLines(form.message, LINES_FOR_USER)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.message, LINES_FOR_USER, scale, form.cert_style, show, isGift, chosenDateStr])
+  
+  
   // Séquence identique au PDF (baselines)
   y -= (tsSize + 6); const topMainTime = toTopPx(y, tsSize)
 
@@ -475,6 +538,7 @@ export default function EditClient({
   let titleLabelTop:number|null = null; const titleLineTops:number[] = []
   if (titleForPreview) {
     y -= (nameSize + 4)
+    y -= (giftedNameTop ? 8 : gapSection)
     y -= gapSection
     titleLabelTop = toTopPx(y - (labelSize + 2), labelSize)
     y -= (labelSize + 6)
@@ -506,14 +570,19 @@ export default function EditClient({
     setStatus('loading'); setError('')
 
     // Compose message final (avec Gifted by si activé)
-    const msgParts: string[] = []
-    if (show.message && form.message.trim()) msgParts.push(form.message.trim())
+    
+      const safeUserMsg = show.message ? (form.message || '') : ''
+      const cappedUserMsg =
+        userMsgMaxChars > 0 ? safeUserMsg.slice(0, userMsgMaxChars) : ''
+
+      const msgParts: string[] = []
+      if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
       if (show.message && show.attestation) msgParts.push(attestationText)
       if (isGift && show.giftedBy && form.gifted_by.trim()) {
-      msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
-    }
-    if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
-    const finalMessage = msgParts.length ? msgParts.join('\n') : ''
+        msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
+      }
+      if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
+      const finalMessage = msgParts.length ? msgParts.join('\n') : undefined
 
     const payload:any = {
       mode: 'edit',
@@ -662,6 +731,11 @@ export default function EditClient({
                 placeholder={isFR ? '“Le jour de notre rencontre…”' : '“The day we met…”'}
                 style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
               />
+              {show.message && (
+                <div style={{textAlign:'right', fontSize:12, opacity:.65, marginTop:4}}>
+                  {(form.message?.length || 0)} / {userMsgMaxChars || '∞'}
+                </div>
+              )}
             </label>
           </div>
 
