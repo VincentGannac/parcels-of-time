@@ -354,7 +354,7 @@ export default function EditClient({
 
   const ownerForText = (form.display_name || '').trim() || L.anon
   const chosenDateStr = ymdUTC(parsedDate)   // déjà présent plus bas ; garde une seule définition
-  const attestationText = `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${chosenDateStr}. Cette date est officiellement inscrite comme faisant partie de sa collection personnelle de journées de l'Histoire. Le présent document confirme la validité et l'authenticité de cette acquisition.`
+  const attestationText = `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${chosenDateStr}. Le présent document confirme la validité et l'authenticité de cette acquisition.`
 
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')

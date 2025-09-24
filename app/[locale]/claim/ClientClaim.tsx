@@ -590,7 +590,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   }, [])
 
   const ownerForText = (form.display_name || '').trim() || L.anon
-  const attestationText = `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${chosenDateStr}. Cette date est officiellement inscrite comme faisant partie de sa collection personnelle de journées de l'Histoire. Le présent document confirme la validité et l'authenticité de cette acquisition.`
+  const attestationText = `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${chosenDateStr}. Le présent document confirme la validité et l'authenticité de cette acquisition.`
 
   // données d'entrée pour la préview
   const showOwned = show.ownedBy
