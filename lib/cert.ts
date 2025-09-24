@@ -128,6 +128,7 @@ export async function generateCertificatePDF(opts: {
   const page = pdf.addPage([595.28, 841.89]) // A4 portrait
   const { width, height } = page.getSize()
 
+  const MIN_GAP_HEADER_PT = 28
   // Background
   try {
     let embedded = false
@@ -171,9 +172,20 @@ export async function generateCertificatePDF(opts: {
   // Header
   const brandSize = 18, subSize = 12
   let yHeader = TOP_Y - 40
-  page.drawText(L.brand, { x: CX - fontBold.widthOfTextAtSize(L.brand, brandSize)/2, y: yHeader, size: brandSize, font: fontBold, color: cMain })
+  const yBrand = yHeader
+
+  page.drawText(L.brand, {
+  x: CX - fontBold.widthOfTextAtSize(L.brand, brandSize)/2,
+  y: yHeader, size: brandSize, font: fontBold, color: cMain
+  })
   yHeader -= 18
-  page.drawText(L.title, { x: CX - font.widthOfTextAtSize(L.title, subSize)/2, y: yHeader, size: subSize, font, color: cSub })
+
+  const yCert = yHeader
+
+  page.drawText(L.title, {
+  x: CX - font.widthOfTextAtSize(L.title, subSize)/2,
+  y: yHeader, size: subSize, font, color: cSub
+})
 
   // Typo sizes
   const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5, linkSize = 10.5
@@ -190,7 +202,11 @@ export async function generateCertificatePDF(opts: {
   const footerMarginTop = 8
 
   // Content box
-  const contentTopMax = yHeader - 38 + SHIFT_UP_PT
+
+  const contentTopMaxNatural = yHeader - 38 + SHIFT_UP_PT
+  const contentTopMaxSafe    = (yCert - MIN_GAP_HEADER_PT) - (tsSize + 6) // 6 = breathing au-dessus de la date
+  const contentTopMax        = Math.min(contentTopMaxNatural, contentTopMaxSafe)
+
   const contentBottomMin = BOT_Y + footerH + footerMarginTop
   const availH = contentTopMax - contentBottomMin
 

@@ -148,6 +148,8 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const [Y, setY] = useState<number>(prefillDate.getFullYear())
   const [M, setM] = useState<number>(prefillDate.getMonth()+1)
   const [D, setD] = useState<number>(prefillDate.getDate())
+ 
+  const MIN_GAP_HEADER_PT = 28 // marge min entre "Certificate of Claim" et la date
 
   // Ajuste le jour si dépasse le nb de jours du mois
   useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M])
@@ -773,6 +775,26 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const topBrand = toTopPx(yBrand, brandSize)
   const topCert  = toTopPx(yCert,  subSize)
 
+  // --- Anti-overlap header/date ---
+  // On veut: top(date) >= top("Certificate of Claim") + MIN_GAP
+  const minTimeTopPx = topCert + (MIN_GAP_HEADER_PT * scale)
+  const contentOffsetPx = Math.max(0, minTimeTopPx - topMainTime)
+
+  // Appliquer l’offset à tous les tops de contenu dynamique (PAS au header)
+const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
+
+  const topMainTime2      = topMainTime + contentOffsetPx
+  ownedLabelTop           = push(ownedLabelTop)
+  ownedNameTop            = push(ownedNameTop)
+  giftedLabelTop          = push(giftedLabelTop)
+  giftedNameTop           = push(giftedNameTop)
+  titleLabelTop           = push(titleLabelTop)
+  for (let i=0;i<titleLineTops.length;i++) titleLineTops[i] = titleLineTops[i] + contentOffsetPx
+  msgLabelTop             = push(msgLabelTop)
+  for (let i=0;i<msgLineTops.length;i++) msgLineTops[i] = msgLineTops[i] + contentOffsetPx
+  linkLabelTop            = push(linkLabelTop)
+  for (let i=0;i<linkLineTops.length;i++) linkLineTops[i] = linkLineTops[i] + contentOffsetPx
+
   return (
     <main style={containerStyle}>
       {/* input fichier global */}
@@ -1148,7 +1170,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
               <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yCert, 12), fontWeight:400, fontSize: 12*scale, color: subtleColor }}>{L.title}</div>
 
               {/* Date principale (AAAA-MM-JJ) */}
-              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topMainTime, fontWeight:800, fontSize: tsSize*scale, color: form.text_color }}>
+              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topMainTime2, fontWeight:800, fontSize: tsSize*scale, color: form.text_color }}>
                 {mainTime}
               </div>
 

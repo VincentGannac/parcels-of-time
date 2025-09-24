@@ -255,6 +255,9 @@ export default function EditClient({
   const [M] = useState<number>(M0)
   const [D] = useState<number>(D0)
 
+  const MIN_GAP_HEADER_PT = 28
+
+
   // ==== Form ====
   const [isGift, setIsGift] = useState<boolean>(/^\s*Offert par:/mi.test(initial.message || ''))
   const [form, setForm] = useState({
@@ -566,6 +569,24 @@ export default function EditClient({
     '#102A43','#0F2A2E','#14213D',
     '#FFFFFF','#E6EAF2',
   ]
+
+  // --- Anti-overlap header/date (édition) ---
+  const minTimeTopPx = topCert + (MIN_GAP_HEADER_PT * scale)
+  const contentOffsetPx = Math.max(0, minTimeTopPx - topMainTime)
+
+  const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
+
+  const topMainTime2      = topMainTime + contentOffsetPx
+  ownedLabelTop           = push(ownedLabelTop)
+  ownedNameTop            = push(ownedNameTop)
+  giftedLabelTop          = push(giftedLabelTop)
+  giftedNameTop           = push(giftedNameTop)
+  titleLabelTop           = push(titleLabelTop)
+  for (let i=0;i<titleLineTops.length;i++) titleLineTops[i] = titleLineTops[i] + contentOffsetPx
+  msgLabelTop             = push(msgLabelTop)
+  for (let i=0;i<msgLineTops.length;i++) msgLineTops[i] = msgLineTops[i] + contentOffsetPx
+  linkLabelTop            = push(linkLabelTop)
+  for (let i=0;i<linkLineTops.length;i++) linkLineTops[i] = linkLineTops[i] + contentOffsetPx
 
   return (
     <div style={{ display:'grid', gridTemplateColumns:'1.1fr 0.9fr', gap:18, alignItems:'start' }}>
@@ -884,7 +905,7 @@ export default function EditClient({
           <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topCert,  fontWeight:400, fontSize: 12*scale, color: subtleColor }}>{L.title}</div>
 
           {/* Date */}
-          <div style={{ ...centerStyle, top: topMainTime, fontWeight:800, fontSize: tsSize*scale }}>
+          <div style={{ ...centerStyle, top: topMainTime2, fontWeight:800, fontSize: tsSize*scale }}>
             {chosenDateStr}
           </div>
 
