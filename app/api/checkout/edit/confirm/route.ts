@@ -1,4 +1,4 @@
-//app/api/checkout/edit/confirm/route.ts
+//api/checkout/edit/confirm/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -41,7 +41,6 @@ export async function GET(req: Request) {
     }
 
     if ((s.metadata?.kind || '') !== 'edit') {
-      // pas une session d’édition → retour minute
       const tsBack = normIsoDay(String(s.metadata?.ts || '')) || ''
       return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsBack)}`, { status:303 })
     }
@@ -49,14 +48,57 @@ export async function GET(req: Request) {
     const tsISO = normIsoDay(String(s.metadata?.ts || ''))
     if (!tsISO) return NextResponse.redirect(`${base}/`, { status:302 })
 
+    const payloadKey = String(s.metadata?.payload_key || '').trim()
+    const custom_bg_key = String(s.metadata?.custom_bg_key || '')
+    const email = String(s.metadata?.email || '').trim().toLowerCase()
+
+    // Fallback par défaut (au cas où)
+    let displayName: string | null = (s.metadata?.display_name || '') || null
+    let title: string | null       = (s.metadata?.title || '') || null
+    let message: string | null     = (s.metadata?.message || '') || null
+    let link_url: string | null    = (s.metadata?.link_url || '') || null
+    let cert_style                 = safeStyle(s.metadata?.cert_style)
+    let time_display: 'utc'|'utc+local'|'local+utc' = ((): any => {
+      const td = String(s.metadata?.time_display || 'local+utc')
+      return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc'
+    })()
+    let local_date_only            = safeBool1(s.metadata?.local_date_only)
+    let text_color                 = safeHex(s.metadata?.text_color)
+    let title_public               = safeBool1(s.metadata?.title_public)
+    let message_public             = safeBool1(s.metadata?.message_public)
+
+    // ⛳️ NOUVEAU : lecture du payload complet si payload_key
+    if (payloadKey) {
+      const { rows: p } = await pool.query(
+        `select data from checkout_payload_temp where key = $1 and kind = 'edit'`,
+        [payloadKey]
+      )
+      if (p.length) {
+        const d = p[0].data || {}
+        displayName     = (d.display_name ?? displayName) || null
+        title           = (d.title ?? title) || null
+        message         = (d.message ?? message) || null   // ← conserve les \n
+        link_url        = (d.link_url ?? link_url) || null
+        cert_style      = safeStyle(d.cert_style ?? cert_style)
+        time_display    = ((): any => {
+          const td = String(d.time_display ?? time_display)
+          return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc'
+        })()
+        local_date_only = !!(d.local_date_only ?? local_date_only)
+        text_color      = safeHex(d.text_color ?? text_color)
+        title_public    = !!(d.title_public ?? title_public)
+        message_public  = !!(d.message_public ?? message_public)
+
+        await pool.query(`delete from checkout_payload_temp where key = $1`, [payloadKey])
+      }
+    }
+
     // === Écriture DB ===
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
 
-      // 1) owner: maj display_name si fourni
-      const email = String(s.metadata?.email || '').trim().toLowerCase()
-      const displayName = (s.metadata?.display_name || '') || null
+      // 1) owners : maj display_name si fourni
       if (email) {
         await client.query(
           `insert into owners(email, display_name)
@@ -67,21 +109,7 @@ export async function GET(req: Request) {
         )
       }
 
-      // 2) claims: maj champs éditables uniquement (où ts = tsISO)
-      const title = (s.metadata?.title || '') || null
-      const message = (s.metadata?.message || '') || null
-      const link_url = (s.metadata?.link_url || '') || null
-      const cert_style = safeStyle(s.metadata?.cert_style)
-      const custom_bg_key = String(s.metadata?.custom_bg_key || '')
-      const time_display = ((): 'utc'|'utc+local'|'local+utc' => {
-        const td = String(s.metadata?.time_display || 'local+utc')
-        return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc'
-      })()
-      const local_date_only = safeBool1(s.metadata?.local_date_only)
-      const text_color = safeHex(s.metadata?.text_color)
-      const title_public = safeBool1(s.metadata?.title_public)
-      const message_public = safeBool1(s.metadata?.message_public)
-
+      // 2) claims : maj champs éditables
       const { rowCount } = await client.query(
         `update claims set
            title=$1, message=$2, link_url=$3,
@@ -91,20 +119,15 @@ export async function GET(req: Request) {
         [title, message, link_url, cert_style, time_display, local_date_only, text_color, title_public, message_public, tsISO]
       )
 
-      // si la claim n’existe pas (course condition improbable) -> rollback logique
       if (rowCount === 0) {
         await client.query('ROLLBACK')
         return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsISO)}?updated=0`, { status:303 })
       }
 
-        // ⛏️ Si on quitte le style "custom", on supprime le fond persistant
+      // 3) fond custom : purge/persist selon le style
       if (cert_style !== 'custom') {
-        await client.query(
-          'delete from claim_custom_bg where ts = $1::timestamptz',
-          [tsISO]
-        )
+        await client.query('delete from claim_custom_bg where ts = $1::timestamptz', [tsISO])
       } else if (custom_bg_key) {
-        // (logique existante) si on reste en custom avec une nouvelle image, on persiste
         const { rows: tmp } = await client.query(
           'select data_url from custom_bg_temp where key = $1',
           [custom_bg_key]
@@ -112,34 +135,15 @@ export async function GET(req: Request) {
         if (tmp.length) {
           await client.query(
             `insert into claim_custom_bg (ts, data_url)
-            values ($1::timestamptz, $2)
-            on conflict (ts) do update
-              set data_url = excluded.data_url, created_at = now()`,
+             values ($1::timestamptz, $2)
+             on conflict (ts) do update set data_url = excluded.data_url, created_at = now()`,
             [tsISO, tmp[0].data_url]
           )
           await client.query('delete from custom_bg_temp where key = $1', [custom_bg_key])
         }
       }
 
-          // --- Si style custom & key fournie : persiste le nouveau fond ---
-    if (cert_style === 'custom' && custom_bg_key) {
-      // mêmes gardes que dans /api/checkout/confirm
-      const { rows: tmp } = await client.query(
-        'select data_url from custom_bg_temp where key = $1',
-        [custom_bg_key]
-      )
-      if (tmp.length) {
-        await client.query(
-          `insert into claim_custom_bg (ts, data_url)
-           values ($1::timestamptz, $2)
-           on conflict (ts) do update set data_url = excluded.data_url, created_at = now()`,
-          [tsISO, tmp[0].data_url]
-        )
-        await client.query('delete from custom_bg_temp where key = $1', [custom_bg_key])
-      }
-    }
-
-      // 3) Recalcul cert_hash (avec price_cents & created_at déjà présents)
+      // 4) Recalcul cert_hash
       const { rows: cur } = await client.query(
         `select owner_id, price_cents, created_at from claims where ts=$1::timestamptz`,
         [tsISO]
@@ -171,7 +175,7 @@ export async function GET(req: Request) {
 
   } catch (e:any) {
     console.error('[edit confirm] error:', e?.message || e)
-    const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
-    return NextResponse.redirect(`${base}/`, { status:302 })
+    const base2 = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
+    return NextResponse.redirect(`${base2}/`, { status:302 })
   }
 }

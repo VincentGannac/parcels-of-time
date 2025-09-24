@@ -1,4 +1,3 @@
-// app/api/checkout/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -62,13 +61,11 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body
     if (!body.ts || !body.email) return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
 
- 
     const d = new Date(body.ts)
     if (isNaN(d.getTime())) return NextResponse.json({ error: 'invalid_ts' }, { status: 400 })
     d.setUTCHours(0,0,0,0)
     const tsISO = d.toISOString()
 
-  
     const maxAllowed = oneYearAfter(todayUtcStart())
     if (d.getTime() > maxAllowed.getTime()) {
       return NextResponse.json({ error: 'ts_out_of_range' }, { status: 400 })
@@ -106,7 +103,7 @@ export async function POST(req: Request) {
       )
     }
 
-    // ⚠️ Vérifie que la journée n'est pas déjà vendue (unicité côté serveur)
+    // ⚠️ Unicité côté serveur (journée déjà vendue ?)
     {
       const { rows } = await pool.query<{ exists: boolean }>(
         `select exists(select 1 from claims where ts = $1::timestamptz) as exists`,
@@ -126,6 +123,29 @@ export async function POST(req: Request) {
     if (!price_cents || price_cents < 1) return NextResponse.json({ error: 'bad_price' }, { status: 400 })
     const stripeCurrency = (currency || 'eur').toLowerCase()
 
+    // ⛳️ NOUVEAU : on stocke le payload complet côté DB et on donne seulement une clé à Stripe
+    const payloadKey = `pl_${crypto.randomUUID()}`
+    const payloadData = {
+      display_name: body.display_name ?? '',
+      title:        body.title ?? '',
+      message:      body.message ?? '',  // ← 100% du texte, sauts de ligne conservés
+      link_url:     body.link_url ?? '',
+      cert_style,
+      time_display,
+      local_date_only,
+      text_color,
+      title_public,
+      message_public,
+      public_registry,
+      locale,
+    }
+    await pool.query(
+      `insert into checkout_payload_temp(key, kind, data)
+       values ($1, 'create', $2::jsonb)
+       on conflict (key) do update set data = excluded.data, created_at = now()`,
+      [payloadKey, JSON.stringify(payloadData)]
+    )
+
     const ymd = tsISO.slice(0,10)
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -141,28 +161,18 @@ export async function POST(req: Request) {
         },
       }],
       customer_email: body.email,
+      // ✅ metadata MINIMALES
       metadata: {
         ts: tsISO,
         email: body.email,
-        display_name: body.display_name ?? '',
-        title: body.title ?? '',
-        message: body.message ?? '',
-        link_url: body.link_url ?? '',
-        cert_style,
+        payload_key: payloadKey,  // 👈 clé courte
         custom_bg_key,
-        time_display,
-        local_date_only,
-        text_color,
-        title_public,
-        message_public,
-        public_registry,
-        locale, // utile pour tes mails de secours, etc.
+        locale,
       },
-      // ✅ propage la volonté de publication jusqu'à la page m/[ts]
-          success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}${
-            public_registry === '1' ? '&autopub=1' : ''
-          }`,
-          cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(ymd)}&style=${cert_style}&cancelled=1`,
+      success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}${
+        public_registry === '1' ? '&autopub=1' : ''
+      }`,
+      cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(ymd)}&style=${cert_style}&cancelled=1`,
     })
 
     if (!session.url) return NextResponse.json({ error: 'no_checkout_url' }, { status: 500 })

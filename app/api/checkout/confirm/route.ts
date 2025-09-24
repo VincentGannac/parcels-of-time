@@ -1,4 +1,3 @@
-// app/api/checkout/confirm/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -44,16 +43,14 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const session_id = url.searchParams.get('session_id');
-    // ✅ récupère l’intention d’auto-publication passée par /api/checkout
   let wantsAutopub = url.searchParams.get('autopub') === '1';
-  // Si pas de session_id → retour accueil
   if (!session_id) return NextResponse.redirect(`${base}/`, { status: 302 });
 
-  let tsForRedirect = ''; // on essaie de toujours rediriger même en cas d’erreur DB
-
+  let tsForRedirect = '';
   let outOwnerId = ''
   let outEmail = ''
   let outDisplayName: string | null = null
+
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
     const s = await stripe.checkout.sessions.retrieve(session_id, { expand: ['payment_intent'] });
@@ -66,36 +63,66 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${base}/claim?ts=${safeBack}&status=unpaid`, { status: 302 });
     }
 
-    // --------- Métadonnées Stripe ---------
+    // --------- Métadonnées Stripe minimales ---------
     const tsRaw = String(s.metadata?.ts || '');
     if (!tsRaw || isNaN(Date.parse(tsRaw))) {
       console.error('[confirm] missing_or_bad_ts', { tsRaw });
-      // si introuvable → on sort proprement
       return NextResponse.redirect(`${base}/`, { status: 302 });
     }
-    const tsISO = new Date(tsRaw); tsISO.setUTCHours(0,0,0,0);
-    const ts = tsISO.toISOString();
-    tsForRedirect = ts; // pour la redirection finale
+    const tsISOd = new Date(tsRaw); tsISOd.setUTCHours(0,0,0,0);
+    const ts = tsISOd.toISOString();
+    tsForRedirect = ts;
 
     const email = String(s.customer_details?.email || s.metadata?.email || '').trim().toLowerCase();
-    const display_name = (s.metadata?.display_name || '') || null;
-    const title = (s.metadata?.title || '') || null;
-    const message = (s.metadata?.message || '') || null;
-    const link_url = (s.metadata?.link_url || '') || null;
-
-    const cert_style = safeStyle(s.metadata?.cert_style);
     const custom_bg_key = String(s.metadata?.custom_bg_key || '');
+    const payloadKey = String(s.metadata?.payload_key || '').trim();
 
-    const td = String(s.metadata?.time_display || 'local+utc');
-    const time_display = (td === 'utc' || td === 'utc+local' || td === 'local+utc') ? td : 'local+utc';
-    const local_date_only = safeBool(s.metadata?.local_date_only);
-    const text_color = safeHex(s.metadata?.text_color);
+    // Valeurs par défaut (fallback rétro-compat si d’anciennes sessions avaient encore metadata longues)
+    let display_name: string | null = (s.metadata?.display_name || '') || null;
+    let title: string | null        = (s.metadata?.title || '') || null;
+    let message: string | null      = (s.metadata?.message || '') || null;
+    let link_url: string | null     = (s.metadata?.link_url || '') || null;
 
-    const title_public = safeBool(s.metadata?.title_public);
-    const message_public = safeBool(s.metadata?.message_public);
-    const public_registry = safeBool(s.metadata?.public_registry);
-        // ✅ renforce wantsAutopub avec la méta Stripe (filet de sécurité)
+    let cert_style = safeStyle(s.metadata?.cert_style);
+    let time_display: 'utc'|'utc+local'|'local+utc' = ((): any => {
+      const td = String(s.metadata?.time_display || 'local+utc')
+      return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc'
+    })();
+    let local_date_only = safeBool(s.metadata?.local_date_only);
+    let text_color = safeHex(s.metadata?.text_color);
+    let title_public = safeBool(s.metadata?.title_public);
+    let message_public = safeBool(s.metadata?.message_public);
+    let public_registry = safeBool(s.metadata?.public_registry);
     wantsAutopub = wantsAutopub || public_registry;
+
+    // ⛳️ NOUVEAU : si payload_key, on recharge le JSON complet depuis la table (préserve 100% du texte)
+    if (payloadKey) {
+      const { rows: p } = await pool.query(
+        `select data from checkout_payload_temp where key = $1`,
+        [payloadKey]
+      );
+      if (p.length) {
+        const d = p[0].data || {};
+        display_name    = (d.display_name ?? display_name) || null;
+        title           = (d.title ?? title) || null;
+        message         = (d.message ?? message) || null;   // ← sauts de ligne OK
+        link_url        = (d.link_url ?? link_url) || null;
+        cert_style      = safeStyle(d.cert_style ?? cert_style);
+        time_display    = ((): any => {
+          const td = String(d.time_display ?? time_display);
+          return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc';
+        })();
+        local_date_only = !!(d.local_date_only ?? local_date_only);
+        text_color      = safeHex(d.text_color ?? text_color);
+        title_public    = !!(d.title_public ?? title_public);
+        message_public  = !!(d.message_public ?? message_public);
+        public_registry = !!(d.public_registry ?? public_registry);
+        wantsAutopub    = wantsAutopub || public_registry;
+
+        // hygiène : on supprime l’entrée tampon
+        await pool.query(`delete from checkout_payload_temp where key = $1`, [payloadKey]);
+      }
+    }
 
     const amount_total_raw =
       s.amount_total ??
@@ -105,7 +132,7 @@ export async function GET(req: Request) {
     const price_cents = Math.max(0, Number(amount_total_raw) | 0);
     const currency = String(s.currency || 'EUR').toUpperCase()
 
-    // ====== Transaction DB (robuste) ======
+    // ====== Transaction DB ======
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -147,7 +174,6 @@ export async function GET(req: Request) {
       pushOpt('text_color', text_color);
       pushOpt('title_public', title_public);
       pushOpt('message_public', message_public);
-      
 
       const updateCols = insertCols.filter(n => !['ts','owner_id','price_cents','currency'].includes(n));
       const updateSet = updateCols.length
@@ -193,17 +219,18 @@ export async function GET(req: Request) {
       const hash = crypto.createHash('sha256').update(data).digest('hex');
       const cert_url = `/api/cert/${encodeURIComponent(ts)}`;
 
-      if (cols.has('cert_hash') || cols.has('cert_url')) {
+      const cols2 = await getColumns(client, 'claims');
+      if (cols2.has('cert_hash') || cols2.has('cert_url')) {
         await client.query(
           `update claims
-             set ${cols.has('cert_hash') ? 'cert_hash = $1' : 'cert_hash = cert_hash'},
-                 ${cols.has('cert_url')  ? 'cert_url  = $2' : 'cert_url  = cert_url'}
+             set ${cols2.has('cert_hash') ? 'cert_hash = $1' : 'cert_hash = cert_hash'},
+                 ${cols2.has('cert_url')  ? 'cert_url  = $2' : 'cert_url  = cert_url'}
            where id = $3`,
           [hash, cert_url, claim.id]
         );
       }
 
-      // ✅ Publication dans la même transaction que la claim
+      // Publication si demandé
       if (public_registry) {
         await client.query(
           `insert into minute_public (ts)
@@ -227,16 +254,14 @@ export async function GET(req: Request) {
     } catch (e:any) {
       try { await pool.query('ROLLBACK') } catch {}
       console.error('[confirm] db_error:', e?.message || e);
-      // ⚠️ On NE renvoie PAS 500 : on continue vers la page de la minute.
-      // Le webhook Stripe /api/stripe/webhook complètera l’écriture côté DB si nécessaire.
+      // On laisse le webhook Stripe compléter si besoin
     }
 
-    // Toujours rediriger côté client (même si DB a échoué ici)
+    // Redirection finale
     {
       const to = new URL(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect)}`);
       if (wantsAutopub) to.searchParams.set('autopub', '1');
       const res = NextResponse.redirect(to.toString(), { status: 303 });
-      // ✅ Auto-login si on a l’ownerId
       if (outOwnerId && outEmail) {
         setSessionCookieOnResponse(res, {
           ownerId: outOwnerId,
@@ -246,11 +271,10 @@ export async function GET(req: Request) {
         });
       }
       return res;
-     }
+    }
 
   } catch (e:any) {
     console.error('confirm_error_top:', e?.message, e?.stack);
-    // En dernier recours : retour accueil sans 500
     return NextResponse.redirect(`${base}/`, { status: 302 });
   }
 }

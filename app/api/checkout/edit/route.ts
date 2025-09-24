@@ -1,4 +1,3 @@
-//app/api/checkout/edit/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -48,10 +47,12 @@ export async function POST(req: Request) {
     const tsISO = d.toISOString()
 
     // Vérifie existence claim
-    const { rows } = await pool.query<{ exists: boolean }>(`select exists(select 1 from claims where ts=$1::timestamptz) as exists`, [tsISO])
+    const { rows } = await pool.query<{ exists: boolean }>(
+      `select exists(select 1 from claims where ts=$1::timestamptz) as exists`,
+      [tsISO]
+    )
     if (!rows[0]?.exists) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-    // Stripe
     const key = process.env.STRIPE_SECRET_KEY
     if (!key) return NextResponse.json({ error: 'stripe_key_missing' }, { status: 500 })
     const stripe = new Stripe(key)
@@ -59,22 +60,43 @@ export async function POST(req: Request) {
     // Prix fixe 9,99 €
     const unit_amount = 999
     const currency = 'eur'
-
     const origin = new URL(req.url).origin
 
-      // --- Stash éventuel de l'image custom comme lors du checkout initial ---
-      let custom_bg_key = ''
-      if (String((body.cert_style || 'neutral')).toLowerCase() === 'custom' && body.custom_bg_data_url) {
+    // --- Stash éventuel de l'image custom (identique au checkout initial) ---
+    let custom_bg_key = ''
+    if (String((body.cert_style || 'neutral')).toLowerCase() === 'custom' && body.custom_bg_data_url) {
       const m = /^data:image\/(png|jpe?g);base64,/.exec(body.custom_bg_data_url)
-        if (!m) return NextResponse.json({ error: 'custom_bg_invalid' }, { status: 400 })
-        custom_bg_key = `cbg_${crypto.randomUUID()}`
-        await pool.query(
-          `insert into custom_bg_temp(key, data_url)
-           values ($1,$2)
-           on conflict (key) do update set data_url = excluded.data_url, created_at = now()`,
-          [custom_bg_key, body.custom_bg_data_url]
-        )
-      }
+      if (!m) return NextResponse.json({ error: 'custom_bg_invalid' }, { status: 400 })
+      custom_bg_key = `cbg_${crypto.randomUUID()}`
+      await pool.query(
+        `insert into custom_bg_temp(key, data_url)
+         values ($1,$2)
+         on conflict (key) do update set data_url = excluded.data_url, created_at = now()`,
+        [custom_bg_key, body.custom_bg_data_url]
+      )
+    }
+
+    // ⛳️ NOUVEAU : payload complet en DB, pas dans metadata Stripe
+    const payloadKey = `pl_${crypto.randomUUID()}`
+    const payloadData = {
+      display_name:  body.display_name ?? '',
+      title:         body.title ?? '',
+      message:       body.message ?? '',    // ← préserve 100% du texte
+      link_url:      body.link_url ?? '',
+      cert_style:    (body.cert_style || 'neutral').toLowerCase(),
+      time_display:  body.time_display || 'local+utc',
+      local_date_only: (String(body.local_date_only) === '1' || body.local_date_only === true),
+      text_color:    (/^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'),
+      title_public:  (String(body.title_public) === '1' || body.title_public === true),
+      message_public:(String(body.message_public) === '1' || body.message_public === true),
+      locale,
+    }
+    await pool.query(
+      `insert into checkout_payload_temp(key, kind, data)
+       values ($1, 'edit', $2::jsonb)
+       on conflict (key) do update set data = excluded.data, created_at = now()`,
+      [payloadKey, JSON.stringify(payloadData)]
+    )
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -90,21 +112,13 @@ export async function POST(req: Request) {
         },
       }],
       customer_email: body.email,
-        metadata: {
+      // ✅ metadata MINIMALES
+      metadata: {
         kind: 'edit',
         ts: tsISO.slice(0,10),
         email: body.email,
-        display_name: body.display_name ?? '',
-        title: body.title ?? '',
-        message: body.message ?? '',
-        link_url: body.link_url ?? '',
-        cert_style: (body.cert_style || 'neutral').toLowerCase(),
-        custom_bg_key, 
-        time_display: body.time_display || 'local+utc',
-        local_date_only: (String(body.local_date_only) === '1' || body.local_date_only === true) ? '1' : '0',
-        text_color: (/^#[0-9a-fA-F]{6}$/.test(body.text_color || '') ? String(body.text_color).toLowerCase() : '#1a1f2a'),
-        title_public: (String(body.title_public) === '1' || body.title_public === true) ? '1' : '0',
-        message_public: (String(body.message_public) === '1' || body.message_public === true) ? '1' : '0',
+        payload_key: payloadKey, // 👈 seule clé
+        custom_bg_key,
         locale,
       },
       success_url: `${origin}/api/checkout/edit/confirm?session_id={CHECKOUT_SESSION_ID}`,
