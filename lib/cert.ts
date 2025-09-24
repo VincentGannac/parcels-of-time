@@ -71,14 +71,14 @@ const MIN_GAP_HEADER_PT = 28 // écart mini entre sous-titre et date
 function getSafeArea(style: CertStyle){
   const base = { top: 140, right: 96, bottom: 156, left: 96 }
   switch (style) {
-    case 'romantic':   return { top:160, right:116, bottom:156, left:116 }
-    case 'birthday':   return { top:144, right:132, bottom:156, left:132 }
-    case 'birth':      return { top:150, right:112, bottom:156, left:112 }
-    case 'wedding':    return { top:160, right:124, bottom:156, left:124 }
-    case 'christmas':  return { top:150, right:112, bottom:156, left:112 }
-    case 'newyear':    return { top:150, right:112, bottom:156, left:112 }
-    case 'graduation': return { top:150, right:112, bottom:156, left:112 }
-    case 'custom':     return { top:150, right:112, bottom:156, left:112 }
+    case 'romantic':   return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'birthday':   return { top: 140, right: 96, bottom: 156, left: 96}
+    case 'birth':      return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'wedding':    return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'christmas':  return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'newyear':    return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'graduation': return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'custom':     return { top: 140, right: 96, bottom: 156, left: 96 }
     default:           return base
   }
 }
@@ -192,7 +192,7 @@ export async function generateCertificatePDF(opts: {
   const m = hexToRgb01(mainHex)
   const cMain = rgb(m.r, m.g, m.b)
   const cSub  = rgb(mix01(m.r,1,0.45), mix01(m.g,1,0.45), mix01(m.b,1,0.45))
-  // même teinte que le preview (mélange vers un bleu profond)
+  // même logique que le preview (mélange vers un bleu profond)
   const cLink = rgb(mix01(m.r,0.2,0.3), mix01(m.g,0.2,0.3), mix01(m.b,0.7,0.3))
 
   // Safe area & colonnes
@@ -230,12 +230,10 @@ export async function generateCertificatePDF(opts: {
   const footerH = Math.max(qrSizePx, metaBlockH)
   const footerMarginTop = 8
 
-  // Boîte de contenu : ancrage haut + anti-overlap sous-titre/date
+  // Boîte de contenu (NATURELLE)
   const contentTopMaxNatural = yHeader - 38 + SHIFT_UP_PT
-  const contentTopMaxSafe    = (yCert - MIN_GAP_HEADER_PT) - (tsSize + 6)
-  const contentTopMax        = Math.min(contentTopMaxNatural, contentTopMaxSafe)
   const contentBottomMin     = BOT_Y + footerH + footerMarginTop
-  const availH               = contentTopMax - contentBottomMin
+  const availH               = contentTopMaxNatural - contentBottomMin
 
   // --------- Parsing message : HIDE_OWNED_BY / Gifted by / Attestation ---------
   let giftedName = ''
@@ -311,14 +309,27 @@ export async function generateCertificatePDF(opts: {
   // Wrap attestation
   const attestLinesAll = attestationText ? wrapText(attestationText, font, msgSize, COLW) : []
 
-  // Allocation : d’abord le message user, puis l’attestation
-  const LINES_FOR_USER = Math.max(0, TOTAL_TEXT_LINES - attestLinesAll.length)
-  const msgLines = msgLinesAll.slice(0, LINES_FOR_USER)
+  // ✅ Priorité au MESSAGE utilisateur (l’attestation prend le reste)
+  const msgLines = msgLinesAll.slice(0, TOTAL_TEXT_LINES)
   const remainingForAttest = Math.max(0, TOTAL_TEXT_LINES - msgLines.length)
   const attestLines = attestLinesAll.slice(0, remainingForAttest)
 
-  // Rendu (ancrage haut, comme la preview)
-  let y = contentTopMax
+  // --------- Placement avec ANTI-CHEVAUCHEMENT titre/date (exactement comme le preview) ---------
+  // On part du placement naturel…
+  let y = contentTopMaxNatural
+
+  // Baseline “date” prévue naturellement
+  const yDateNatural = y - (tsSize + 6)
+  // Convertit en “top” (distance depuis le haut) en points (équivalent de toTopPx sans scale)
+  const topOf = (baselineY:number, fontSize:number) => (height - baselineY) - fontSize
+  const topCert = topOf(yCert, subSize)
+  const topDateNatural = topOf(yDateNatural, tsSize)
+  // Si la date est trop proche du sous-titre, on pousse TOUT le contenu vers le bas d’un offset
+  const minDateTop = topCert + MIN_GAP_HEADER_PT
+  const offsetPt = Math.max(0, minDateTop - topDateNatural)
+
+  // Point de départ final (on abaisse le contenu de offsetPt)
+  y = y - offsetPt
 
   // 1) Date
   y -= (tsSize + 6)
@@ -402,7 +413,7 @@ export async function generateCertificatePDF(opts: {
     }
   }
 
-  // 5b) Attestation (section indépendante)
+  // 5b) Attestation (section indépendante — remplit le reste)
   if (attestLines.length) {
     y -= gapSection
     page.drawText(L.attestationLabel, {

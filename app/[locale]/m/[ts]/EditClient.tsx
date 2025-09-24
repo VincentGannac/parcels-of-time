@@ -34,14 +34,14 @@ const CERT_BG_HEX = '#F4F1EC'
 function getSafeArea(style: CertStyle){
   const base = { top: 140, right: 96, bottom: 156, left: 96 }
   switch (style) {
-    case 'romantic':   return { top:160, right:116, bottom:156, left:116 }
-    case 'birthday':   return { top:144, right:132, bottom:156, left:132 }
-    case 'birth':      return { top:150, right:112, bottom:156, left:112 }
-    case 'wedding':    return { top:160, right:124, bottom:156, left:124 }
-    case 'christmas':  return { top:150, right:112, bottom:156, left:112 }
-    case 'newyear':    return { top:150, right:112, bottom:156, left:112 }
-    case 'graduation': return { top:150, right:112, bottom:156, left:112 }
-    case 'custom':     return { top:150, right:112, bottom:156, left:112 }
+    case 'romantic':   return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'birthday':   return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'birth':      return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'wedding':    return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'christmas':  return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'newyear':    return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'graduation': return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'custom':     return { top: 140, right: 96, bottom: 156, left: 96 }
     default:           return base
   }
 }
