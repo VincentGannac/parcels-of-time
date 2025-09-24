@@ -498,7 +498,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
     if (show.attestation) msgParts.push(attestationText) // 👈 indépendant du message
     if (isGift && show.giftedBy && form.gifted_by.trim()) {
-      msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
+      msgParts.push(`${giftLabel}: ${form.gifted_by.trim().slice(0, GIFT_MAX)}`) 
     }
     if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
 
@@ -698,7 +698,10 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   
 
   const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (form.link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
-  
+  const NAME_MAX  = 40
+  const GIFT_MAX  = 40
+  const TITLE_MAX = 80
+
   const afterMsgSpace = afterTitleSpace - (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
   const maxLinkLines = Math.min(2, Math.max(0, Math.floor(afterMsgSpace / lineHLink)))
   const linkLines = linkLinesAll.slice(0, maxLinkLines)
@@ -855,6 +858,15 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   const isMsgOverflow = show.message && userMsgMaxChars>0 && (form.message?.length||0) > userMsgMaxChars
 
+  // 🔧 Champs visibles (bornés côté serveur aussi par sécurité)
+  const finalDisplayName = show.ownedBy
+  ? ((form.display_name || '').slice(0, NAME_MAX) || undefined)
+  : undefined
+
+  const finalTitle = show.title
+  ? ((form.title || '').slice(0, TITLE_MAX) || undefined)
+  : undefined
+
   // Appliquer l’offset à tous les tops de contenu dynamique (PAS au header)
 const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
@@ -917,10 +929,11 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </label>
 
               <label style={{display:'grid', gap:6}}>
-                <span>{isGift ? 'Nom du·de la destinataire (sur le certificat)' : 'Nom sur le certificat'}</span>
+                <span>{isGift ? 'Nom du·de la destinataire' : 'Nom sur le certificat'}</span>
                 <input type="text" value={form.display_name}
                   onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
-                  placeholder={isGift ? 'Ex. “Camille & Jonas”' : 'Ex. “Camille D.”'}
+                  maxLength={NAME_MAX}
+                  placeholder={isGift ? 'Ex. “Marie”' : 'Ex. “Marie”'}
                    style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                  />
                </label>
@@ -934,7 +947,8 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                     type="text"
                     value={form.gifted_by}
                     onChange={e=>setForm(f=>({...f, gifted_by:e.target.value}))}
-                    placeholder={isFR ? 'Ex. “Offert par Élodie & Marc”' : 'e.g. “Gifted by Elodie & Marc”'}
+                    maxLength={GIFT_MAX} 
+                    placeholder={isFR ? 'Ex. “Offert par Vincent”' : 'e.g. “Gifted by Vincent”'}
                     style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                 </label>
@@ -945,6 +959,7 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                   <span>{titleLabel}</span>
                   <input type="text" value={form.title}
                     onChange={e=>setForm(f=>({...f, title:e.target.value}))}
+                    maxLength={TITLE_MAX}     
                     placeholder="Ex. “Notre journée sous la pluie”"
                     style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
@@ -975,7 +990,7 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               )}
               {isMsgOverflow && (
                 <div role="alert" aria-live="polite" style={{marginTop:6, fontSize:12, color:'#ff6b6b'}}>
-                  Votre message dépasse la limite actuelle et sera tronqué lors de la génération du PDF.
+                  Votre message dépasse la limite autorisée
                 </div>
               )}
             </label>

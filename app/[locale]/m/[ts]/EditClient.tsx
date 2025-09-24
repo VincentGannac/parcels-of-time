@@ -454,7 +454,10 @@ export default function EditClient({
   const linkLinesAll = form.link_url ? meas.wrap(form.link_url, linkSize, COLW, false) : []
   
   const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (form.link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
-  
+  const NAME_MAX  = 40
+  const GIFT_MAX  = 40
+  const TITLE_MAX = 80
+
   const afterMsgSpace = afterTitleSpace - (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
   const maxLinkLines = Math.min(2, Math.max(0, Math.floor(afterMsgSpace / lineHLink)))
   const linkLines = linkLinesAll.slice(0, maxLinkLines)
@@ -599,12 +602,11 @@ export default function EditClient({
     if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
     if (show.attestation) msgParts.push(attestationText) // 👈 indépendant du message
     if (isGift && show.giftedBy && form.gifted_by.trim()) {
-      msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
+      msgParts.push(`${giftLabel}: ${form.gifted_by.trim().slice(0, GIFT_MAX)}`) 
     }
     if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
 
     const finalMessage = msgParts.length ? msgParts.join('\n') : undefined
-
 
     const payload:any = {
       mode: 'edit',
@@ -667,6 +669,16 @@ export default function EditClient({
 
   const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
+  // 🔧 Champs visibles (bornés côté serveur aussi par sécurité)
+  const finalDisplayName = show.ownedBy
+  ? ((form.display_name || '').slice(0, NAME_MAX) || undefined)
+  : undefined
+
+  const finalTitle = show.title
+  ? ((form.title || '').slice(0, TITLE_MAX) || undefined)
+  : undefined
+
+
   const topMainTime2      = topMainTime + contentOffsetPx
   ownedLabelTop           = push(ownedLabelTop)
   ownedNameTop            = push(ownedNameTop)
@@ -710,10 +722,11 @@ export default function EditClient({
           </label>
 
           <label style={{display:'grid', gap:6}}>
-            <span>{isFR ? 'Nom affiché (public sur le certificat)' : 'Displayed name (public)'}</span>
+            <span>{isFR ? 'Nom affiché' : 'Displayed name'}</span>
             <input type="text" value={form.display_name}
               onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
-              placeholder={isFR ? 'Ex. “Camille & Jonas”' : 'e.g. “Camille & Jonas”'}
+              maxLength={NAME_MAX}     
+              placeholder={isFR ? 'Ex. “Marie”' : 'e.g. “Marie”'}
               style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
             />
           </label>
@@ -730,7 +743,8 @@ export default function EditClient({
                   type="text"
                   value={form.gifted_by}
                   onChange={e=>setForm(f=>({...f, gifted_by:e.target.value}))}
-                  placeholder={isFR ? 'Ex. “Offert par Élodie & Marc”' : 'e.g. “Gifted by Elodie & Marc”'}
+                  maxLength={GIFT_MAX} 
+                  placeholder={isFR ? 'Ex. “Offert par Vincent”' : 'e.g. “Gifted by Vincent”'}
                   style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                 />
               </div>
@@ -742,7 +756,8 @@ export default function EditClient({
               <span>{titleLabel}</span>
               <input type="text" value={form.title}
                 onChange={e=>setForm(f=>({...f, title:e.target.value}))}
-                placeholder="Ex. “Notre journée sous la pluie”"
+                maxLength={TITLE_MAX}   
+                placeholder="Ex. “Joyeux anniversaire !”"
                 style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
               />
             </label>
@@ -772,7 +787,7 @@ export default function EditClient({
             )}
             {isMsgOverflow && (
               <div role="alert" aria-live="polite" style={{marginTop:6, fontSize:12, color:'#ff6b6b'}}>
-                Votre message dépasse la limite actuelle et sera tronqué lors de la génération du PDF.
+                Votre message dépasse la limite autorisée
               </div>
             )}
           </label>
