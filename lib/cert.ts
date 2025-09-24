@@ -69,16 +69,16 @@ const SHIFT_UP_PT = Math.round(2 * PT_PER_CM) // 2 cm
 const MIN_GAP_HEADER_PT = 28 // écart mini entre sous-titre et date
 
 function getSafeArea(style: CertStyle){
-  const base = { top: 140, right: 96, bottom: 156, left: 96 }
+  const base = { top: 120, right: 96, bottom: 130, left: 96 }
   switch (style) {
-    case 'romantic':   return { top: 140, right: 96, bottom: 156, left: 96 }
-    case 'birthday':   return { top: 140, right: 96, bottom: 156, left: 96}
-    case 'birth':      return { top: 140, right: 96, bottom: 156, left: 96 }
-    case 'wedding':    return { top: 140, right: 96, bottom: 156, left: 96 }
-    case 'christmas':  return { top: 140, right: 96, bottom: 156, left: 96 }
-    case 'newyear':    return { top: 140, right: 96, bottom: 156, left: 96 }
-    case 'graduation': return { top: 140, right: 96, bottom: 156, left: 96 }
-    case 'custom':     return { top: 140, right: 96, bottom: 156, left: 96 }
+    case 'romantic':   return { top: 120, right: 96, bottom: 130, left: 96 }
+    case 'birthday':   return { top: 120, right: 96, bottom: 130, left: 96}
+    case 'birth':      return { top: 120, right: 96, bottom: 130, left: 96 }
+    case 'wedding':    return { top: 120, right: 96, bottom: 130, left: 96 }
+    case 'christmas':  return { top: 120, right: 96, bottom: 130, left: 96 }
+    case 'newyear':    return { top: 120, right: 96, bottom: 130, left: 96 }
+    case 'graduation': return { top: 120, right: 96, bottom: 130, left: 96 }
+    case 'custom':     return { top: 120, right: 96, bottom: 130, left: 96 }
     default:           return base
   }
 }
