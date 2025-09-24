@@ -57,23 +57,16 @@ function drawBgPortraitAware(page: any, img: any) {
   const { width: pw, height: ph } = page.getSize()
   const iw = (img.width  ?? img.scale(1).width)
   const ih = (img.height ?? img.scale(1).height)
-
   if (iw > ih) {
-    page.drawImage(img, {
-      x: pw,
-      y: 0,
-      width: ph,
-      height: pw,
-      rotate: degrees(90),
-    })
+    page.drawImage(img, { x: pw, y: 0, width: ph, height: pw, rotate: degrees(90) })
   } else {
     page.drawImage(img, { x: 0, y: 0, width: pw, height: ph })
   }
 }
 
 const PT_PER_CM = 28.3465
-const SHIFT_UP_PT = Math.round(2 * PT_PER_CM) // 2cm
-const MIN_GAP_HEADER_PT = 28
+const SHIFT_UP_PT = Math.round(2 * PT_PER_CM) // 2 cm
+const MIN_GAP_HEADER_PT = 28 // écart mini entre sous-titre et date
 
 function getSafeArea(style: CertStyle){
   const base = { top: 140, right: 96, bottom: 156, left: 96 }
@@ -99,8 +92,9 @@ function parseDataImage(dataUrl?: string){
   return { bytes, kind } as const
 }
 
+// Wrap identique au preview (mesure avec pdf-lib)
 function wrapText(text: string, font: any, size: number, maxWidth: number) {
-  const words = (text || '').trim().split(/\s+/).filter(Boolean)
+  const words = (String(text) || '').trim().split(/\s+/).filter(Boolean)
   const lines: string[] = []; let line = ''
   for (const w of words) {
     const test = line ? line + ' ' + w : w
@@ -120,10 +114,15 @@ function ymdFromUTC(iso: string){
 }
 
 // couleurs
-function hexToRgb01(hex:string){ const m=/^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return {r:0.1,g:0.12,b:0.15}; const n=parseInt(m[1],16); return { r:((n>>16)&255)/255, g:((n>>8)&255)/255, b:(n&255)/255 } }
+function hexToRgb01(hex:string){
+  const m=/^#?([0-9a-f]{6})$/i.exec(hex)
+  if(!m) return {r:0.102,g:0.122,b:0.165} // ~#1a1f2a
+  const n=parseInt(m[1],16)
+  return { r:((n>>16)&255)/255, g:((n>>8)&255)/255, b:(n&255)/255 }
+}
 function mix01(a:number,b:number,t:number){ return a*(1-t)+b*t }
 
-// Détection “Attestation” (FR/EN) pour la séparation Message / Attestation
+// Détection “Attestation” (FR/EN) pour séparer du message
 function isAttestationParagraph(p: string){
   const s = p.trim().toLowerCase()
   return s.startsWith('ce certificat atteste que') || s.startsWith('this certificate attests that')
@@ -134,7 +133,7 @@ export async function generateCertificatePDF(opts: {
   display_name: string
   title?: string | null
   message?: string | null
-  /** Conserver le paramètre (tables claim) mais ne pas l’utiliser pour la mise en page */
+  /** conservé pour compat (BDD) mais non rendu */
   link_url?: string | null
   claim_id: string
   hash: string
@@ -193,7 +192,8 @@ export async function generateCertificatePDF(opts: {
   const m = hexToRgb01(mainHex)
   const cMain = rgb(m.r, m.g, m.b)
   const cSub  = rgb(mix01(m.r,1,0.45), mix01(m.g,1,0.45), mix01(m.b,1,0.45))
-  const cLink = rgb(mix01(m.r,0.2,0.3, ), mix01(m.g,0.2,0.3), mix01(m.b,0.7,0.3)) // cohérent avec ClientClaim
+  // même teinte que le preview (mélange vers un bleu profond)
+  const cLink = rgb(mix01(m.r,0.2,0.3), mix01(m.g,0.2,0.3), mix01(m.b,0.7,0.3))
 
   // Safe area & colonnes
   const SA = getSafeArea(style)
@@ -230,7 +230,7 @@ export async function generateCertificatePDF(opts: {
   const footerH = Math.max(qrSizePx, metaBlockH)
   const footerMarginTop = 8
 
-  // Boîte de contenu : ancrage haut + anti-overlap avec le sous-titre
+  // Boîte de contenu : ancrage haut + anti-overlap sous-titre/date
   const contentTopMaxNatural = yHeader - 38 + SHIFT_UP_PT
   const contentTopMaxSafe    = (yCert - MIN_GAP_HEADER_PT) - (tsSize + 6)
   const contentTopMax        = Math.min(contentTopMaxNatural, contentTopMaxSafe)
@@ -257,7 +257,7 @@ export async function generateCertificatePDF(opts: {
         kept.push(p)
       }
 
-      // extraction attestation (dernier paragraphe “attestation” connu)
+      // extraction attestation (dernier paragraphe “attestation”)
       const finalParas: string[] = []
       for (const p of kept) {
         if (!attestationText && isAttestationParagraph(p)) attestationText = p
@@ -274,9 +274,8 @@ export async function generateCertificatePDF(opts: {
   const titleText = (title || '').trim()
   const titleLines = titleText ? wrapText(titleText, fontBold, nameSize, COLW).slice(0, 2) : []
 
-  // ⚠️ On conserve link_url en paramètre pour compatibilité BDD, MAIS
-  // on ne réserve aucun espace ni n’affichons le lien (placements historiquement NULL)
-  const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
+  // ⚠️ link_url conservé pour compat BDD MAIS ni réservé ni rendu
+  void link_url // (silence TS)
 
   // Hauteurs des blocs optionnels
   const ownedBlockH  = hasName    ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
@@ -286,7 +285,7 @@ export async function generateCertificatePDF(opts: {
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
 
-  // Taille bloc Titre (sans gap supplémentaire, exactement comme ClientClaim)
+  // Taille bloc Titre (sans gap supplémentaire — strictement comme ClientClaim)
   const titleBlockNoGap = titleText
     ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6))
     : 0
@@ -295,11 +294,10 @@ export async function generateCertificatePDF(opts: {
   const beforeMsgConsumed = giftedBlockH + (titleBlockNoGap ? (gapBeforeTitle + titleBlockNoGap) : 0)
   const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
 
-  // Capacité totale en lignes pour le contenu “texte” (Message + Attestation)
-  // (aucune réserve pour le lien)
+  // Capacité totale en lignes pour Message + Attestation (pas de lien)
   const TOTAL_TEXT_LINES = Math.max(0, Math.floor(afterTitleSpace / lineHMsg))
 
-  // Wrap du message utilisateur (paragraphes avec lignes vides)
+  // Wrap message user (paragraphes avec lignes vides)
   let msgLinesAll: string[] = []
   if (userMessage) {
     const paras = userMessage.split(/\n+/)
@@ -318,13 +316,6 @@ export async function generateCertificatePDF(opts: {
   const msgLines = msgLinesAll.slice(0, LINES_FOR_USER)
   const remainingForAttest = Math.max(0, TOTAL_TEXT_LINES - msgLines.length)
   const attestLines = attestLinesAll.slice(0, remainingForAttest)
-
-  // Hauteur réelle consommée (sans lien)
-  const blockH =
-    fixedTop
-    + (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
-    + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
-    + (attestLines.length ? (gapSection + attestLines.length * lineHMsg) : 0)
 
   // Rendu (ancrage haut, comme la preview)
   let y = contentTopMax
@@ -371,11 +362,10 @@ export async function generateCertificatePDF(opts: {
     y -= (nameSize + 4)
   }
 
-  // 4) Title (⚠️ pas de gapSection supplémentaire : strictement comme ClientClaim)
+  // 4) Title — pas de gapSection supplémentaire (identique ClientClaim)
   if (titleText) {
     y -= (nameSize + 4)
     y -= (giftedName ? 8 : gapSection)
-    // (aucun y -= gapSection ici)
     page.drawText(L.titleLabel, {
       x: CX - font.widthOfTextAtSize(L.titleLabel, labelSize)/2,
       y: y - (labelSize + 2),
@@ -432,11 +422,9 @@ export async function generateCertificatePDF(opts: {
     }
   }
 
-  // 6) Lien — Conservé en PARAMÈTRE pour compat BDD mais
-  //     pas de réserve d’espace et pas de rendu (placements historiquement NULL).
-  //     Si un jour on le réactive, reproduire la même séquence que ClientClaim.
+  // 6) Lien — conservé en paramètre pour compat BDD mais non rendu
 
-  // Footer (QR + méta)
+  // Footer (QR + méta) — mêmes métriques que le preview
   const EDGE = 16
   if (!opts.hideQr) {
     const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })
