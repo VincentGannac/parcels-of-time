@@ -171,6 +171,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const isFR = useMemo(()=>{
     try { return (navigator.language || '').toLowerCase().startsWith('fr') } catch { return false }
   }, [])
+
   const L = useMemo(()=>({
     brand:'Parcels of Time',
     title:isFR?'Certificat de Claim':'Certificate of Claim',
@@ -178,6 +179,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     giftedBy:isFR?'Offert par':'Gifted by',
     titleLabel:isFR?'Titre':'Title',
     message:isFR?'Message':'Message',
+    attestationLabel: isFR ? 'Texte d’attestation' : 'Attestation text', 
     link:isFR?'Lien':'Link',
     anon:isFR?'Anonyme':'Anonymous',
     placeholders:{
@@ -490,20 +492,18 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     // “Offert par” : injecté dans le message (pour compat PDF)
 
     const safeUserMsg = show.message ? (form.message || '') : ''
-    const cappedUserMsg = userMsgMaxChars > 0
-      ? safeUserMsg.slice(0, userMsgMaxChars)
-      : ''
+    const cappedUserMsg = userMsgMaxChars > 0 ? safeUserMsg.slice(0, userMsgMaxChars) : ''
 
     const msgParts: string[] = []
     if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
-    if (show.message && show.attestation) msgParts.push(attestationText)
+    if (show.attestation) msgParts.push(attestationText) // 👈 indépendant du message
     if (isGift && show.giftedBy && form.gifted_by.trim()) {
       msgParts.push(`${giftLabel}: ${form.gifted_by.trim()}`)
     }
     if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
+
     const finalMessage = msgParts.length ? msgParts.join('\n') : undefined
-
-
+    
     const payload:any = {
       ts: d.toISOString(),
       email: form.email,
@@ -595,8 +595,15 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   // données d'entrée pour la préview
   const showOwned = show.ownedBy
   const showGifted = isGift && show.giftedBy
+  
   const showT = show.title
   const showM = show.message
+  const showA = show.attestation
+
+  const titleForPreview      = showT ? (form.title.trim() || L.placeholders.title) : ''
+  const messageOnlyPreview   = showM ? (form.message.trim() || L.placeholders.message) : ''
+  const attestationPreview   = showA ? attestationText : ''
+
 
   const nameForPreview = showOwned
   ? (form.display_name.trim() || L.anon)
@@ -607,16 +614,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     ? (form.gifted_by.trim() || L.placeholders.giftedName)
     : ''
 
-  const titleForPreview = showT
-    ? (form.title.trim() || L.placeholders.title)
-    : ''
-
-  const messageForPreview = showM
-    ? [
-        (form.message.trim() || L.placeholders.message),
-        ...(show.attestation ? [attestationText] : []),
-      ].filter(Boolean).join('\n\n')
-    : ''
+  
 
   const mainTime = chosenDateStr // toujours AAAA-MM-JJ
 
@@ -651,50 +649,65 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   // wrapping (identique au PDF)
   const meas = useMemo(()=>makeMeasurer(scale), [scale])
 
+  // --- Mesure titre déjà en place ---
   const titleLines = titleForPreview ? meas.wrap(titleForPreview, nameSize, COLW, true).slice(0, 2) : []
-  
-  const msgLinesAll = messageForPreview
-  ? messageForPreview.split(/\n+/).flatMap((p, i, arr) => {
-      const lines = meas.wrap(p, msgSize, COLW, false)
-      return i < arr.length - 1 ? [...lines, ''] : lines
-    })
-  : []
-
-  const linkLinesAll = form.link_url ? meas.wrap(form.link_url, linkSize, COLW, false) : []
 
   // Hauteurs des blocs optionnels — mêmes formules que le PDF
-  const ownedBlockH = showOwned ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
+  const ownedBlockH  = showOwned  ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
   const giftedBlockH = showGifted ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
 
-  const fixedTop =
-    (tsSize + 6) + // uniquement la date
-    ownedBlockH
-
+  const fixedTop = (tsSize + 6) + ownedBlockH
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
 
-  // ⚠️ titleBlock SANS gapSection (comme cert.ts)
-  const titleBlockNoGap = titleForPreview
-    ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6))
-    : 0
-
-    const gapBeforeTitle = showGifted ? 8 : gapSection
+  // ⚠️ Bloc titre sans gap supplémentaire (comme cert.ts)
+  const titleBlockNoGap = titleForPreview ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
+  const gapBeforeTitle = showGifted ? 8 : gapSection
   const beforeMsgConsumed = giftedBlockH + (titleBlockNoGap ? (gapBeforeTitle + titleBlockNoGap) : 0)
 
   const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
 
-  const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (form.link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
-  const msgLines = msgLinesAll.slice(0, maxMsgLines)
+  // (Lien non pris en compte ici; si tu veux le réactiver, soustrais son bloc comme avant)
+  const TOTAL_TEXT_LINES = Math.max(0, Math.floor(afterTitleSpace / lineHMsg))
 
+  // Mesure "attestation" seule
+  const attestLinesAll = (attestationPreview)
+    ? meas.wrap(attestationPreview, msgSize, COLW, false)
+    : []
+
+  // Lignes allouées au MESSAGE utilisateur (le reste ira à l’attestation)
+  const LINES_FOR_USER = Math.max(0, TOTAL_TEXT_LINES - attestLinesAll.length)
+
+  // Wrap effectif
+  const msgLinesAll = messageOnlyPreview
+    ? messageOnlyPreview.split(/\n+/).flatMap((p, i, arr) => {
+        const lines = meas.wrap(p, msgSize, COLW, false)
+        return i < arr.length - 1 ? [...lines, ''] : lines
+      })
+    : []
+
+  const msgLines = msgLinesAll.slice(0, LINES_FOR_USER)
+
+  // Lignes restantes pour l’attestation
+  const remainingForAttest = Math.max(0, TOTAL_TEXT_LINES - msgLines.length)
+  const attestLines = attestLinesAll.slice(0, remainingForAttest)
+
+  const linkLinesAll = form.link_url ? meas.wrap(form.link_url, linkSize, COLW, false) : []
+
+  // Hauteurs des blocs optionnels — mêmes formules que le PDF
+  
+
+  const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (form.link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
+  
   const afterMsgSpace = afterTitleSpace - (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
   const maxLinkLines = Math.min(2, Math.max(0, Math.floor(afterMsgSpace / lineHLink)))
   const linkLines = linkLinesAll.slice(0, maxLinkLines)
 
   const blockH =
-    fixedTop
-    + (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
-    + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
-    + (linkLines.length ? (gapSection + linkLines.length * lineHLink) : 0)
+  fixedTop
+  + (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
+  + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
+  + (attestLines.length ? (gapSection + attestLines.length * lineHMsg) : 0)
 
     /*
   const biasUp = 22
@@ -706,17 +719,10 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   // lignes dispo totales pour Message (tel que déjà calculé)
   const TOTAL_MSG_LINES = maxMsgLines
 
-  // nombre de lignes consommées par l’attestation (si cochée)
-  const attestLinesAll = show.attestation
-    ? meas.wrap(attestationText, msgSize, COLW, false)
-    : []
   // + une ligne vide entre message perso et attestation si les deux existent
   const attestExtraBlank = (show.attestation ? 1 : 0)
 
-  // capacité lignes pour le message perso seulement :
-  const LINES_FOR_USER = Math.max(0, TOTAL_MSG_LINES - attestLinesAll.length - attestExtraBlank)
-
-
+  
   function capacityCharsForLines(linesBudget: number): number {
     if (linesBudget <= 0) return 0
     // On cherche combien de "mots courts" ("x") séparés par des espaces tiennent
@@ -812,6 +818,19 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     }
   }
 
+  // 5b) Attestation (indépendante)
+  let attestLabelTop:number|null = null
+  const attestLineTops:number[] = []
+  if (attestLines.length) {
+    y -= gapSection
+    attestLabelTop = toTopPx(y - (labelSize + 2), labelSize)
+    y -= (labelSize + 6)
+    for (const _ of attestLines) {
+      attestLineTops.push(toTopPx(y - lineHMsg, msgSize))
+      y -= lineHMsg
+    }
+  }
+
   // 6) Link
   let linkLabelTop:number|null = null
   const linkLineTops:number[] = []
@@ -834,6 +853,8 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const minTimeTopPx = topCert + (MIN_GAP_HEADER_PT * scale)
   const contentOffsetPx = Math.max(0, minTimeTopPx - topMainTime)
 
+  const isMsgOverflow = show.message && userMsgMaxChars>0 && (form.message?.length||0) > userMsgMaxChars
+
   // Appliquer l’offset à tous les tops de contenu dynamique (PAS au header)
 const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
@@ -845,10 +866,13 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
   titleLabelTop           = push(titleLabelTop)
   for (let i=0;i<titleLineTops.length;i++) titleLineTops[i] = titleLineTops[i] + contentOffsetPx
   msgLabelTop             = push(msgLabelTop)
+  attestLabelTop = push(attestLabelTop)
+  for (let i=0;i<attestLineTops.length;i++) 
+  attestLineTops[i] = attestLineTops[i] + contentOffsetPx
   for (let i=0;i<msgLineTops.length;i++) msgLineTops[i] = msgLineTops[i] + contentOffsetPx
   linkLabelTop            = push(linkLabelTop)
   for (let i=0;i<linkLineTops.length;i++) linkLineTops[i] = linkLineTops[i] + contentOffsetPx
-
+ 
   return (
     <main style={containerStyle}>
       {/* input fichier global */}
@@ -928,19 +952,33 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </div>
 
               <div style={{display:'grid', gap:6, marginTop:10}}>
-                <label>
-                  <span>{messageLabel}</span>
-                  <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} 
-                    maxLength={userMsgMaxChars || undefined}
-                    placeholder={isGift ? '“Le jour de notre rencontre…”' : '“Le jour où tout a commencé.”'}
-                    style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                  />
-                  {show.message && (
-                    <div style={{textAlign:'right', fontSize:12, opacity:.65, marginTop:4}}>
-                      {(form.message?.length || 0)} / {userMsgMaxChars || '∞'}
-                    </div>
-                  )}
-                </label>
+              <label>
+              <span>{messageLabel}</span>
+              <textarea
+                value={form.message}
+                onChange={e=>setForm(f=>({...f, message:e.target.value}))}
+                maxLength={userMsgMaxChars || undefined}
+                placeholder={isGift ? '“Le jour de notre rencontre…”' : '“Le jour où tout a commencé.”'}
+                style={{
+                  width:'100%',
+                  padding:'12px 14px',
+                  border:'1px solid ' + (isMsgOverflow ? '#ff6b6b' : 'var(--color-border)'),
+                  borderRadius:10,
+                  background:'transparent',
+                  color:'var(--color-text)'
+                }}
+              />
+              {show.message && (
+                <div style={{textAlign:'right', fontSize:12, marginTop:4, color: isMsgOverflow ? '#ff6b6b' : 'inherit', opacity: isMsgOverflow ? 1 : .65}}>
+                  {(form.message?.length || 0)} / {userMsgMaxChars || '∞'}
+                </div>
+              )}
+              {isMsgOverflow && (
+                <div role="alert" aria-live="polite" style={{marginTop:6, fontSize:12, color:'#ff6b6b'}}>
+                  Votre message dépasse la limite actuelle et sera tronqué lors de la génération du PDF.
+                </div>
+              )}
+            </label>
               </div>
 
               {/* Affichage / Masquage des sections */}
@@ -1280,6 +1318,20 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                   </div>
                   {msgLines.map((line, i)=>(
                     <div key={i} style={{ ...centerStyle, top: msgLineTops[i], fontSize: 12.5*scale }}>
+                      {line}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Attestation (section indépendante) */}
+              {attestLines.length>0 && (
+                <>
+                  <div style={{ ...centerStyle, top: attestLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                    {L.attestationLabel}
+                  </div>
+                  {attestLines.map((line, i)=>(
+                    <div key={i} style={{ ...centerStyle, top: attestLineTops[i], fontSize: 12.5*scale }}>
                       {line}
                     </div>
                   ))}
