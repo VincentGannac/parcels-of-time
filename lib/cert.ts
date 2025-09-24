@@ -13,8 +13,32 @@ export type Locale = 'fr' | 'en'
 export type TimeLabelMode = 'utc' | 'utc_plus_local' | 'local_plus_utc' // conservé pour compat, mais non utilisé
 
 const TEXTS = {
-  en: { brand:'Parcels of Time', title:'Certificate of Claim', ownedBy:'Owned by', giftedBy:'Gifted by', titleLabel:'Title', message:'Message', link:'Link', certId:'Certificate ID', integrity:'Integrity (SHA-256)', anon:'Anonymous' },
-  fr: { brand:'Parcels of Time', title:'Certificat de Claim',  ownedBy:'Au nom de', giftedBy:'Offert par', titleLabel:'Titre',  message:'Message', link:'Lien', certId:'ID du certificat', integrity:'Intégrité (SHA-256)', anon:'Anonyme' },
+  en: {
+    brand:'Parcels of Time',
+    title:'Certificate of Claim',
+    ownedBy:'Owned by',
+    giftedBy:'Gifted by',
+    titleLabel:'Title',
+    message:'Message',
+    attestationLabel:'Attestation text',
+    link:'Link',
+    certId:'Certificate ID',
+    integrity:'Integrity (SHA-256)',
+    anon:'Anonymous'
+  },
+  fr: {
+    brand:'Parcels of Time',
+    title:'Certificat de Claim',
+    ownedBy:'Au nom de',
+    giftedBy:'Offert par',
+    titleLabel:'Titre',
+    message:'Message',
+    attestationLabel:'Texte d’attestation',
+    link:'Lien',
+    certId:'ID du certificat',
+    integrity:'Intégrité (SHA-256)',
+    anon:'Anonyme'
+  },
 } as const
 
 async function loadBgFromPublic(style: CertStyle){
@@ -46,8 +70,10 @@ function drawBgPortraitAware(page: any, img: any) {
     page.drawImage(img, { x: 0, y: 0, width: pw, height: ph })
   }
 }
+
 const PT_PER_CM = 28.3465
-const SHIFT_UP_PT = Math.round(2 * PT_PER_CM)
+const SHIFT_UP_PT = Math.round(2 * PT_PER_CM) // 2cm
+const MIN_GAP_HEADER_PT = 28
 
 function getSafeArea(style: CertStyle){
   const base = { top: 140, right: 96, bottom: 156, left: 96 }
@@ -97,11 +123,18 @@ function ymdFromUTC(iso: string){
 function hexToRgb01(hex:string){ const m=/^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return {r:0.1,g:0.12,b:0.15}; const n=parseInt(m[1],16); return { r:((n>>16)&255)/255, g:((n>>8)&255)/255, b:(n&255)/255 } }
 function mix01(a:number,b:number,t:number){ return a*(1-t)+b*t }
 
+// Détection “Attestation” (FR/EN) pour la séparation Message / Attestation
+function isAttestationParagraph(p: string){
+  const s = p.trim().toLowerCase()
+  return s.startsWith('ce certificat atteste que') || s.startsWith('this certificate attests that')
+}
+
 export async function generateCertificatePDF(opts: {
   ts: string
   display_name: string
   title?: string | null
   message?: string | null
+  /** Conserver le paramètre (tables claim) mais ne pas l’utiliser pour la mise en page */
   link_url?: string | null
   claim_id: string
   hash: string
@@ -113,7 +146,7 @@ export async function generateCertificatePDF(opts: {
   customBgDataUrl?: string
   localDateOnly?: boolean
   textColorHex?: string
-  /** ✅ masque le QR quand true (registre public) */
+  /** masque le QR quand true (registre public) */
   hideQr?: boolean,
   hideMeta?: boolean,
 }) {
@@ -128,7 +161,6 @@ export async function generateCertificatePDF(opts: {
   const page = pdf.addPage([595.28, 841.89]) // A4 portrait
   const { width, height } = page.getSize()
 
-  const MIN_GAP_HEADER_PT = 28
   // Background
   try {
     let embedded = false
@@ -161,9 +193,9 @@ export async function generateCertificatePDF(opts: {
   const m = hexToRgb01(mainHex)
   const cMain = rgb(m.r, m.g, m.b)
   const cSub  = rgb(mix01(m.r,1,0.45), mix01(m.g,1,0.45), mix01(m.b,1,0.45))
-  const cLink = rgb(mix01(m.r,0.2,0.3), mix01(m.g,0.2,0.3), mix01(m.b,0.7,0.3))
+  const cLink = rgb(mix01(m.r,0.2,0.3, ), mix01(m.g,0.2,0.3), mix01(m.b,0.7,0.3)) // cohérent avec ClientClaim
 
-  // Safe area
+  // Safe area & colonnes
   const SA = getSafeArea(style)
   const LEFT = SA.left, RIGHT = width - SA.right, TOP_Y = height - SA.top, BOT_Y = SA.bottom
   const COLW = RIGHT - LEFT
@@ -173,176 +205,238 @@ export async function generateCertificatePDF(opts: {
   const brandSize = 18, subSize = 12
   let yHeader = TOP_Y - 40
   const yBrand = yHeader
-
   page.drawText(L.brand, {
-  x: CX - fontBold.widthOfTextAtSize(L.brand, brandSize)/2,
-  y: yHeader, size: brandSize, font: fontBold, color: cMain
+    x: CX - fontBold.widthOfTextAtSize(L.brand, brandSize)/2,
+    y: yHeader, size: brandSize, font: fontBold, color: cMain
   })
   yHeader -= 18
-
   const yCert = yHeader
-
   page.drawText(L.title, {
-  x: CX - font.widthOfTextAtSize(L.title, subSize)/2,
-  y: yHeader, size: subSize, font, color: cSub
-})
+    x: CX - font.widthOfTextAtSize(L.title, subSize)/2,
+    y: yHeader, size: subSize, font, color: cSub
+  })
 
-  // Typo sizes
+  // Typo sizes & métriques (miroir ClientClaim)
   const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5, linkSize = 10.5
   const gapSection = 14, gapSmall = 8
   const lineHMsg = 16, lineHLink = 14
 
-  
-  // Date label — AAAA-MM-JJ
+  // Date principale
   const mainTime = ymdFromUTC(ts)
 
-  // Footer reserved (réduction si QR ou méta masqués)
+  // Footer réservations (réduites si QR/meta masqués)
   const qrSizePx = opts.hideQr ? 0 : 120
   const metaBlockH = opts.hideMeta ? 0 : 76
   const footerH = Math.max(qrSizePx, metaBlockH)
   const footerMarginTop = 8
 
-  // Content box
-
+  // Boîte de contenu : ancrage haut + anti-overlap avec le sous-titre
   const contentTopMaxNatural = yHeader - 38 + SHIFT_UP_PT
-  const contentTopMaxSafe    = (yCert - MIN_GAP_HEADER_PT) - (tsSize + 6) // 6 = breathing au-dessus de la date
+  const contentTopMaxSafe    = (yCert - MIN_GAP_HEADER_PT) - (tsSize + 6)
   const contentTopMax        = Math.min(contentTopMaxNatural, contentTopMaxSafe)
+  const contentBottomMin     = BOT_Y + footerH + footerMarginTop
+  const availH               = contentTopMax - contentBottomMin
 
-  const contentBottomMin = BOT_Y + footerH + footerMarginTop
-  const availH = contentTopMax - contentBottomMin
-
-  // --------- Contenu dynamique (Owned by / Gifted by / Message) ---------
-  // On retire le marqueur [[HIDE_OWNED_BY]] et on capture Gifted by / Offert par
+  // --------- Parsing message : HIDE_OWNED_BY / Gifted by / Attestation ---------
   let giftedName = ''
   let forceHideOwned = false
-  let messageClean = (message || '').trim()
-  if (messageClean) {
-    const raw = messageClean.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-    const kept: string[] = []
-    for (const l of raw) {
-      if (/^\[\[\s*HIDE_OWNED_BY\s*\]\]$/i.test(l)) { forceHideOwned = true; continue }
-      const mGift = /^(offert\s*par|gifted\s*by)\s*:\s*(.+)$/i.exec(l)
-      if (mGift) { giftedName = mGift[2].trim(); continue }
-      kept.push(l)
+  let userMessage = ''
+  let attestationText = ''
+
+  {
+    let raw = (message || '').trim()
+    if (raw) {
+      const paras = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+
+      // marqueurs + gifted
+      const kept: string[] = []
+      for (const p of paras) {
+        if (/^\[\[\s*HIDE_OWNED_BY\s*\]\]$/i.test(p)) { forceHideOwned = true; continue }
+        const mg = /^(offert\s*par|gifted\s*by)\s*:\s*(.+)$/i.exec(p)
+        if (mg) { giftedName = mg[2].trim(); continue }
+        kept.push(p)
+      }
+
+      // extraction attestation (dernier paragraphe “attestation” connu)
+      const finalParas: string[] = []
+      for (const p of kept) {
+        if (!attestationText && isAttestationParagraph(p)) attestationText = p
+        else finalParas.push(p)
+      }
+      userMessage = finalParas.join('\n').trim()
     }
-    messageClean = kept.join('\n')  // ← on conserve les paragraphes
   }
+
+  // Owned by visible ?
   const hasName = !forceHideOwned && !!(display_name && String(display_name).trim())
 
-  // Wraps
-  let msgLinesAll: string[] = []
-  if (messageClean) {
-    const paras = messageClean.split(/\n+/)
-    paras.forEach((p, i) => {
-      const lines = wrapText(p, font, msgSize, COLW)
-      msgLinesAll.push(...lines)
-      if (i < paras.length - 1) msgLinesAll.push('') // ligne vide entre paragraphes
-    })
-  }
+  // Wraps (miroir ClientClaim)
+  const titleText = (title || '').trim()
+  const titleLines = titleText ? wrapText(titleText, fontBold, nameSize, COLW).slice(0, 2) : []
 
-
+  // ⚠️ On conserve link_url en paramètre pour compatibilité BDD, MAIS
+  // on ne réserve aucun espace ni n’affichons le lien (placements historiquement NULL)
   const linkLinesAll = link_url ? wrapText(link_url, font, linkSize, COLW) : []
 
   // Hauteurs des blocs optionnels
-  const ownedBlockH = hasName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
+  const ownedBlockH  = hasName    ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
   const giftedBlockH = giftedName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
 
-  const fixedTop =
-    (tsSize + 6) + // uniquement la date (plus de sous-ligne)
-    ownedBlockH
-
+  const fixedTop = (tsSize + 6) + ownedBlockH
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
-  const titleText = (title || '').trim()
-  const titleLines = titleText ? wrapText(titleText, fontBold, nameSize, COLW).slice(0, 2) : []
-  const titleBlock = titleText ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
 
-  // Consommation avant le message : GiftedBy + Title
+  // Taille bloc Titre (sans gap supplémentaire, exactement comme ClientClaim)
+  const titleBlockNoGap = titleText
+    ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6))
+    : 0
 
   const gapBeforeTitle = giftedName ? 8 : gapSection
-  const beforeMsgConsumed = giftedBlockH + (titleBlock ? (gapBeforeTitle + titleBlock) : 0)
+  const beforeMsgConsumed = giftedBlockH + (titleBlockNoGap ? (gapBeforeTitle + titleBlockNoGap) : 0)
   const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
-  const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
-  const msgLines = msgLinesAll.slice(0, maxMsgLines)
 
-  const afterMsgSpace = afterTitleSpace - (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
-  const maxLinkLines = Math.min(2, Math.max(0, Math.floor(afterMsgSpace / lineHLink)))
-  const linkLines = linkLinesAll.slice(0, maxLinkLines)
+  // Capacité totale en lignes pour le contenu “texte” (Message + Attestation)
+  // (aucune réserve pour le lien)
+  const TOTAL_TEXT_LINES = Math.max(0, Math.floor(afterTitleSpace / lineHMsg))
 
-  const blockH = fixedTop
-    + (titleBlock ? (gapSection + titleBlock) : 0)
+  // Wrap du message utilisateur (paragraphes avec lignes vides)
+  let msgLinesAll: string[] = []
+  if (userMessage) {
+    const paras = userMessage.split(/\n+/)
+    paras.forEach((p, i) => {
+      const lines = wrapText(p, font, msgSize, COLW)
+      msgLinesAll.push(...lines)
+      if (i < paras.length - 1) msgLinesAll.push('')
+    })
+  }
+
+  // Wrap attestation
+  const attestLinesAll = attestationText ? wrapText(attestationText, font, msgSize, COLW) : []
+
+  // Allocation : d’abord le message user, puis l’attestation
+  const LINES_FOR_USER = Math.max(0, TOTAL_TEXT_LINES - attestLinesAll.length)
+  const msgLines = msgLinesAll.slice(0, LINES_FOR_USER)
+  const remainingForAttest = Math.max(0, TOTAL_TEXT_LINES - msgLines.length)
+  const attestLines = attestLinesAll.slice(0, remainingForAttest)
+
+  // Hauteur réelle consommée (sans lien)
+  const blockH =
+    fixedTop
+    + (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
     + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
-    + (linkLines.length ? (gapSection + linkLines.length * lineHLink) : 0)
+    + (attestLines.length ? (gapSection + attestLines.length * lineHMsg) : 0)
 
-  /*
-
-  const biasUp = 22
-  let by = contentBottomMin + (availH - blockH) / 2 + biasUp
-  let y = by + blockH
-  
-  */
-  // ancrage haut
+  // Rendu (ancrage haut, comme la preview)
   let y = contentTopMax
-  // Render — time
-  y -= (tsSize + 6)
-  page.drawText(mainTime, { x: CX - fontBold.widthOfTextAtSize(mainTime, tsSize)/2, y, size: tsSize, font: fontBold, color: cMain })
 
-  // Owned by (uniquement si autorisé)
+  // 1) Date
+  y -= (tsSize + 6)
+  page.drawText(mainTime, {
+    x: CX - fontBold.widthOfTextAtSize(mainTime, tsSize)/2,
+    y, size: tsSize, font: fontBold, color: cMain
+  })
+
+  // 2) Owned by
   if (hasName) {
     y -= gapSection
-    page.drawText(L.ownedBy, { x: CX - font.widthOfTextAtSize(L.ownedBy, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
+    page.drawText(L.ownedBy, {
+      x: CX - font.widthOfTextAtSize(L.ownedBy, labelSize)/2,
+      y: y - (labelSize + 2),
+      size: labelSize, font, color: cSub
+    })
     y -= (labelSize + 2 + gapSmall)
     const name = String(display_name).trim()
-    page.drawText(name, { x: CX - fontBold.widthOfTextAtSize(name, nameSize)/2, y: y - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
+    page.drawText(name, {
+      x: CX - fontBold.widthOfTextAtSize(name, nameSize)/2,
+      y: y - (nameSize + 4) + 4,
+      size: nameSize, font: fontBold, color: cMain
+    })
     y -= (nameSize + 4)
   }
 
-  // Gifted by (si détecté)
+  // 3) Gifted by
   if (giftedName) {
     y -= gapSection
-    page.drawText(L.giftedBy, { x: CX - font.widthOfTextAtSize(L.giftedBy, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
+    page.drawText(L.giftedBy, {
+      x: CX - font.widthOfTextAtSize(L.giftedBy, labelSize)/2,
+      y: y - (labelSize + 2),
+      size: labelSize, font, color: cSub
+    })
     y -= (labelSize + 2 + gapSmall)
-    page.drawText(giftedName, { x: CX - fontBold.widthOfTextAtSize(giftedName, nameSize)/2, y: y - (nameSize + 4) + 4, size: nameSize, font: fontBold, color: cMain })
+    page.drawText(giftedName, {
+      x: CX - fontBold.widthOfTextAtSize(giftedName, nameSize)/2,
+      y: y - (nameSize + 4) + 4,
+      size: nameSize, font: fontBold, color: cMain
+    })
     y -= (nameSize + 4)
   }
 
-  // Title
+  // 4) Title (⚠️ pas de gapSection supplémentaire : strictement comme ClientClaim)
   if (titleText) {
     y -= (nameSize + 4)
     y -= (giftedName ? 8 : gapSection)
-    y -= gapSection
-    page.drawText(L.titleLabel, { x: CX - font.widthOfTextAtSize(L.titleLabel, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
+    // (aucun y -= gapSection ici)
+    page.drawText(L.titleLabel, {
+      x: CX - font.widthOfTextAtSize(L.titleLabel, labelSize)/2,
+      y: y - (labelSize + 2),
+      size: labelSize, font, color: cSub
+    })
     y -= (labelSize + 6)
     for (const line of titleLines) {
-      page.drawText(line, { x: CX - fontBold.widthOfTextAtSize(line, nameSize)/2, y: y - (nameSize + 2), size: nameSize, font: fontBold, color: cMain })
+      page.drawText(line, {
+        x: CX - fontBold.widthOfTextAtSize(line, nameSize)/2,
+        y: y - (nameSize + 2),
+        size: nameSize, font: fontBold, color: cMain
+      })
       y -= (nameSize + 6)
     }
   }
 
-  // Message
+  // 5) Message
   if (msgLines.length) {
     y -= gapSection
-    page.drawText(L.message, { x: CX - font.widthOfTextAtSize(L.message, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
+    page.drawText(L.message, {
+      x: CX - font.widthOfTextAtSize(L.message, labelSize)/2,
+      y: y - (labelSize + 2),
+      size: labelSize, font, color: cSub
+    })
     y -= (labelSize + 6)
     for (const line of msgLines) {
-        if (line === '') { y -= lineHMsg; continue } // saute une ligne pour l’espace
-        page.drawText(line, { x: CX - font.widthOfTextAtSize(line, msgSize)/2, y: y - lineHMsg, size: msgSize, font, color: cMain })
-        y -= lineHMsg
-      }
-  }
-
-  // Lien
-  if (linkLines.length) {
-    y -= gapSection
-    page.drawText(L.link, { x: CX - font.widthOfTextAtSize(L.link, labelSize)/2, y: y - (labelSize + 2), size: labelSize, font, color: cSub })
-    y -= (labelSize + 6)
-    for (const line of linkLines) {
-      page.drawText(line, { x: CX - font.widthOfTextAtSize(line, linkSize)/2, y: y - lineHLink, size: linkSize, font, color: cLink })
-      y -= lineHLink
+      if (line === '') { y -= lineHMsg; continue }
+      page.drawText(line, {
+        x: CX - font.widthOfTextAtSize(line, msgSize)/2,
+        y: y - lineHMsg,
+        size: msgSize, font, color: cMain
+      })
+      y -= lineHMsg
     }
   }
 
-  // Footer (QR optionnel)
+  // 5b) Attestation (section indépendante)
+  if (attestLines.length) {
+    y -= gapSection
+    page.drawText(L.attestationLabel, {
+      x: CX - font.widthOfTextAtSize(L.attestationLabel, labelSize)/2,
+      y: y - (labelSize + 2),
+      size: labelSize, font, color: cSub
+    })
+    y -= (labelSize + 6)
+    for (const line of attestLines) {
+      if (line === '') { y -= lineHMsg; continue }
+      page.drawText(line, {
+        x: CX - font.widthOfTextAtSize(line, msgSize)/2,
+        y: y - lineHMsg,
+        size: msgSize, font, color: cMain
+      })
+      y -= lineHMsg
+    }
+  }
+
+  // 6) Lien — Conservé en PARAMÈTRE pour compat BDD mais
+  //     pas de réserve d’espace et pas de rendu (placements historiquement NULL).
+  //     Si un jour on le réactive, reproduire la même séquence que ClientClaim.
+
+  // Footer (QR + méta)
   const EDGE = 16
   if (!opts.hideQr) {
     const qrDataUrl = await QRCode.toDataURL(public_url, { margin: 0, scale: 6 })

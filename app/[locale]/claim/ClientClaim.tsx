@@ -960,7 +960,7 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                   <input type="text" value={form.title}
                     onChange={e=>setForm(f=>({...f, title:e.target.value}))}
                     maxLength={TITLE_MAX}     
-                    placeholder="Ex. “Notre journée sous la pluie”"
+                    placeholder="Ex. “Joyeux anniversaire !”"
                     style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                   />
                 </label>
