@@ -468,50 +468,30 @@ export default function EditClient({
   const LINES_FOR_USER = Math.max(0, TOTAL_MSG_LINES - attestLinesAll.length - attestExtraBlank)
 
 
-  function maxCharsByLines(text: string, linesBudget: number): number {
+  function capacityCharsForLines(linesBudget: number): number {
     if (linesBudget <= 0) return 0
-    const words = (text || '').trim().split(/\s+/).filter(Boolean)
-    let usedLines = 0, line = '', usedChars = 0
-  
-    // on doit re-mesurer : on réutilise meas.wrap mais on avance mot à mot
-    const setFont = (sizePt:number, bold=false)=>{} // noop ici, déjà configuré
-    const maxPx = COLW * scale
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')!
-    ctx.font = `${msgSize * scale}px Helvetica, Arial, sans-serif`
-  
-    const w = (s:string)=>ctx.measureText(s).width
-  
-    for (let i=0;i<words.length;i++){
-      const wtest = line ? (line + ' ' + words[i]) : words[i]
-      if (w(wtest) <= maxPx) {
-        line = wtest
-        // si c’est le dernier mot, on compte la ligne finale
-        if (i === words.length - 1) {
-          usedLines++
-          usedChars += line.length + (usedLines>1?1:0) // +1 pour le saut de ligne précédent si besoin
-        }
-      } else {
-        // on commit la ligne actuelle
-        usedLines++
-        usedChars += line.length + (usedLines>1?1:0)
-        if (usedLines >= linesBudget) return usedChars - (usedLines>1?1:0)
-        line = words[i]
-        // si dernier mot après retour à la ligne
-        if (i === words.length - 1) {
-          usedLines++
-          usedChars += line.length + 1
-        }
-      }
-      if (usedLines >= linesBudget) break
+    // On cherche combien de "mots courts" ("x") séparés par des espaces tiennent
+    // sur `linesBudget` lignes avec la même mesure que le PDF.
+    const fitsLines = (n: number) => {
+      const fake = 'x '.repeat(Math.max(0, n)).trim()
+      const lines = meas.wrap(fake, msgSize, COLW, false)
+      return lines.length
     }
-    return Math.min(usedChars, (text || '').trim().length)
+  
+    // borne haute raisonnable (A4, 12.5pt, colonne unique) — on prend large
+    let lo = 0, hi = 5000
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi + 1) / 2)
+      if (fitsLines(mid) <= linesBudget) lo = mid
+      else hi = mid - 1
+    }
+    return lo
   }
 
   const userMsgMaxChars = useMemo(() => {
-    return maxCharsByLines(form.message, LINES_FOR_USER)
+    return capacityCharsForLines(LINES_FOR_USER)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.message, LINES_FOR_USER, scale, form.cert_style, show, isGift, chosenDateStr])
+  }, [LINES_FOR_USER, scale, form.cert_style, show, isGift, chosenDateStr])
   
   
   // Séquence identique au PDF (baselines)
@@ -538,12 +518,17 @@ export default function EditClient({
   let titleLabelTop:number|null = null; const titleLineTops:number[] = []
   if (titleForPreview) {
     y -= (nameSize + 4)
-    y -= (giftedNameTop ? 8 : gapSection)
-    y -= gapSection
+    // même règle que pour la capacité : 8pt si Gifted juste au-dessus, sinon 14pt
+    y -= (showGifted ? 8 : gapSection)
+    // ⚠️ on NE rajoute plus un gapSection supplémentaire ici
     titleLabelTop = toTopPx(y - (labelSize + 2), labelSize)
     y -= (labelSize + 6)
-    for (const _ of titleLines) { titleLineTops.push(toTopPx(y - (nameSize + 2), nameSize)); y -= (nameSize + 6) }
+    for (const _ of titleLines) {
+      titleLineTops.push(toTopPx(y - (nameSize + 2), nameSize))
+      y -= (nameSize + 6)
+    }
   }
+  
 
   let msgLabelTop:number|null = null; const msgLineTops:number[] = []
   if (msgLines.length) {
@@ -571,10 +556,11 @@ export default function EditClient({
 
     // Compose message final (avec Gifted by si activé)
     
-      const safeUserMsg = show.message ? (form.message || '') : ''
-      const cappedUserMsg =
-        userMsgMaxChars > 0 ? safeUserMsg.slice(0, userMsgMaxChars) : ''
-
+    const safeUserMsg = show.message ? (form.message || '') : ''
+    const cappedUserMsg = userMsgMaxChars > 0
+      ? safeUserMsg.slice(0, userMsgMaxChars)
+      : ''
+    
       const msgParts: string[] = []
       if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
       if (show.message && show.attestation) msgParts.push(attestationText)
