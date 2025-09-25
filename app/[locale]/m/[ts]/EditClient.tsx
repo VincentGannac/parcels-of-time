@@ -706,6 +706,38 @@ export default function EditClient({
 
       {/* ---------- FORM EDIT ---------- */}
       <form onSubmit={onSubmit} style={{display:'grid', gap:14}}>
+         
+        {/* Date (verrouillée) */}
+        <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+          <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>VOTRE JOUR (verrouillé)</div>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
+            <label style={{display:'grid', gap:6}}>
+              <span>Année</span>
+              <select value={Y} disabled
+                style={{padding:'12px 10px', border:'1px dashed var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                <option value={Y} style={{color:'#000'}}>{Y}</option>
+              </select>
+            </label>
+            <label style={{display:'grid', gap:6}}>
+              <span>Mois</span>
+              <select value={M} disabled
+                style={{padding:'12px 10px', border:'1px dashed var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                <option value={M} style={{color:'#000'}}>{String(M).padStart(2,'0')}</option>
+              </select>
+            </label>
+            <label style={{display:'grid', gap:6}}>
+              <span>Jour</span>
+              <select value={D} disabled
+                style={{padding:'12px 10px', border:'1px dashed var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                <option value={D} style={{color:'#000'}}>{String(D).padStart(2,'0')}</option>
+              </select>
+            </label>
+          </div>
+          <div style={{marginTop:8, fontSize:12, color:'var(--color-muted)'}}>
+            La date ne peut pas être modifiée (unicité garantie). Vous pouvez changer le style, le texte, etc.
+          </div>
+        </div>
+        
         {/* Infos */}
         <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
           <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
@@ -869,36 +901,7 @@ export default function EditClient({
           </div>
         </div>
 
-        {/* Date (verrouillée) */}
-        <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-          <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>VOTRE JOUR (verrouillé)</div>
-          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
-            <label style={{display:'grid', gap:6}}>
-              <span>Année</span>
-              <select value={Y} disabled
-                style={{padding:'12px 10px', border:'1px dashed var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                <option value={Y} style={{color:'#000'}}>{Y}</option>
-              </select>
-            </label>
-            <label style={{display:'grid', gap:6}}>
-              <span>Mois</span>
-              <select value={M} disabled
-                style={{padding:'12px 10px', border:'1px dashed var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                <option value={M} style={{color:'#000'}}>{String(M).padStart(2,'0')}</option>
-              </select>
-            </label>
-            <label style={{display:'grid', gap:6}}>
-              <span>Jour</span>
-              <select value={D} disabled
-                style={{padding:'12px 10px', border:'1px dashed var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                <option value={D} style={{color:'#000'}}>{String(D).padStart(2,'0')}</option>
-              </select>
-            </label>
-          </div>
-          <div style={{marginTop:8, fontSize:12, color:'var(--color-muted)'}}>
-            La date ne peut pas être modifiée (unicité garantie). Vous pouvez changer le style, le texte, etc.
-          </div>
-        </div>
+        
 
         {/* Style */}
         <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>

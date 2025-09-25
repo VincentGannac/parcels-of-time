@@ -918,7 +918,7 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
             
             {/* Step 1 — Journée */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE JOUR</div>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 1 — VOTRE JOUR</div>
 
               {/* Sélecteurs date (jour complet) */}
               <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
@@ -998,7 +998,7 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
             {/* Step 2 — Infos */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 1 — INFORMATIONS</div>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — INFORMATIONS</div>
 
               <label style={{display:'grid', gap:6, marginBottom:10}}>
                 <span>{isGift ? 'Votre e-mail (reçu & certificat)' : 'E-mail (reçu & certificat)'}</span>
