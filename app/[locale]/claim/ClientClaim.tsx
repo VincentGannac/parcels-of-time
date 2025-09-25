@@ -233,13 +233,43 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   // Jours indisponibles (du mois courant) — affichés en rouge et désactivés
   const [unavailableDays, setUnavailableDays] = useState<number[]>([])
+  const [isLoadingDays, setIsLoadingDays] = useState(false)
+
+  // Cache par mois (YYYY-MM) pour accélérer les rafraîchissements
+  const unavailCacheRef = useRef<Map<string, number[]>>(new Map())
+
+  // Pour annuler les requêtes précédentes si on change Y/M rapidement
+  const daysReqAbortRef = useRef<AbortController | null>(null)
+
   useEffect(() => {
     const ym = `${Y}-${String(M).padStart(2,'0')}`
-    let ignore = false
+  
+    // 1) Cancel la requête précédente si encore en vol
+    if (daysReqAbortRef.current) {
+      try { daysReqAbortRef.current.abort() } catch {}
+    }
+  
+    // 2) Reset optimiste pour rafraîchir l’affichage tout de suite
+    setIsLoadingDays(true)
+    setUnavailableDays([])
+  
+    // 3) Cache : si on l’a déjà, on le pousse instantanément
+    const cached = unavailCacheRef.current.get(ym)
+    if (cached) {
+      setUnavailableDays(cached)
+      setIsLoadingDays(false)
+      return
+    }
+  
+    // 4) Sinon on fetch, avec AbortController
+    const ctrl = new AbortController()
+    daysReqAbortRef.current = ctrl
+  
     ;(async () => {
       try {
-        const res = await fetch(`/api/unavailable?ym=${ym}`)
-        if (!res.ok) { if (!ignore) setUnavailableDays([]); return }
+        const res = await fetch(`/api/unavailable?ym=${ym}`, { signal: ctrl.signal })
+        if (!res.ok) { setUnavailableDays([]); return }
+  
         const data = await res.json()
         const raw: any[] = Array.isArray(data) ? data : (data?.days ?? data?.unavailable ?? [])
         const set = new Set<number>()
@@ -255,13 +285,20 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
             }
           }
         }
-        if (!ignore) setUnavailableDays(Array.from(set).sort((a,b)=>a-b))
-      } catch {
-        if (!ignore) setUnavailableDays([])
+        const arr = Array.from(set).sort((a,b)=>a-b)
+        unavailCacheRef.current.set(ym, arr)   // 🔒 mise en cache
+        setUnavailableDays(arr)
+      } catch (e:any) {
+        if (e?.name !== 'AbortError') setUnavailableDays([])
+      } finally {
+        if (daysReqAbortRef.current === ctrl) {
+          daysReqAbortRef.current = null
+        }
+        setIsLoadingDays(false)
       }
     })()
-    return () => { ignore = true }
   }, [Y, M])
+  
 
   // Si le jour sélectionné devient indisponible, tente de choisir le 1er jour dispo
   useEffect(() => {
@@ -949,7 +986,7 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
                 {/* Jour (borné si année/mois max) + indisponibles en rouge & désactivés */}
                 <label style={{display:'grid', gap:6}}>
-                  <span>Jour</span>
+                  <span>Jour {isLoadingDays && <em style={{fontSize:12, opacity:.7}}>— Maj…</em>}</span>
                   {(() => {
                     const dim = daysInMonth(Y, M)
                     const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
@@ -957,8 +994,10 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                     const set = new Set(unavailableDays)
                     return (
                       <select
+                        key={`${Y}-${M}`} // 🔑 force le remount quand Y/M change → options recalculées instantanément
                         value={D}
                         onChange={e=>setD(parseInt(e.target.value))}
+                        aria-busy={isLoadingDays || undefined}
                         style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                       >
                         {days.map(d=>{
@@ -970,7 +1009,6 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                               value={d}
                               disabled={unavailable}
                               aria-disabled={unavailable}
-                              // certaines plateformes grisent les options désactivées — on laisse aussi un indicateur ⛔
                               style={{color: unavailable ? '#ff4d4d' : '#000'}}
                             >
                               {unavailable ? `⛔ ${label}` : label}
@@ -981,6 +1019,7 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                     )
                   })()}
                 </label>
+
               </div>
 
               <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
