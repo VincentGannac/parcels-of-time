@@ -915,7 +915,88 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
         <div style={{display:'grid', gridTemplateColumns:'1.1fr 0.9fr', gap:18, alignItems:'start'}}>
           {/* ---------- FORM COLUMN ---------- */}
           <form onSubmit={onSubmit} style={{display:'grid', gap:14}}>
-            {/* Step 1 — Infos */}
+            
+            {/* Step 1 — Journée */}
+            <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE JOUR</div>
+
+              {/* Sélecteurs date (jour complet) */}
+              <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
+                {/* Année (1900 -> MAX_Y) */}
+                <label style={{display:'grid', gap:6}}>
+                  <span>Année</span>
+                  <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
+                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                    {range(1900, MAX_Y).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
+                  </select>
+                </label>
+
+                {/* Mois (borné si année max) */}
+                <label style={{display:'grid', gap:6}}>
+                  <span>Mois</span>
+                  {(() => {
+                    const maxMonthForYear = (Y === MAX_Y) ? MAX_M : 12
+                    return (
+                      <select value={M} onChange={e=>setM(parseInt(e.target.value))}
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
+                        {Array.from({length:maxMonthForYear},(_,i)=>i+1).map(v=>(
+                          <option key={v} value={v} style={{color:'#000'}}>{String(v).padStart(2,'0')}</option>
+                        ))}
+                      </select>
+                    )
+                  })()}
+                </label>
+
+                {/* Jour (borné si année/mois max) + indisponibles en rouge & désactivés */}
+                <label style={{display:'grid', gap:6}}>
+                  <span>Jour</span>
+                  {(() => {
+                    const dim = daysInMonth(Y, M)
+                    const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
+                    const days = Array.from({length: maxDayForThisMonth}, (_,i)=>i+1)
+                    const set = new Set(unavailableDays)
+                    return (
+                      <select
+                        value={D}
+                        onChange={e=>setD(parseInt(e.target.value))}
+                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                      >
+                        {days.map(d=>{
+                          const unavailable = set.has(d)
+                          const label = d.toString().padStart(2,'0') + (unavailable ? ' — indisponible' : '')
+                          return (
+                            <option
+                              key={d}
+                              value={d}
+                              disabled={unavailable}
+                              aria-disabled={unavailable}
+                              // certaines plateformes grisent les options désactivées — on laisse aussi un indicateur ⛔
+                              style={{color: unavailable ? '#ff4d4d' : '#000'}}
+                            >
+                              {unavailable ? `⛔ ${label}` : label}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    )
+                  })()}
+                </label>
+              </div>
+
+              <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
+                  <strong>Affichage&nbsp;:</strong> {chosenDateStr || '—'}
+                </div>
+                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
+                  <strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}
+                </div>
+              </div>
+              <div style={{marginTop:8, fontSize:12, color:'#ff8a8a'}}>
+                Les jours en rouge sont indisponibles.
+              </div>
+            </div>
+
+            {/* Step 2 — Infos */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 1 — INFORMATIONS</div>
 
@@ -1095,85 +1176,6 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </div>
             </div>
 
-            {/* Step 2 — Journée */}
-            <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 2 — VOTRE JOUR</div>
-
-              {/* Sélecteurs date (jour complet) */}
-              <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
-                {/* Année (1900 -> MAX_Y) */}
-                <label style={{display:'grid', gap:6}}>
-                  <span>Année</span>
-                  <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
-                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                    {range(1900, MAX_Y).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
-                  </select>
-                </label>
-
-                {/* Mois (borné si année max) */}
-                <label style={{display:'grid', gap:6}}>
-                  <span>Mois</span>
-                  {(() => {
-                    const maxMonthForYear = (Y === MAX_Y) ? MAX_M : 12
-                    return (
-                      <select value={M} onChange={e=>setM(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                        {Array.from({length:maxMonthForYear},(_,i)=>i+1).map(v=>(
-                          <option key={v} value={v} style={{color:'#000'}}>{String(v).padStart(2,'0')}</option>
-                        ))}
-                      </select>
-                    )
-                  })()}
-                </label>
-
-                {/* Jour (borné si année/mois max) + indisponibles en rouge & désactivés */}
-                <label style={{display:'grid', gap:6}}>
-                  <span>Jour</span>
-                  {(() => {
-                    const dim = daysInMonth(Y, M)
-                    const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
-                    const days = Array.from({length: maxDayForThisMonth}, (_,i)=>i+1)
-                    const set = new Set(unavailableDays)
-                    return (
-                      <select
-                        value={D}
-                        onChange={e=>setD(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                      >
-                        {days.map(d=>{
-                          const unavailable = set.has(d)
-                          const label = d.toString().padStart(2,'0') + (unavailable ? ' — indisponible' : '')
-                          return (
-                            <option
-                              key={d}
-                              value={d}
-                              disabled={unavailable}
-                              aria-disabled={unavailable}
-                              // certaines plateformes grisent les options désactivées — on laisse aussi un indicateur ⛔
-                              style={{color: unavailable ? '#ff4d4d' : '#000'}}
-                            >
-                              {unavailable ? `⛔ ${label}` : label}
-                            </option>
-                          )
-                        })}
-                      </select>
-                    )
-                  })()}
-                </label>
-              </div>
-
-              <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
-                  <strong>Affichage&nbsp;:</strong> {chosenDateStr || '—'}
-                </div>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
-                  <strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}
-                </div>
-              </div>
-              <div style={{marginTop:8, fontSize:12, color:'#ff8a8a'}}>
-                Les jours en rouge sont indisponibles.
-              </div>
-            </div>
 
             {/* Step 3 — Style */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
