@@ -1,14 +1,13 @@
 // app/[locale]/m/[ts]/page.tsx
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
-import dynamic from 'next/dynamic'
-const EditClient = dynamic(() => import('./EditClient'), { ssr: false })
-
+import EditClient from './EditClient'
 type Params = { locale: string; ts: string }
 type SearchParams = { autopub?: string; ok?: string }
 
