@@ -5,7 +5,7 @@ import type React from 'react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 
-export type CertStyle =
+type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
 
@@ -201,7 +201,7 @@ function coverToA4JPEG(dataUrl: string, srcW: number, srcH: number) {
   })
 }
 
-export type Initial = {
+type Initial = {
   email: string
   display_name: string
   title: string
@@ -214,13 +214,6 @@ export type Initial = {
   title_public: boolean
   message_public: boolean
 }
-
-export type EditClientProps = {
-  tsISO: string
-  locale: string
-  initial: Initial
-}
-
 
 export default function EditClient({
   tsISO,
@@ -713,14 +706,8 @@ export default function EditClient({
 
       {/* ---------- FORM EDIT ---------- */}
       <form onSubmit={onSubmit} style={{display:'grid', gap:14}}>
-        
-        {/* Infos */}
-        <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-          <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-            Modifier les informations (9,99 €)
-          </div>
-
-          {/* Date (verrouillée) */}
+         
+        {/* Date (verrouillée) */}
         <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
           <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>VOTRE JOUR (verrouillé)</div>
           <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
@@ -750,6 +737,12 @@ export default function EditClient({
             La date ne peut pas être modifiée (unicité garantie). Vous pouvez changer le style, le texte, etc.
           </div>
         </div>
+        
+        {/* Infos */}
+        <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+          <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
+            Modifier les informations (9,99 €)
+          </div>
 
           <label style={{display:'grid', gap:6, marginBottom:10}}>
             <span>{isFR ? 'E-mail de réception' : 'Receipt email'}</span>

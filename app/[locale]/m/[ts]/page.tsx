@@ -6,21 +6,20 @@ export const revalidate = 0
 import { redirect } from 'next/navigation'
 import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
-import EditSection from './EditSection'
+import EditClient from './EditClient'
+
 type Params = { locale: string; ts: string }
 type SearchParams = { autopub?: string; ok?: string; debug?: string }
 
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
 
-
 function formatISOAsNiceSafe(iso: string) {
-     try {
-       const d = new Date(iso)
-       if (isNaN(d.getTime())) return iso
-       // rendu court, indépen­dant du locale de l’OS
-       return d.toISOString().slice(0,10) // YYYY-MM-DD
-     } catch { return iso }
-   }
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    return d.toISOString().slice(0,10) // YYYY-MM-DD
+  } catch { return iso }
+}
 
 /** Normalise vers minuit UTC et renvoie aussi le YMD */
 function normalizeTs(input: string): { tsISO: string | null; tsYMD: string | null } {
@@ -220,7 +219,7 @@ export default async function Page({
   const pdfHref = `/api/cert/${encodeURIComponent(tsYMD!)}`
   const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
-  // L’API verify peut accepter l’ISO minuit propre
+  // L’API verify accepte l’ISO minuit propre
   const verifyHref = `/api/verify?ts=${encodeURIComponent(tsISO!)}`
   const niceTs = formatISOAsNiceSafe(tsISO!)
 
@@ -246,7 +245,6 @@ export default async function Page({
     redirect(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}?ok=${ok ? '1' : '0'}`)
   }
 
-
   const showDebug = sp.debug === '1'
   const debugBlob = showDebug ? {
     input: { decodedTs, tsISO, tsYMD },
@@ -261,7 +259,6 @@ export default async function Page({
       price_eur: listing.price_cents/100
     } : null
   } : null
-
 
   return (
     <main
@@ -348,11 +345,15 @@ export default async function Page({
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
                 Revendre ce certificat (Marketplace)
               </div>
-              <form onSubmit={(e)=>{ /* hydratation client si besoin */ }} method="dialog">
+              <form method="post" action="/api/marketplace/listing">
+                <input type="hidden" name="ts" value={tsISO!} />
                 <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
-                  <label>Prix (€) <input name="price" type="number" min={1} step={1} style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}} /></label>
-                  <button formAction={`/api/marketplace/listing`} formMethod="post"
-                    style={{padding:'10px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)'}}
+                  <label>Prix (€){' '}
+                    <input name="price" type="number" min={1} step={1} required
+                           style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}} />
+                  </label>
+                  <button type="submit"
+                    style={{padding:'10px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}
                   >Mettre en vente</button>
                 </div>
                 <p style={{fontSize:12, opacity:.7, marginTop:8}}>Commission 10% (min 1€) prélevée par Parcels of Time.</p>
@@ -372,6 +373,7 @@ export default async function Page({
                 </div>
                 <form id="mk-checkout" method="post" action="/api/marketplace/checkout" style={{display:'flex', gap:8}}>
                   <input type="hidden" name="listing_id" value={String(listing.id)} />
+                  <input type="hidden" name="ts" value={tsISO!} />
                   <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
                         style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10}} />
                   <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
@@ -520,7 +522,64 @@ export default async function Page({
             <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>Métadonnées non disponibles.</div>
           )}
         </aside>
-       
+
+        {/* ======= ÉDITION (9,99 €) — DÉPLIANTE ======= */}
+        <section style={{ marginTop: 24 }}>
+          <details style={{ border: '1px solid var(--color-border)', borderRadius: 12, background: 'var(--color-surface)' }}>
+            <summary
+              style={{
+                listStyle: 'none',
+                cursor: 'pointer',
+                padding: '14px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                userSelect: 'none',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <span style={{ fontFamily: 'Fraunces, serif', fontSize: 20 }}>Modifier votre certificat</span>
+                <small style={{ fontSize: 13, opacity: 0.75 }}>(9,99 €)</small>
+              </span>
+              <span aria-hidden style={{ opacity: 0.7 }}>▼</span>
+            </summary>
+
+            <div style={{ padding: 16, borderTop: '1px solid var(--color-border)' }}>
+              {claim ? (
+                <EditClient
+                  tsISO={tsISO!}
+                  locale={locale}
+                  initial={{
+                    email: claim.email || '',
+                    display_name: claim.display_name || '',
+                    title: claim.title || '',
+                    message: claim.message || '',
+                    link_url: claim.link_url || '',
+                    cert_style: (claim.cert_style as any) || 'neutral',
+                    time_display: (claim.time_display as any) || 'local+utc',
+                    local_date_only: !!claim.local_date_only,
+                    text_color: claim.text_color || '#1a1f2a',
+                    title_public: !!claim.title_public,
+                    message_public: !!claim.message_public,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 12,
+                    padding: 16,
+                  }}
+                >
+                  <p style={{ margin: 0 }}>
+                    Aucune donnée trouvée pour cette journée. Assurez-vous que l’URL contient bien un horodatage valide.
+                  </p>
+                </div>
+              )}
+            </div>
+          </details>
+        </section>
 
         {showDebug && (
           <aside style={{
@@ -538,7 +597,6 @@ export default async function Page({
             </pre>
           </aside>
         )}
-
 
         <div style={{ marginTop: 18, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <a
