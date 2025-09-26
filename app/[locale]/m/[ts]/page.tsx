@@ -12,9 +12,10 @@ import EditClient from './EditClient'
 
 type Params = { locale: string; ts: string }
 type SearchParams = { autopub?: string; ok?: string }
+
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
 function asDayIsoUTC(ts: string) {
-  // accepte YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ssZ → force minuit UTC
+  // accepte YYYY-MM-DD ou un ISO → force minuit UTC
   const d = /^\d{4}-\d{2}-\d{2}$/.test(ts) ? new Date(`${ts}T00:00:00.000Z`) : new Date(ts)
   if (isNaN(d.getTime())) return null
   d.setUTCHours(0,0,0,0)
@@ -31,9 +32,7 @@ async function getPublicStateDb(tsISO: string): Promise<boolean> {
       [tsISO]
     )
     return !!rows[0]?.ok
-  } catch {
-    return false
-  }
+  } catch { return false }
 }
 
 /** Écriture état public (par jour) */
@@ -43,19 +42,15 @@ async function setPublicDb(tsISO: string, next: boolean): Promise<boolean> {
     if (next) {
       await client.query(
         `insert into minute_public (ts)
-           values ($1::timestamptz)
-           on conflict (ts) do nothing`,
+         values ($1::timestamptz)
+         on conflict (ts) do nothing`,
         [tsISO]
       )
     } else {
       await client.query(`delete from minute_public where ts = $1::timestamptz`, [tsISO])
     }
     return true
-  } catch {
-    return false
-  } finally {
-    client.release()
-  }
+  } catch { return false } finally { client.release() }
 }
 
 const TOKENS = {
@@ -92,7 +87,7 @@ async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
               c.title_public, c.message_public
          from claims c
          left join owners o on o.id = c.owner_id
-         where date_trunc('day', c.ts) = $1::timestamptz`,
+        where date_trunc('day', c.ts) = $1::timestamptz`,
       [tsISO]
     )
     if (!rows.length) return null
@@ -110,9 +105,7 @@ async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
       title_public: !!r.title_public,
       message_public: !!r.message_public,
     }
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 async function getClaimMeta(tsISO: string) {
@@ -125,9 +118,7 @@ async function getClaimMeta(tsISO: string) {
     )
     if (!rows.length) return null
     return { claimId: String(rows[0].claim_id), hash: String(rows[0].cert_hash || '') }
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 type ListingRow = {
@@ -151,25 +142,22 @@ async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
       [tsISO]
     )
     return rows[0] || null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 export default async function Page({
   params,
   searchParams,
 }: {
-  params: Params
-  searchParams?: SearchParams
+  params: Promise<Params>
+  searchParams: Promise<SearchParams>
 }) {
-  const { locale = 'en', ts: tsParam = '' } = params || ({} as Params)
-  const sp = searchParams || {}
+  // ✅ signature Promise pour satisfaire les types Next (et éviter l’erreur Vercel)
+  const { locale = 'en', ts: tsParam = '' } = await params
+  const sp = (await searchParams) || {}
   const decodedTs = safeDecode(tsParam)
   const tsISO = asDayIsoUTC(decodedTs)
-  if (!tsISO) {
-    redirect(`/${locale}/account?err=bad_ts`)
-  }
+  if (!tsISO) redirect(`/${locale}/account?err=bad_ts`)
 
   // 1) Auth obligatoire
   const session = await readSession()
@@ -183,7 +171,6 @@ export default async function Page({
   const listing = isOwner ? null : await readActiveListing(tsISO)
 
   if (!isOwner && !listing) {
-    // ni owner ni annonce → on renvoie vers compte
     redirect(`/${locale}/account?err=not_owner`)
   }
 
@@ -197,7 +184,7 @@ export default async function Page({
   }
   const isPublic = isPublicDb
 
-  // 4) Données claim / meta (si claim absent, on ne casse pas l’affichage d’annonce)
+  // 4) Données claim / meta (robuste si claim absent)
   const meta = await getClaimMeta(tsISO)
   const claim = await getClaimForEdit(tsISO)
 
@@ -313,7 +300,7 @@ export default async function Page({
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
                 Revendre ce certificat (Marketplace)
               </div>
-              <form onSubmit={(e)=>{ /* hydraté côté client si besoin */ }} method="dialog">
+              <form onSubmit={(e)=>{ /* hydratation client si besoin */ }} method="dialog">
                 <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
                   <label>Prix (€) <input name="price" type="number" min={1} step={1} style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}} /></label>
                   <button formAction={`/api/marketplace/listing`} formMethod="post"
@@ -528,9 +515,7 @@ export default async function Page({
                 />
               ) : (
                 <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16 }}>
-                  <p style={{ margin: 0 }}>
-                    Aucune donnée trouvée pour cette journée.
-                  </p>
+                  <p style={{ margin: 0 }}>Aucune donnée trouvée pour cette journée.</p>
                 </div>
               )}
             </div>
