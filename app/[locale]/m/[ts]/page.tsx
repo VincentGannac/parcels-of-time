@@ -11,26 +11,22 @@ import { readSession, ownerIdForDay } from '@/lib/auth'
 import EditClient from './EditClient'
 
 type Params = { locale: string; ts: string }
-type SearchParams = { autopub?: string; ok?: string } 
+type SearchParams = { autopub?: string; ok?: string }
 
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
 
-/** Normalise au jour UTC (00:00:00.000Z) — accepte YYYY-MM-DD ou un ISO */
-function asDayIsoUTC(ts: string) {
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(ts) ? new Date(`${ts}T00:00:00.000Z`) : new Date(ts)
-  if (isNaN(d.getTime())) return null
-  d.setUTCHours(0,0,0,0)
-  return d.toISOString()
+/** Normalise vers minuit UTC et renvoie aussi le YMD */
+function normalizeTs(input: string): { tsISO: string | null; tsYMD: string | null } {
+  if (!input) return { tsISO: null, tsYMD: null }
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(input) ? new Date(`${input}T00:00:00.000Z`) : new Date(input)
+  if (isNaN(d.getTime())) return { tsISO: null, tsYMD: null }
+  d.setUTCHours(0, 0, 0, 0)
+  const tsISO = d.toISOString()
+  const tsYMD = tsISO.slice(0, 10)
+  return { tsISO, tsYMD }
 }
 
-/** Helpers searchParams (compatible objet ou URLSearchParams) */
-function getQ(sp: SearchParams | undefined, key: string): string | undefined {
-  if (!sp) return undefined
-  if (typeof (sp as any)?.get === 'function') return (sp as any).get(key) ?? undefined
-  return (sp as any)?.[key]
-}
-
-/** Lecture état public (par jour) */
+/** Lecture état public (par jour) – attend un ISO minuit */
 async function getPublicStateDb(tsISO: string): Promise<boolean> {
   try {
     const { rows } = await pool.query(
@@ -43,14 +39,13 @@ async function getPublicStateDb(tsISO: string): Promise<boolean> {
   } catch { return false }
 }
 
-/** Écriture état public (par jour) */
+/** Écriture état public (par jour) – attend un ISO minuit */
 async function setPublicDb(tsISO: string, next: boolean): Promise<boolean> {
   const client = await pool.connect()
   try {
     if (next) {
       await client.query(
-        `insert into minute_public (ts)
-         values ($1::timestamptz)
+        `insert into minute_public (ts) values ($1::timestamptz)
          on conflict (ts) do nothing`,
         [tsISO]
       )
@@ -144,7 +139,7 @@ async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
               o.display_name as seller_display_name
          from listings l
          join owners o on o.id = l.seller_owner_id
-        where date_trunc('day', l.ts) = $1::timestamptz
+        where l.ts = $1::timestamptz
           and l.status = 'active'
         limit 1`,
       [tsISO]
@@ -153,92 +148,95 @@ async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
   } catch { return null }
 }
 
+/** ownerIdForDay tolérant : tente ISO minuit puis YMD */
+async function ownerIdForDaySafe(tsISO: string, tsYMD: string): Promise<string | null> {
+  try {
+    const a = await ownerIdForDay(tsISO)
+    if (a) return a as any
+  } catch {}
+  try {
+    const b = await ownerIdForDay(tsYMD)
+    if (b) return b as any
+  } catch {}
+  return null
+}
+
 export default async function Page({
   params,
   searchParams,
 }: {
-  params: Promise<Params> | Params
-  searchParams: Promise<SearchParams> | SearchParams
+  params: Promise<Params>
+  searchParams: Promise<SearchParams>
 }) {
-  // Accepte Promise ou objet (différences de types Next 15)
-  const p = await params as Params
-  const sp = await searchParams as SearchParams
+  const { locale = 'en', ts: tsParam = '' } = await params
+  const sp = (await searchParams) || {}
 
-  const { locale = 'en', ts: tsParam = '' } = p
   const decodedTs = safeDecode(tsParam)
-
-  // 🔒 Normalisation unique pour TOUTE la page
-  const tsISO = asDayIsoUTC(decodedTs)
-  if (!tsISO) redirect(`/${locale}/account?err=bad_ts`)
-  const tsDay = tsISO.slice(0, 10) // utile pour certaines routes publiques
-
-  // 1) Auth
-  let session = null as null | { ownerId: string }
-  try { session = await readSession() } catch { /* durcit contre erreurs réseau */ }
-  if (!session) {
-    // Non connecté → on laisse entrer seulement si une annonce active existe (vue publique)
-    const listing = await readActiveListing(tsISO)
-    if (listing) {
-      // vue publique autorisée
-    } else {
-      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
-    }
+  const { tsISO, tsYMD } = normalizeTs(decodedTs)
+  if (!tsISO || !tsYMD) {
+    redirect(`/${locale}/account?err=bad_ts`)
   }
 
-  // 2) Ownership strict OU annonce active publique
-  let ownerId: string | null = null
-  try { ownerId = await ownerIdForDay(tsISO) } catch { ownerId = null } // ✅ toujours passer le ts normalisé
-  const isOwner = !!session && !!ownerId && ownerId === session.ownerId
-  const listing = isOwner ? null : await readActiveListing(tsISO)
+  // 1) Auth obligatoire
+  const session = await readSession()
+  if (!session) {
+    // on garde la même URL après login
+    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
+  }
+
+  // 2) Owner strict OU annonce active publique
+  const ownerId = await ownerIdForDaySafe(tsISO!, tsYMD!)
+  const isOwner = !!ownerId && ownerId === session.ownerId
+  const listing = isOwner ? null : await readActiveListing(tsISO!)
 
   if (!isOwner && !listing) {
-    // ni owner ni annonce → compte
     redirect(`/${locale}/account?err=not_owner`)
   }
 
   // 3) État public + autopub (owner only)
-  const isPublicDb = await getPublicStateDb(tsISO)
-  const wantsAutopub = getQ(sp, 'autopub') === '1'
+  const isPublicDb = await getPublicStateDb(tsISO!)
+  const wantsAutopub = sp.autopub === '1'
   if (isOwner && wantsAutopub && !isPublicDb) {
-    await setPublicDb(tsISO, true)
-    revalidatePath(`/${locale}/m/${encodeURIComponent(tsDay)}`)
-    redirect(`/${locale}/m/${encodeURIComponent(tsDay)}?ok=1`)
+    await setPublicDb(tsISO!, true)
+    revalidatePath(`/${locale}/m/${encodeURIComponent(tsYMD!)}`)
+    redirect(`/${locale}/m/${encodeURIComponent(tsYMD!)}?ok=1`)
   }
   const isPublic = isPublicDb
 
-  // 4) Données claim / meta (si claim absent, on ne casse pas l’affichage d’annonce)
-  const meta = await getClaimMeta(tsISO)
-  const claim = await getClaimForEdit(tsISO)
+  // 4) Données claim / meta
+  const meta = await getClaimMeta(tsISO!)
+  const claim = await getClaimForEdit(tsISO!)
 
-  // 🔗 URLs (utiliser le *jour* pour les endpoints jour-based)
-  const pdfHref = `/api/cert/${encodeURIComponent(tsDay)}`
+  // Liens : on passe TOUJOURS le YMD aux routes de fichiers
+  const pdfHref = `/api/cert/${encodeURIComponent(tsYMD!)}`
   const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
-  const verifyHref = `/api/verify?ts=${encodeURIComponent(tsDay)}`
-  let niceTs = tsDay
-  try { niceTs = formatISOAsNice(tsISO) } catch {}
+  // L’API verify peut accepter l’ISO minuit propre
+  const verifyHref = `/api/verify?ts=${encodeURIComponent(tsISO!)}`
+  let niceTs = tsISO!
+  try { niceTs = formatISOAsNice(tsISO!) } catch {}
 
-  // Action serveur (toggle registre public)
   const togglePublic = async (formData: FormData) => {
     'use server'
-    const raw = String(formData.get('ts') || '')
-    const tsFix = asDayIsoUTC(raw)
-    const next = String(formData.get('next') || '0') === '1'
-    const s = await readSession()
-
-    if (!s || !tsFix) {
-      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(raw)}`)}`)
+    const tsY = String(formData.get('ts') || '') // YMD attendu du formulaire
+    const norm = normalizeTs(tsY)
+    if (!norm.tsISO || !norm.tsYMD) {
+      redirect(`/${locale}/account?err=bad_ts`)
     }
+    const next = String(formData.get('next') || '0') === '1'
 
-    let oid: string | null = null
-    try { oid = await ownerIdForDay(tsFix) } catch { oid = null }
-    if (!oid || oid !== s.ownerId) {
+    const s = await readSession()
+    if (!s) {
+      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}`)}`)
+    }
+    const oid = await ownerIdForDaySafe(norm.tsISO, norm.tsYMD)
+    if (!oid || oid !== s!.ownerId) {
       redirect(`/${locale}/account?err=not_owner`)
     }
 
-    const ok = await setPublicDb(tsFix, next)
-    revalidatePath(`/${locale}/m/${encodeURIComponent(tsFix.slice(0,10))}`)
-    redirect(`/${locale}/m/${encodeURIComponent(tsFix.slice(0,10))}?ok=${ok ? '1' : '0'}`)
+    const ok = await setPublicDb(norm.tsISO, next)
+    revalidatePath(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}`)
+    redirect(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}?ok=${ok ? '1' : '0'}`)
   }
 
   return (
@@ -388,7 +386,7 @@ export default async function Page({
             </div>
 
             <form action={togglePublic} style={{ display: 'flex', gap: 10 }}>
-              <input type="hidden" name="ts" value={tsDay} />
+              <input type="hidden" name="ts" value={tsYMD!} />
               <input type="hidden" name="next" value={isPublic ? '0' : '1'} />
               <button
                 type="submit"
@@ -523,7 +521,7 @@ export default async function Page({
             <div style={{ padding: 16, borderTop: '1px solid var(--color-border)' }}>
               {claim ? (
                 <EditClient
-                  tsISO={tsDay}
+                  tsISO={tsISO!}
                   locale={locale}
                   initial={{
                     email: claim.email || '',
