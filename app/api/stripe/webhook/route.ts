@@ -1,4 +1,3 @@
-// app/api/stripe/webhook/route.ts
 export const runtime = 'nodejs'
 
 import Stripe from 'stripe'
@@ -35,14 +34,7 @@ function asTimeDisplay(v: unknown) {
   return (td === 'utc' || td === 'utc+local' || td === 'local+utc') ? td : 'local+utc'
 }
 
-/**
- * Upsert de la claim après paiement. Tout est fait dans 1 transaction :
- * - owners upsert
- * - claims upsert (toutes colonnes pertinentes)
- * - custom_bg_temp -> claim_custom_bg (si présent)
- * - cert_hash + cert_url
- * - publication minute_public si demandé (FK ok)
- */
+/** Claim primaire après paiement */
 async function writeClaimFromSession(session: Stripe.Checkout.Session) {
   const tsISO = normIsoDay(String(session.metadata?.ts || ''))
   if (!tsISO) throw new Error('bad_ts')
@@ -53,8 +45,8 @@ async function writeClaimFromSession(session: Stripe.Checkout.Session) {
   const display_name: string | null =
     (session.customer_details?.name || session.metadata?.display_name || '') || null
 
-  const title: string | null   = (session.metadata?.title   || '') || null
-  const message: string | null = (session.metadata?.message || '') || null
+  const title: string | null    = (session.metadata?.title   || '') || null
+  const message: string | null  = (session.metadata?.message || '') || null
   const link_url: string | null = (session.metadata?.link_url || '') || null
 
   const cert_style = asStyle(session.metadata?.cert_style)
@@ -188,11 +180,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'missing_env' }, { status: 500 })
   }
 
-  // Stripe exige le raw body (pas de JSON parse)
   const sig = req.headers.get('stripe-signature') || ''
   const rawBody = await req.text()
-
-  // ✅ Pas d'apiVersion forcée pour éviter l'erreur TS (on laisse Stripe choisir)
   const stripe = new Stripe(STRIPE_SECRET_KEY)
 
   let evt: Stripe.Event
@@ -217,26 +206,30 @@ export async function POST(req: Request) {
     console.warn('[webhook] idempotence insert failed:', e?.message || e)
   }
 
-  // ➕ Branche “secondary market” demandée (court-circuit avant le switch)
-  if (evt.type === 'checkout.session.completed') {
-    const s = evt.data.object as Stripe.Checkout.Session
-    if (s.metadata?.market_kind === 'secondary' && s.payment_status === 'paid') {
-      try { await applySecondarySaleFromSession(s) } catch (e) {
-        console.warn('[secondary] apply error:', (e as any)?.message || e)
-        // on laisse 200 pour éviter les retries infinis une fois l’erreur gérée/observée
-      }
-      return NextResponse.json({ ok: true })
-    }
-  }
-
   try {
+    // 🎯 Branche très tôt si "secondary"
+    if (evt.type === 'checkout.session.completed' || evt.type === 'checkout.session.async_payment_succeeded') {
+      const s = evt.data.object as Stripe.Checkout.Session
+      const paid = !s.payment_status || s.payment_status === 'paid'
+      const isSecondary = String(s.metadata?.market_kind || '') === 'secondary'
+      if (paid && isSecondary) {
+        try {
+          await applySecondarySaleFromSession(s)
+        } catch (e) {
+          console.error('[webhook][secondary] error:', (e as any)?.message || e)
+          // On laisse 200 pour ne pas retenter en boucle si erreur logique; adapte selon stratégie
+        }
+        return NextResponse.json({ received: true, secondary: true })
+      }
+    }
+
     switch (evt.type) {
       case 'checkout.session.completed':
       case 'checkout.session.async_payment_succeeded': {
         const session = evt.data.object as Stripe.Checkout.Session
         if (session.payment_status && session.payment_status !== 'paid') break
 
-        // Flux “primary” (market_kind ≠ 'secondary')
+        // Paiement primaire
         const res = await writeClaimFromSession(session)
 
         // Email de secours

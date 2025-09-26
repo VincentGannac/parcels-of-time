@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
 
-  // 1) Récupérer/Créer le compte Connect
+  // 1) Récupérer/Créer le compte Connect pour ce owner
   let accountId: string | null = null
   {
     const { rows } = await pool.query(
@@ -24,10 +24,13 @@ export async function POST(req: Request) {
   if (!accountId) {
     const acct = await stripe.accounts.create({
       type: 'express',
-      country: 'FR',                  // adapte si besoin
+      country: 'FR', // adapte si besoin
       email: sess.email,
       default_currency: 'eur',
-      capabilities: { transfers: { requested: true }, card_payments: { requested: true } }
+      capabilities: {
+        transfers: { requested: true },
+        card_payments: { requested: true },
+      },
     })
     accountId = acct.id
     await pool.query(
@@ -38,13 +41,22 @@ export async function POST(req: Request) {
     )
   }
 
-  // 2) Account Link (onboarding ou update)
+  // 2) Account Link (onboarding / update)
   const link = await stripe.accountLinks.create({
     account: accountId,
     refresh_url: `${base}/api/connect/refresh`,
     return_url: `${base}/account?connect=done`,
-    type: 'account_onboarding'
+    type: 'account_onboarding',
   })
 
+  // Si appel depuis un <form> → redirection 303 (flow UX)
+  const ctype = req.headers.get('content-type') || ''
+  const accept = req.headers.get('accept') || ''
+  const wantsHtml = ctype.includes('application/x-www-form-urlencoded') || accept.includes('text/html')
+
+  if (wantsHtml) {
+    return NextResponse.redirect(link.url, { status: 303 })
+  }
+  // Sinon, JSON (utile si tu déclenches via fetch/ajax)
   return NextResponse.json({ url: link.url })
 }

@@ -1,61 +1,80 @@
-// app/api/marketplace/checkout/route.ts
 export const runtime = 'nodejs'
+
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { pool } from '@/lib/db'
+import { readSession } from '@/lib/auth'
+
+function enc(s: string) { return encodeURIComponent(s) }
 
 export async function POST(req: Request) {
-  const { listing_id, email } = await req.json()
-  if (!listing_id || !email) return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
+  try {
+    const body = await req.json().catch(()=> ({}))
+    const listingId = Number(body?.listing_id || 0)
+    const locale = (String(body?.locale || 'fr').toLowerCase() === 'en') ? 'en' : 'fr'
+    if (!listingId) return NextResponse.json({ error: 'missing_listing_id' }, { status: 400 })
 
-  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
-  const BASE = process.env.NEXT_PUBLIC_BASE_URL
-  if (!STRIPE_SECRET_KEY || !BASE) return NextResponse.json({ error: 'missing_env' }, { status: 500 })
+    const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 
-  const stripe = new Stripe(STRIPE_SECRET_KEY)
+    // Récupère l’annonce + vendeur + compte Connect
+    const { rows } = await pool.query(
+      `select l.id, l.ts, l.price_cents, l.currency, l.status,
+              c.owner_id as seller_owner_id,
+              ma.stripe_account_id
+         from listings l
+         join claims c on c.ts = l.ts
+    left join merchant_accounts ma on ma.owner_id = c.owner_id
+        where l.id = $1
+        limit 1`,
+      [listingId]
+    )
+    const L = rows[0]
+    if (!L) return NextResponse.json({ error: 'listing_not_found' }, { status: 404 })
+    if (L.status !== 'active') return NextResponse.json({ error: 'listing_not_active' }, { status: 400 })
+    if (!L.stripe_account_id) return NextResponse.json({ error: 'seller_not_onboarded' }, { status: 400 })
 
-  // 1) lecture annonce + contrôle de base
-  const { rows } = await pool.query(
-    `select l.*, c.owner_id as claim_owner
-       from listings l
-       join claims c on c.ts = l.ts
-      where l.id=$1`,
-    [listing_id]
-  )
-  const listing = rows[0]
-  if (!listing || listing.status !== 'active') return NextResponse.json({ error: 'listing_unavailable' }, { status: 400 })
-  if (listing.claim_owner !== listing.seller_owner_id) return NextResponse.json({ error: 'seller_mismatch' }, { status: 400 })
+    const tsISO = new Date(L.ts).toISOString().slice(0,10) // YYYY-MM-DD
+    const price = Number(L.price_cents) | 0
+    const currency = String(L.currency || 'eur').toLowerCase()
 
-  // 2) commission (ex: 10%)
-  const feeBps = 1000 // 10% (1000 basis points)
-  const application_fee_amount = Math.round(listing.price_cents * feeBps / 10_000)
+    // Commission plateforme (optionnelle)
+    const bps = Number(process.env.MARKETPLACE_FEE_BPS || 0) // ex 300 => 3%
+    const appFee = Math.max(0, Math.floor(price * bps / 10_000))
 
-  // 3) création session (marché secondaire)
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    success_url: `${BASE}/market/success?sid={CHECKOUT_SESSION_ID}`,
-    cancel_url:  `${BASE}/market/cancel`,
-    customer_email: email,
-    line_items: [{
-      price_data: {
-        currency: listing.currency,
-        product_data: { name: `Parcels of Time — ${new Date(listing.ts).toISOString().slice(0,10)}` },
-        unit_amount: listing.price_cents,
+    const successUrl = `${base}/${locale}/m/${enc(tsISO)}?buy=success&sid={CHECKOUT_SESSION_ID}`
+    const cancelUrl  = `${base}/${locale}/m/${enc(tsISO)}?buy=cancel`
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency,
+          unit_amount: price,
+          product_data: { name: locale==='fr' ? `Journée ${tsISO}` : `Day ${tsISO}` },
+        },
+      }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      payment_intent_data: {
+        on_behalf_of: L.stripe_account_id,
+        application_fee_amount: appFee || undefined,
+        transfer_data: { destination: L.stripe_account_id },
       },
-      quantity: 1,
-    }],
-    metadata: {
-      market_kind: 'secondary',
-      listing_id: String(listing_id),
-      ts: new Date(listing.ts).toISOString(),
-      email,
-    },
-    // ➜ si tu passes à Stripe Connect plus tard :
-    // payment_intent_data: {
-    //   application_fee_amount,
-    //   transfer_data: { destination: '<acct_xxx du vendeur>' },
-    // },
-  })
+      // tag pour le webhook
+      metadata: {
+        market_kind: 'secondary',
+        listing_id: String(listingId),
+        ts: tsISO,
+      },
+      // client_email: laissé vide → l’acheteur saisira sur Checkout
+      automatic_tax: { enabled: false },
+    })
 
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (e: any) {
+    console.error('[marketplace/checkout] error:', e?.message || e)
+    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+  }
 }
