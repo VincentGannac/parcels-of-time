@@ -1,19 +1,28 @@
 // app/[locale]/m/[ts]/page.tsx
 export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { formatISOAsNice } from '@/lib/date'
 import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
-import EditClient from './EditClient'
+import dynamic from 'next/dynamic'
+const EditClient = dynamic(() => import('./EditClient'), { ssr: false })
 
 type Params = { locale: string; ts: string }
 type SearchParams = { autopub?: string; ok?: string }
 
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
+
+
+function formatISOAsNiceSafe(iso: string) {
+     try {
+       const d = new Date(iso)
+       if (isNaN(d.getTime())) return iso
+       // rendu court, indépen­dant du locale de l’OS
+       return d.toISOString().slice(0,10) // YYYY-MM-DD
+     } catch { return iso }
+   }
 
 /** Normalise vers minuit UTC et renvoie aussi le YMD */
 function normalizeTs(input: string): { tsISO: string | null; tsYMD: string | null } {
@@ -177,20 +186,23 @@ export default async function Page({
     redirect(`/${locale}/account?err=bad_ts`)
   }
 
-  // 1) Auth obligatoire
-  const session = await readSession()
-  if (!session) {
-    // on garde la même URL après login
-    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
-  }
-
-  // 2) Owner strict OU annonce active publique
-  const ownerId = await ownerIdForDaySafe(tsISO!, tsYMD!)
-  const isOwner = !!ownerId && ownerId === session.ownerId
-  const listing = isOwner ? null : await readActiveListing(tsISO!)
-
-  if (!isOwner && !listing) {
-    redirect(`/${locale}/account?err=not_owner`)
+  let session = null as Awaited<ReturnType<typeof readSession>> | null
+  let isOwner = false
+  let listing: Awaited<ReturnType<typeof readActiveListing>> | null = null
+  try {
+    session = await readSession()
+    if (!session) {
+      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
+    }
+    const ownerId = await ownerIdForDaySafe(tsISO!, tsYMD!)
+    isOwner = !!ownerId && ownerId === session!.ownerId
+    listing = isOwner ? null : await readActiveListing(tsISO!)
+    if (!isOwner && !listing) {
+      redirect(`/${locale}/account?err=not_owner`)
+    }
+  } catch {
+    // filets de sécurité pour éviter l'erreur 500
+    redirect(`/${locale}/account?err=internal`)
   }
 
   // 3) État public + autopub (owner only)
@@ -213,8 +225,7 @@ export default async function Page({
   const exploreHref = `/${locale}/explore`
   // L’API verify peut accepter l’ISO minuit propre
   const verifyHref = `/api/verify?ts=${encodeURIComponent(tsISO!)}`
-  let niceTs = tsISO!
-  try { niceTs = formatISOAsNice(tsISO!) } catch {}
+  const niceTs = formatISOAsNiceSafe(tsISO!)
 
   const togglePublic = async (formData: FormData) => {
     'use server'
