@@ -38,14 +38,24 @@ async function listClaims(ownerId: string): Promise<ClaimRow[]> {
   }
 }
 
+async function readMerchant(ownerId: string) {
+  const { rows } = await pool.query(
+    `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
+       from merchant_accounts where owner_id=$1`,
+    [ownerId]
+  )
+  return rows[0] || null
+}
+
 export default async function Page({ params }: { params: Promise<Params> }) {
   const { locale } = await params
   const sess = await readSession()
-  if (!sess) {
-    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
-  }
+  if (!sess) redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
 
-  const claims = await listClaims(sess.ownerId)
+  const [claims, merchant] = await Promise.all([
+    listClaims(sess.ownerId),
+    readMerchant(sess.ownerId),
+  ])
 
   return (
     <main style={{maxWidth: 900, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui'}}>
@@ -62,6 +72,33 @@ export default async function Page({ params }: { params: Promise<Params> }) {
       <p style={{opacity:.8, marginTop:0}}>
         {sess.displayName ? `${sess.displayName} — ` : ''}{sess.email}
       </p>
+
+      <section style={{marginTop:18}}>
+      <h2 style={{fontSize:18, margin:'0 0 10px'}}>
+        {locale==='fr' ? 'Compte marchand' : 'Merchant account'}
+      </h2>
+      <div style={{border:'1px solid #eee', borderRadius:12, padding:14, display:'grid', gap:10}}>
+        {merchant ? (
+          <>
+            <div>Stripe: <code>{merchant.stripe_account_id}</code></div>
+            <div>Charges: <strong>{merchant.charges_enabled ? '✅' : '❌'}</strong> — Payouts: <strong>{merchant.payouts_enabled ? '✅' : '❌'}</strong></div>
+            {!!merchant.requirements_due?.length && (
+              <div style={{fontSize:13, color:'#b36'}}>Éléments requis: {merchant.requirements_due.join(', ')}</div>
+            )}
+            <form method="post" action="/api/connect/sync"><button style={{padding:'8px 12px', borderRadius:10, border:'1px solid #ddd'}}>Rafraîchir statut</button></form>
+          </>
+        ) : (
+          <p style={{margin:0, opacity:.85}}>
+            {locale==='fr' ? 'Pour revendre vos certificats, créez un compte vendeur.' : 'Create a seller account to resell your certificates.'}
+          </p>
+        )}
+        <form method="post" action="/api/connect/onboard">
+          <button style={{padding:'10px 14px', borderRadius:10, border:'1px solid #ddd', cursor:'pointer'}}>
+            {merchant ? (locale==='fr' ? 'Mettre à jour / compléter' : 'Update / complete') : (locale==='fr' ? 'Devenir vendeur' : 'Become a seller')}
+          </button>
+        </form>
+      </div>
+    </section>
 
       <section style={{marginTop:18}}>
         <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>

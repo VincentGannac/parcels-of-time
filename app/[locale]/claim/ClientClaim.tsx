@@ -235,6 +235,8 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const [unavailableDays, setUnavailableDays] = useState<number[]>([])
   const [isLoadingDays, setIsLoadingDays] = useState(false)
 
+  const [forSaleDays, setForSaleDays] = useState<number[]>([])
+
   // Cache par mois (YYYY-MM) pour accélérer les rafraîchissements
   const unavailCacheRef = useRef<Map<string, number[]>>(new Map())
 
@@ -271,6 +273,10 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         if (!res.ok) { setUnavailableDays([]); return }
   
         const data = await res.json()
+        const red = Array.isArray(data?.unavailable) ? data.unavailable : []
+      const yellow = Array.isArray(data?.for_sale) ? data.for_sale : []
+      setUnavailableDays(red)
+      setForSaleDays(yellow)
         const raw: any[] = Array.isArray(data) ? data : (data?.days ?? data?.unavailable ?? [])
         const set = new Set<number>()
         for (const v of raw) {
@@ -991,7 +997,8 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                     const dim = daysInMonth(Y, M)
                     const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
                     const days = Array.from({length: maxDayForThisMonth}, (_,i)=>i+1)
-                    const set = new Set(unavailableDays)
+                    const setRed = new Set(unavailableDays)
+                    const setYellow = new Set(forSaleDays)
                     return (
                       <select
                         key={`${Y}-${M}`} // 🔑 force le remount quand Y/M change → options recalculées instantanément
@@ -1001,17 +1008,18 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                         style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                       >
                         {days.map(d=>{
-                          const unavailable = set.has(d)
-                          const label = d.toString().padStart(2,'0') + (unavailable ? ' — indisponible' : '')
+                         const unavailable = setRed.has(d)
+                         const onSale = setYellow.has(d)
+                         const label = d.toString().padStart(2,'0') + (unavailable ? ' — indisponible' : onSale ? ' — en vente' : '')
                           return (
                             <option
                               key={d}
                               value={d}
                               disabled={unavailable}
                               aria-disabled={unavailable}
-                              style={{color: unavailable ? '#ff4d4d' : '#000'}}
+                              style={{ color: unavailable ? '#ff4d4d' : onSale ? '#e0a800' : '#000' }}
                             >
-                              {unavailable ? `⛔ ${label}` : label}
+                             {(unavailable ? '⛔ ' : onSale ? '🟡 ' : '') + label}
                             </option>
                           )
                         })}

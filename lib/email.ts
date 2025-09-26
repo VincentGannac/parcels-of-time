@@ -63,6 +63,35 @@ export async function sendClaimReceiptEmail(input: {
   }
 }
 
+export async function sendSecondarySaleEmails(opts: {
+  ts: string,
+  buyerEmail: string,
+  pdfUrl: string,
+  publicUrl: string,
+  sessionId: string
+}) {
+  const { Resend } = await import('resend')
+  const resend = new Resend(process.env.RESEND_API_KEY!)
+  const subjectFR = `Achat confirmé — Certificat du ${opts.ts}`
+  const subjectEN = `Purchase confirmed — Certificate for ${opts.ts}`
+
+  // Buyer (PDF)
+  await resend.emails.send({
+    from: 'Parcels of Time <hello@parcelsoftime.com>',
+    to: [opts.buyerEmail],
+    subject: subjectEN,
+    html: `
+      <p>Thank you for your purchase.</p>
+      <p>Your certificate PDF: <a href="${opts.pdfUrl}">Download</a></p>
+      <p>Manage and view here: <a href="${opts.publicUrl}">${opts.publicUrl}</a></p>
+    `
+  })
+
+  // Seller recap (si tu veux retrouver l'email vendeur, fais une petite requête au besoin)
+  // await resend.emails.send({ ... })
+}
+
+
 /** Réinitialisation de mot de passe */
 export async function sendPasswordResetEmail(
   to: string | string[],

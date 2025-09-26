@@ -216,6 +216,16 @@ export async function POST(req: Request) {
     console.warn('[webhook] idempotence insert failed:', e?.message || e)
   }
 
+  // ➕ Branche “secondary market” demandée (court-circuit avant le switch)
+  if (evt.type === 'checkout.session.completed') {
+    const s = evt.data.object as Stripe.Checkout.Session
+    if (s.metadata?.market_kind === 'secondary' && s.payment_status === 'paid') {
+      // Appelle la même logique que /api/marketplace/confirm (factorise dans une fn)
+      // try { await applySecondarySaleFromSession(s) } catch {}
+      return NextResponse.json({ ok: true })
+    }
+  }
+
   try {
     switch (evt.type) {
       case 'checkout.session.completed':
@@ -223,6 +233,7 @@ export async function POST(req: Request) {
         const session = evt.data.object as Stripe.Checkout.Session
         if (session.payment_status && session.payment_status !== 'paid') break
 
+        // Flux “primary” (market_kind ≠ 'secondary')
         const res = await writeClaimFromSession(session)
 
         // Email de secours
@@ -232,7 +243,7 @@ export async function POST(req: Request) {
             const guessedLocale =
               String(session.metadata?.locale || '').toLowerCase().startsWith('fr') ? 'fr' : 'en'
             const publicUrl = `${base}/${guessedLocale}/m/${encodeURIComponent(res.tsISO)}`
-           const pdfUrl = `${base}/api/cert/${encodeURIComponent(res.tsISO.slice(0,10))}`
+            const pdfUrl = `${base}/api/cert/${encodeURIComponent(res.tsISO.slice(0,10))}`
             const { sendClaimReceiptEmail } = await import('@/lib/email')
             await sendClaimReceiptEmail({
               to: res.email,

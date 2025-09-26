@@ -149,11 +149,27 @@ export default async function Page({
       redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
     }
   
-    // 2) Ownership STRICT : seul·e le/la propriétaire peut voir cette page
+    // 2) Ownership STRICT ? Si non owner, on autorise la vue publique SI une annonce existe
     const ownerId = await ownerIdForDay(decodedTs)
-    if (!ownerId || ownerId !== session.ownerId) {
+    const isOwner = !!ownerId && ownerId === session.ownerId
+
+    async function readActiveListing(tsISO: string) {
+      const { rows } = await pool.query(
+        `select l.id, l.ts, l.price_cents, l.currency, l.status,
+                o.display_name as seller_display_name
+          from listings l
+          join owners o on o.id = l.seller_owner_id
+          where l.ts = $1 and l.status in ('active','paused')`,
+        [tsISO.endsWith('Z') ? tsISO : `${tsISO}T00:00:00.000Z`]
+      )
+      return rows[0] || null
+    }
+    const listing = isOwner ? null : await readActiveListing(decodedTs)
+
+    // si pas owner ET pas d'annonce -> redirect
+    if (!isOwner && !listing) {
       redirect(`/${locale}/account?err=not_owner`)
-   }
+    }
   
     // 3) État public (autopub possible car ownership déjà validé)
     const isPublicDb = await getPublicStateDb(decodedTs)
@@ -278,6 +294,49 @@ export default async function Page({
               Le PDF est également envoyé par e-mail (pensez aux indésirables).
             </p>
           </div>
+
+          {isOwner && (
+          <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+            <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
+              Revendre ce certificat (Marketplace)
+            </div>
+            <form onSubmit={(e)=>{ /* hydraté client avec petite action fetch */ }} method="dialog">
+              <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+                <label>Prix (€) <input name="price" type="number" min={1} step={1} style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}} /></label>
+                <button formAction={`/api/marketplace/listing`} formMethod="post"
+                  style={{padding:'10px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)'}}
+                  onClick={(e)=>{/* pack ts & price en body JSON côté client */}}
+                >Mettre en vente</button>
+                {/* Si annonce existante de ce owner: boutons pause / retirer */}
+                {/* ... (prévois petit client component pour état) */}
+              </div>
+              <p style={{fontSize:12, opacity:.7, marginTop:8}}>Commission 10% (min 1€) prélevée par Parcels of Time.</p>
+            </form>
+          </section>
+        )}
+
+        {!isOwner && listing && (
+          <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div>
+                <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>Annonce</div>
+                <div style={{fontSize:18, fontWeight:800, marginTop:4}}>
+                  {listing.price_cents/100} € — {listing.seller_display_name || 'Vendeur'}
+                </div>
+              </div>
+              <form id="mk-checkout" method="post" action="/api/marketplace/checkout" style={{display:'flex', gap:8}}>
+                <input type="hidden" name="listing_id" value={String(listing.id)} />
+                <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
+                      style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10}} />
+                <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
+                  Acheter
+                </button>
+              </form>
+            </div>
+            <p style={{fontSize:12, opacity:.7, marginTop:8}}>Paiement sécurisé Stripe. PDF transféré au nouvel acquéreur.</p>
+          </section>
+        )}
+
 
           {/* Registre public */}
           <aside
