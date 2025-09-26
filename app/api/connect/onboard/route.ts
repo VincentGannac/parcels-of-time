@@ -1,3 +1,4 @@
+// app/api/connect/onboard/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
 
-  // 1) Récupérer/Créer le compte Connect pour ce owner
+  // 1) Récupérer/Créer le compte Connect
   let accountId: string | null = null
   {
     const { rows } = await pool.query(
@@ -24,12 +25,21 @@ export async function POST(req: Request) {
   if (!accountId) {
     const acct = await stripe.accounts.create({
       type: 'express',
-      country: 'FR', // adapte si besoin
+      country: 'FR',
       email: sess.email,
+      business_type: 'individual', // 👈 particulier
       default_currency: 'eur',
       capabilities: {
         transfers: { requested: true },
         card_payments: { requested: true },
+      },
+      business_profile: {
+        product_description: 'Vente/achat de certificats numériques Parcels of Time (revente C2C).',
+        url: base,
+      },
+      metadata: { pot_owner_id: String(sess.ownerId) },
+      settings: {
+        payouts: { schedule: { interval: 'manual' } }, // optionnel : contrôles des transferts
       },
     })
     accountId = acct.id
@@ -41,7 +51,7 @@ export async function POST(req: Request) {
     )
   }
 
-  // 2) Account Link (onboarding / update)
+  // 2) Lien d’onboarding / mise à jour
   const link = await stripe.accountLinks.create({
     account: accountId,
     refresh_url: `${base}/api/connect/refresh`,
@@ -49,14 +59,5 @@ export async function POST(req: Request) {
     type: 'account_onboarding',
   })
 
-  // Si appel depuis un <form> → redirection 303 (flow UX)
-  const ctype = req.headers.get('content-type') || ''
-  const accept = req.headers.get('accept') || ''
-  const wantsHtml = ctype.includes('application/x-www-form-urlencoded') || accept.includes('text/html')
-
-  if (wantsHtml) {
-    return NextResponse.redirect(link.url, { status: 303 })
-  }
-  // Sinon, JSON (utile si tu déclenches via fetch/ajax)
   return NextResponse.json({ url: link.url })
 }

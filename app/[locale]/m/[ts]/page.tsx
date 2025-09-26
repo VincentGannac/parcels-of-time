@@ -1,5 +1,4 @@
 // app/[locale]/m/[ts]/page.tsx
-
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -12,11 +11,18 @@ import { readSession, ownerIdForDay } from '@/lib/auth'
 import EditClient from './EditClient'
 
 type Params = { locale: string; ts: string }
+type SearchParams = { autopub?: string; ok?: string }
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
+function asDayIsoUTC(ts: string) {
+  // accepte YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ssZ → force minuit UTC
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(ts) ? new Date(`${ts}T00:00:00.000Z`) : new Date(ts)
+  if (isNaN(d.getTime())) return null
+  d.setUTCHours(0,0,0,0)
+  return d.toISOString()
+}
 
 /** Lecture état public (par jour) */
 async function getPublicStateDb(tsISO: string): Promise<boolean> {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`
   try {
     const { rows } = await pool.query(
       `select exists(
@@ -32,7 +38,6 @@ async function getPublicStateDb(tsISO: string): Promise<boolean> {
 
 /** Écriture état public (par jour) */
 async function setPublicDb(tsISO: string, next: boolean): Promise<boolean> {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`
   const client = await pool.connect()
   try {
     if (next) {
@@ -43,10 +48,7 @@ async function setPublicDb(tsISO: string, next: boolean): Promise<boolean> {
         [tsISO]
       )
     } else {
-      await client.query(
-        `delete from minute_public where ts = $1::timestamptz`,
-        [tsISO]
-      )
+      await client.query(`delete from minute_public where ts = $1::timestamptz`, [tsISO])
     }
     return true
   } catch {
@@ -82,7 +84,6 @@ type ClaimForEdit = {
 }
 
 async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`
   try {
     const { rows } = await pool.query(
       `select o.email, o.display_name,
@@ -109,14 +110,12 @@ async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
       title_public: !!r.title_public,
       message_public: !!r.message_public,
     }
-  } catch (e) {
-    console.warn('[minute] getClaimForEdit error', e)
+  } catch {
     return null
   }
 }
 
 async function getClaimMeta(tsISO: string) {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(tsISO)) tsISO = `${tsISO}T00:00:00.000Z`
   try {
     const { rows } = await pool.query(
       `select id as claim_id, cert_hash
@@ -131,88 +130,100 @@ async function getClaimMeta(tsISO: string) {
   }
 }
 
-type SearchParams = { autopub?: string; ok?: string }
+type ListingRow = {
+  id: string
+  ts: string
+  price_cents: number
+  currency: string
+  status: 'active' | 'sold' | 'canceled'
+  seller_display_name: string | null
+}
+async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
+  try {
+    const { rows } = await pool.query(
+      `select l.id, l.ts, l.price_cents, l.currency, l.status,
+              o.display_name as seller_display_name
+         from listings l
+         join owners o on o.id = l.seller_owner_id
+        where l.ts = $1::timestamptz
+          and l.status = 'active'
+        limit 1`,
+      [tsISO]
+    )
+    return rows[0] || null
+  } catch {
+    return null
+  }
+}
 
 export default async function Page({
   params,
   searchParams,
 }: {
-  params: Promise<Params>
-  searchParams: Promise<SearchParams>
+  params: Params
+  searchParams?: SearchParams
 }) {
-  const { locale = 'en', ts: tsParam = '' } = await params
-  const sp = await searchParams
+  const { locale = 'en', ts: tsParam = '' } = params || ({} as Params)
+  const sp = searchParams || {}
   const decodedTs = safeDecode(tsParam)
+  const tsISO = asDayIsoUTC(decodedTs)
+  if (!tsISO) {
+    redirect(`/${locale}/account?err=bad_ts`)
+  }
 
-    // 1) Auth OBLIGATOIRE
-    const session = await readSession()
-    if (!session) {
-      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
-    }
-  
-    // 2) Ownership STRICT ? Si non owner, on autorise la vue publique SI une annonce existe
-    const ownerId = await ownerIdForDay(decodedTs)
-    const isOwner = !!ownerId && ownerId === session.ownerId
+  // 1) Auth obligatoire
+  const session = await readSession()
+  if (!session) {
+    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
+  }
 
-    async function readActiveListing(tsISO: string) {
-      const { rows } = await pool.query(
-        `select l.id, l.ts, l.price_cents, l.currency, l.status,
-                o.display_name as seller_display_name
-          from listings l
-          join owners o on o.id = l.seller_owner_id
-          where l.ts = $1 and l.status in ('active','paused')`,
-        [tsISO.endsWith('Z') ? tsISO : `${tsISO}T00:00:00.000Z`]
-      )
-      return rows[0] || null
-    }
-    const listing = isOwner ? null : await readActiveListing(decodedTs)
+  // 2) Owner strict OU annonce active publique
+  const ownerId = await ownerIdForDay(decodedTs)
+  const isOwner = !!ownerId && ownerId === session.ownerId
+  const listing = isOwner ? null : await readActiveListing(tsISO)
 
-    // si pas owner ET pas d'annonce -> redirect
-    if (!isOwner && !listing) {
-      redirect(`/${locale}/account?err=not_owner`)
-    }
-  
-    // 3) État public (autopub possible car ownership déjà validé)
-    const isPublicDb = await getPublicStateDb(decodedTs)
-    const wantsAutopub = sp?.autopub === '1'
-    const isPublic = isPublicDb
-  
-    if (wantsAutopub && !isPublicDb) {
-      await setPublicDb(decodedTs, true)
-      revalidatePath(`/${locale}/m/${encodeURIComponent(decodedTs)}`)
-      redirect(`/${locale}/m/${encodeURIComponent(decodedTs)}?ok=1`)
-    }
+  if (!isOwner && !listing) {
+    // ni owner ni annonce → on renvoie vers compte
+    redirect(`/${locale}/account?err=not_owner`)
+  }
 
-  const meta = await getClaimMeta(decodedTs)
-  const claim = await getClaimForEdit(decodedTs)
+  // 3) État public + autopub (owner only)
+  const isPublicDb = await getPublicStateDb(tsISO)
+  const wantsAutopub = sp.autopub === '1'
+  if (isOwner && wantsAutopub && !isPublicDb) {
+    await setPublicDb(tsISO, true)
+    revalidatePath(`/${locale}/m/${encodeURIComponent(decodedTs)}`)
+    redirect(`/${locale}/m/${encodeURIComponent(decodedTs)}?ok=1`)
+  }
+  const isPublic = isPublicDb
+
+  // 4) Données claim / meta (si claim absent, on ne casse pas l’affichage d’annonce)
+  const meta = await getClaimMeta(tsISO)
+  const claim = await getClaimForEdit(tsISO)
 
   const pdfHref = `/api/cert/${encodeURIComponent(decodedTs)}`
   const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
   const verifyHref = `/api/verify?ts=${encodeURIComponent(decodedTs)}`
-
   let niceTs = decodedTs
-  try {
-    niceTs = formatISOAsNice(`${decodedTs}T00:00:00.000Z`)
-  } catch {}
+  try { niceTs = formatISOAsNice(tsISO) } catch {}
 
   const togglePublic = async (formData: FormData) => {
     'use server'
-    
     const ts = String(formData.get('ts') || '')
+    const tsFix = asDayIsoUTC(ts)
     const next = String(formData.get('next') || '0') === '1'
 
-    // 🔐 Re-valide session + ownership côté action serveur
     const s = await readSession()
     const oid = await ownerIdForDay(ts)
     if (!s) {
       redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(ts)}`)}`)
     }
-    if (!oid || oid !== s.ownerId) {
+    if (!oid || oid !== s.ownerId || !tsFix) {
       redirect(`/${locale}/account?err=not_owner`)
     }
-    
-    const ok = await setPublicDb(ts, next)
+
+    const ok = await setPublicDb(tsFix, next)
     revalidatePath(`/${locale}/m/${encodeURIComponent(ts)}`)
     redirect(`/${locale}/m/${encodeURIComponent(ts)}?ok=${ok ? '1' : '0'}`)
   }
@@ -296,48 +307,46 @@ export default async function Page({
             </p>
           </div>
 
+          {/* Bloc Marketplace (owner → vendre) */}
           {isOwner && (
-          <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-              Revendre ce certificat (Marketplace)
-            </div>
-            <form onSubmit={(e)=>{ /* hydraté client avec petite action fetch */ }} method="dialog">
-              <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
-                <label>Prix (€) <input name="price" type="number" min={1} step={1} style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}} /></label>
-                <button formAction={`/api/marketplace/listing`} formMethod="post"
-                  style={{padding:'10px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)'}}
-                  onClick={(e)=>{/* pack ts & price en body JSON côté client */}}
-                >Mettre en vente</button>
-                {/* Si annonce existante de ce owner: boutons pause / retirer */}
-                {/* ... (prévois petit client component pour état) */}
+            <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
+                Revendre ce certificat (Marketplace)
               </div>
-              <p style={{fontSize:12, opacity:.7, marginTop:8}}>Commission 10% (min 1€) prélevée par Parcels of Time.</p>
-            </form>
-          </section>
-        )}
-
-        {!isOwner && listing && (
-          <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <div>
-                <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>Annonce</div>
-                <div style={{fontSize:18, fontWeight:800, marginTop:4}}>
-                  {listing.price_cents/100} € — {listing.seller_display_name || 'Vendeur'}
+              <form onSubmit={(e)=>{ /* hydraté côté client si besoin */ }} method="dialog">
+                <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+                  <label>Prix (€) <input name="price" type="number" min={1} step={1} style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}} /></label>
+                  <button formAction={`/api/marketplace/listing`} formMethod="post"
+                    style={{padding:'10px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)'}}
+                  >Mettre en vente</button>
                 </div>
-              </div>
-              <form id="mk-checkout" method="post" action="/api/marketplace/checkout" style={{display:'flex', gap:8}}>
-                <input type="hidden" name="listing_id" value={String(listing.id)} />
-                <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
-                      style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10}} />
-                <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
-                  Acheter
-                </button>
+                <p style={{fontSize:12, opacity:.7, marginTop:8}}>Commission 10% (min 1€) prélevée par Parcels of Time.</p>
               </form>
-            </div>
-            <p style={{fontSize:12, opacity:.7, marginTop:8}}>Paiement sécurisé Stripe. PDF transféré au nouvel acquéreur.</p>
-          </section>
-        )}
+            </section>
+          )}
 
+          {/* Bloc Marketplace (acheteur → acheter) */}
+          {!isOwner && listing && (
+            <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div>
+                  <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>Annonce</div>
+                  <div style={{fontSize:18, fontWeight:800, marginTop:4}}>
+                    {listing.price_cents/100} € — {listing.seller_display_name || 'Vendeur'}
+                  </div>
+                </div>
+                <form id="mk-checkout" method="post" action="/api/marketplace/checkout" style={{display:'flex', gap:8}}>
+                  <input type="hidden" name="listing_id" value={String(listing.id)} />
+                  <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
+                        style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10}} />
+                  <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
+                    Acheter
+                  </button>
+                </form>
+              </div>
+              <p style={{fontSize:12, opacity:.7, marginTop:8}}>Paiement sécurisé Stripe. PDF transféré au nouvel acquéreur.</p>
+            </section>
+          )}
 
           {/* Registre public */}
           <aside
@@ -477,7 +486,7 @@ export default async function Page({
           )}
         </aside>
 
-        {/* ======= ÉDITION (9,99 €) — DÉPLIANTE ======= */}
+        {/* ===== ÉDITION (dépliante) ===== */}
         <section style={{ marginTop: 24 }}>
           <details style={{ border: '1px solid var(--color-border)', borderRadius: 12, background: 'var(--color-surface)' }}>
             <summary
@@ -518,16 +527,9 @@ export default async function Page({
                   }}
                 />
               ) : (
-                <div
-                  style={{
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 12,
-                    padding: 16,
-                  }}
-                >
+                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16 }}>
                   <p style={{ margin: 0 }}>
-                    Aucune donnée trouvée pour cette journée. Assurez-vous que l’URL contient bien un horodatage valide.
+                    Aucune donnée trouvée pour cette journée.
                   </p>
                 </div>
               )}
