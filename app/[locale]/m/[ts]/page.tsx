@@ -8,7 +8,7 @@ import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
 import EditClient from './EditClientShell'
 type Params = { locale: string; ts: string }
-type SearchParams = { autopub?: string; ok?: string }
+type SearchParams = { autopub?: string; ok?: string; debug?: string }
 
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
 
@@ -245,6 +245,23 @@ export default async function Page({
     const ok = await setPublicDb(norm.tsISO, next)
     redirect(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}?ok=${ok ? '1' : '0'}`)
   }
+
+
+  const showDebug = sp.debug === '1'
+  const debugBlob = showDebug ? {
+    input: { decodedTs, tsISO, tsYMD },
+    session: session ? { ownerId: session.ownerId, email: session.email } : null,
+    isOwner,
+    isPublic,
+    metaOk: !!meta,
+    claimOk: !!claim,
+    listing: listing ? {
+      id: String(listing.id),
+      status: listing.status,
+      price_eur: listing.price_cents/100
+    } : null
+  } : null
+
 
   return (
     <main
@@ -552,6 +569,24 @@ export default async function Page({
             </div>
           </details>
         </section>
+
+        {showDebug && (
+          <aside style={{
+            marginTop: 18,
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 16,
+            padding: 16
+          }}>
+            <div style={{fontSize:14,textTransform:'uppercase',letterSpacing:1,color:'var(--color-muted)',marginBottom:10}}>
+              Debug (visible car <code>?debug=1</code>)
+            </div>
+            <pre style={{ background:'#0b0e14', color:'#e6eaf2', padding:12, borderRadius:8, overflow:'auto' }}>
+              {JSON.stringify(debugBlob, null, 2)}
+            </pre>
+          </aside>
+        )}
+
 
         <div style={{ marginTop: 18, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <a

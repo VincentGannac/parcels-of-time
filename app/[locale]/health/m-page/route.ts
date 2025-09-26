@@ -1,3 +1,4 @@
+//app/[locale]/health/m-page/route.ts
 export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
@@ -42,6 +43,12 @@ export async function GET(req: Request) {
   // Décision de la page
   steps.isOwner = !!(steps.session && steps.claim && steps.session.ownerId === String(steps.claim.owner_id))
   steps.allowed = !!(steps.isOwner || steps.public)
-
+  steps.wouldRedirectTo =
+  steps.allowed ? null
+     : `/${(u.pathname.split('/')[1]||'fr')}/account?err=not_owner`
+  steps.headers = {
+  host: u.host,
+  proto: u.protocol.replace(':','')
+   }
   return NextResponse.json({ ok:true, steps }, { headers: { 'Cache-Control':'no-store' }})
 }
