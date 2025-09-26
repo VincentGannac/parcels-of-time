@@ -11,15 +11,23 @@ import { readSession, ownerIdForDay } from '@/lib/auth'
 import EditClient from './EditClient'
 
 type Params = { locale: string; ts: string }
-type SearchParams = { autopub?: string; ok?: string }
+type SearchParams = { autopub?: string; ok?: string } 
 
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
+
+/** Normalise au jour UTC (00:00:00.000Z) — accepte YYYY-MM-DD ou un ISO */
 function asDayIsoUTC(ts: string) {
-  // accepte YYYY-MM-DD ou un ISO → force minuit UTC
   const d = /^\d{4}-\d{2}-\d{2}$/.test(ts) ? new Date(`${ts}T00:00:00.000Z`) : new Date(ts)
   if (isNaN(d.getTime())) return null
   d.setUTCHours(0,0,0,0)
   return d.toISOString()
+}
+
+/** Helpers searchParams (compatible objet ou URLSearchParams) */
+function getQ(sp: SearchParams | undefined, key: string): string | undefined {
+  if (!sp) return undefined
+  if (typeof (sp as any)?.get === 'function') return (sp as any).get(key) ?? undefined
+  return (sp as any)?.[key]
 }
 
 /** Lecture état public (par jour) */
@@ -136,7 +144,7 @@ async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
               o.display_name as seller_display_name
          from listings l
          join owners o on o.id = l.seller_owner_id
-        where l.ts = $1::timestamptz
+        where date_trunc('day', l.ts) = $1::timestamptz
           and l.status = 'active'
         limit 1`,
       [tsISO]
@@ -149,70 +157,88 @@ export default async function Page({
   params,
   searchParams,
 }: {
-  params: Promise<Params>
-  searchParams: Promise<SearchParams>
+  params: Promise<Params> | Params
+  searchParams: Promise<SearchParams> | SearchParams
 }) {
-  // ✅ signature Promise pour satisfaire les types Next (et éviter l’erreur Vercel)
-  const { locale = 'en', ts: tsParam = '' } = await params
-  const sp = (await searchParams) || {}
+  // Accepte Promise ou objet (différences de types Next 15)
+  const p = await params as Params
+  const sp = await searchParams as SearchParams
+
+  const { locale = 'en', ts: tsParam = '' } = p
   const decodedTs = safeDecode(tsParam)
+
+  // 🔒 Normalisation unique pour TOUTE la page
   const tsISO = asDayIsoUTC(decodedTs)
   if (!tsISO) redirect(`/${locale}/account?err=bad_ts`)
+  const tsDay = tsISO.slice(0, 10) // utile pour certaines routes publiques
 
-  // 1) Auth obligatoire
-  const session = await readSession()
+  // 1) Auth
+  let session = null as null | { ownerId: string }
+  try { session = await readSession() } catch { /* durcit contre erreurs réseau */ }
   if (!session) {
-    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
+    // Non connecté → on laisse entrer seulement si une annonce active existe (vue publique)
+    const listing = await readActiveListing(tsISO)
+    if (listing) {
+      // vue publique autorisée
+    } else {
+      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(decodedTs)}`)}`)
+    }
   }
 
-  // 2) Owner strict OU annonce active publique
-  const ownerId = await ownerIdForDay(decodedTs)
-  const isOwner = !!ownerId && ownerId === session.ownerId
+  // 2) Ownership strict OU annonce active publique
+  let ownerId: string | null = null
+  try { ownerId = await ownerIdForDay(tsISO) } catch { ownerId = null } // ✅ toujours passer le ts normalisé
+  const isOwner = !!session && !!ownerId && ownerId === session.ownerId
   const listing = isOwner ? null : await readActiveListing(tsISO)
 
   if (!isOwner && !listing) {
+    // ni owner ni annonce → compte
     redirect(`/${locale}/account?err=not_owner`)
   }
 
   // 3) État public + autopub (owner only)
   const isPublicDb = await getPublicStateDb(tsISO)
-  const wantsAutopub = sp.autopub === '1'
+  const wantsAutopub = getQ(sp, 'autopub') === '1'
   if (isOwner && wantsAutopub && !isPublicDb) {
     await setPublicDb(tsISO, true)
-    revalidatePath(`/${locale}/m/${encodeURIComponent(decodedTs)}`)
-    redirect(`/${locale}/m/${encodeURIComponent(decodedTs)}?ok=1`)
+    revalidatePath(`/${locale}/m/${encodeURIComponent(tsDay)}`)
+    redirect(`/${locale}/m/${encodeURIComponent(tsDay)}?ok=1`)
   }
   const isPublic = isPublicDb
 
-  // 4) Données claim / meta (robuste si claim absent)
+  // 4) Données claim / meta (si claim absent, on ne casse pas l’affichage d’annonce)
   const meta = await getClaimMeta(tsISO)
   const claim = await getClaimForEdit(tsISO)
 
-  const pdfHref = `/api/cert/${encodeURIComponent(decodedTs)}`
+  // 🔗 URLs (utiliser le *jour* pour les endpoints jour-based)
+  const pdfHref = `/api/cert/${encodeURIComponent(tsDay)}`
   const homeHref = `/${locale}`
   const exploreHref = `/${locale}/explore`
-  const verifyHref = `/api/verify?ts=${encodeURIComponent(decodedTs)}`
-  let niceTs = decodedTs
+  const verifyHref = `/api/verify?ts=${encodeURIComponent(tsDay)}`
+  let niceTs = tsDay
   try { niceTs = formatISOAsNice(tsISO) } catch {}
 
+  // Action serveur (toggle registre public)
   const togglePublic = async (formData: FormData) => {
     'use server'
-    const ts = String(formData.get('ts') || '')
-    const tsFix = asDayIsoUTC(ts)
+    const raw = String(formData.get('ts') || '')
+    const tsFix = asDayIsoUTC(raw)
     const next = String(formData.get('next') || '0') === '1'
-
     const s = await readSession()
-    const oid = await ownerIdForDay(ts)
-    if (!s) {
-      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(ts)}`)}`)
+
+    if (!s || !tsFix) {
+      redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(raw)}`)}`)
     }
-    if (!oid || oid !== s.ownerId || !tsFix) {
+
+    let oid: string | null = null
+    try { oid = await ownerIdForDay(tsFix) } catch { oid = null }
+    if (!oid || oid !== s.ownerId) {
       redirect(`/${locale}/account?err=not_owner`)
     }
 
     const ok = await setPublicDb(tsFix, next)
-    revalidatePath(`/${locale}/m/${encodeURIComponent(ts)}`)
-    redirect(`/${locale}/m/${encodeURIComponent(ts)}?ok=${ok ? '1' : '0'}`)
+    revalidatePath(`/${locale}/m/${encodeURIComponent(tsFix.slice(0,10))}`)
+    redirect(`/${locale}/m/${encodeURIComponent(tsFix.slice(0,10))}?ok=${ok ? '1' : '0'}`)
   }
 
   return (
@@ -362,7 +388,7 @@ export default async function Page({
             </div>
 
             <form action={togglePublic} style={{ display: 'flex', gap: 10 }}>
-              <input type="hidden" name="ts" value={decodedTs} />
+              <input type="hidden" name="ts" value={tsDay} />
               <input type="hidden" name="next" value={isPublic ? '0' : '1'} />
               <button
                 type="submit"
@@ -497,7 +523,7 @@ export default async function Page({
             <div style={{ padding: 16, borderTop: '1px solid var(--color-border)' }}>
               {claim ? (
                 <EditClient
-                  tsISO={decodedTs}
+                  tsISO={tsDay}
                   locale={locale}
                   initial={{
                     email: claim.email || '',
