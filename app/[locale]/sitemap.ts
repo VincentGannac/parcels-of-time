@@ -1,3 +1,4 @@
+//app/[locale]/sitemap.ts
 import type { MetadataRoute } from 'next'
 
 // Canonique = WWW (cohérent avec le reste)

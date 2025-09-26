@@ -4,10 +4,9 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
 import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
-import EditClient from './EditClient'
+import EditClient from './EditClientShell'
 type Params = { locale: string; ts: string }
 type SearchParams = { autopub?: string; ok?: string }
 
@@ -209,7 +208,6 @@ export default async function Page({
   const wantsAutopub = sp.autopub === '1'
   if (isOwner && wantsAutopub && !isPublicDb) {
     await setPublicDb(tsISO!, true)
-    revalidatePath(`/${locale}/m/${encodeURIComponent(tsYMD!)}`)
     redirect(`/${locale}/m/${encodeURIComponent(tsYMD!)}?ok=1`)
   }
   const isPublic = isPublicDb
@@ -245,7 +243,6 @@ export default async function Page({
     }
 
     const ok = await setPublicDb(norm.tsISO, next)
-    revalidatePath(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}`)
     redirect(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}?ok=${ok ? '1' : '0'}`)
   }
 
