@@ -5,6 +5,7 @@ import Stripe from 'stripe'
 import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { pool } from '@/lib/db'
+import { applySecondarySaleFromSession } from '@/lib/marketplace'
 
 /** Utilitaires DB */
 async function tableExists(client: any, table: string) {
@@ -220,8 +221,10 @@ export async function POST(req: Request) {
   if (evt.type === 'checkout.session.completed') {
     const s = evt.data.object as Stripe.Checkout.Session
     if (s.metadata?.market_kind === 'secondary' && s.payment_status === 'paid') {
-      // Appelle la même logique que /api/marketplace/confirm (factorise dans une fn)
-      // try { await applySecondarySaleFromSession(s) } catch {}
+      try { await applySecondarySaleFromSession(s) } catch (e) {
+        console.warn('[secondary] apply error:', (e as any)?.message || e)
+        // on laisse 200 pour éviter les retries infinis une fois l’erreur gérée/observée
+      }
       return NextResponse.json({ ok: true })
     }
   }

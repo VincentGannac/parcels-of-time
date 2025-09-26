@@ -48,9 +48,11 @@ export async function GET(req: Request) {
     const monthStart = `${range.start.getUTCFullYear()}-${String(range.m).padStart(2, '0')}-01`
     const { rows: saleRows } = await pool.query<DayRow>(
       `select extract(day from l.ts at time zone 'UTC')::int as d
-         from listings l
-        where date_trunc('month', l.ts) = $1::date
-          and l.status = 'active'`,
+      from listings l
+      where l.ts >= $1::date
+        and l.ts <  ($1::date + interval '1 month')
+        and l.status = 'active';
+`,
       [monthStart]
     )
     const for_sale = Array.from(
