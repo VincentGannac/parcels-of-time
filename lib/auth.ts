@@ -16,6 +16,20 @@ function fromB64url(input: string) {
   return Buffer.from(input + '='.repeat(pad), 'base64').toString('utf8')
 }
 
+function hmacB64(input: string) {
+  return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('base64url')
+}
+function hmacHex(input: string) {
+  return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('hex')
+}
+function constTimeEq(a: string, b: string): boolean {
+  const A = Buffer.from(a, 'utf8')
+  const B = Buffer.from(b, 'utf8')
+  if (A.length !== B.length) return false
+  return crypto.timingSafeEqual(A, B)
+}
+
+
 export type SessionPayload = { ownerId: string; email: string; displayName?: string | null; iat?: number; exp?: number }
 
 function hmac(input: string) { return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('base64url') }
@@ -28,33 +42,15 @@ export function makeSignedCookieValue(payload: SessionPayload, ttlSec = 60 * 60 
   return `${p64}.${sig}`
 }
 
-function hmacHex(input: string) {
-  return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('hex')
-}
-
-function constTimeEq(a: string, b: string): boolean {
-  // compare des chaînes ASCII en constant-time, sans throw si tailles ≠
-  const A = Buffer.from(a, 'utf8')
-  const B = Buffer.from(b, 'utf8')
-  if (A.length !== B.length) return false
-  return crypto.timingSafeEqual(A, B)
-}
-
 export function parseSignedCookieValue(value: string | undefined): SessionPayload | null {
   if (!value) return null
   const [p64, sig] = value.split('.')
   if (!p64 || !sig) return null
 
-  // Signatures attendues :
-  // - courant : base64url
-  // - legacy  : hex (64 chars)
-  const goodB64 = hmac(p64)
+  // Deux formats acceptés pour compat: base64url (actuel) et hex (legacy)
+  const goodB64 = hmacB64(p64)
   const goodHex = hmacHex(p64)
-
-  const ok =
-    constTimeEq(sig, goodB64) ||      // format actuel
-    constTimeEq(sig, goodHex)         // compat ancien format hex
-
+  const ok = constTimeEq(sig, goodB64) || constTimeEq(sig, goodHex)
   if (!ok) return null
 
   try {
@@ -140,19 +136,22 @@ export async function readSession(): Promise<SessionPayload | null> {
   const bag = typeof cAny === 'function' ? cAny() : cAny
   const jar = bag?.then ? await bag : bag
 
-  const rawHost = jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value
-  const rawNorm = jar?.get?.(AUTH_COOKIE_NAME)?.value
+  const variants = [
+    jar?.get?.(`__Host-${AUTH_COOKIE_NAME}`)?.value,
+    jar?.get?.(AUTH_COOKIE_NAME)?.value,
+  ].filter(Boolean) as string[]
 
-  if (rawHost) {
-    const p = parseSignedCookieValue(rawHost)
-    if (p) return p
-  }
-  if (rawNorm) {
-    const p = parseSignedCookieValue(rawNorm)
-    if (p) return p
+  for (const raw of variants) {
+    try {
+      const p = parseSignedCookieValue(raw)
+      if (p) return p
+    } catch {
+      // on ignore TOUTE erreur de parsing pour ne pas faire tomber le SSR
+    }
   }
   return null
 }
+
 
 // ===== DB & password =====
 type PWRecord = { id: string; email: string; display_name: string | null; password_hash: string | null; password_algo: string | null }
