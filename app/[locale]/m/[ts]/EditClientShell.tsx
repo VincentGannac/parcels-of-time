@@ -1,3 +1,4 @@
+//app/[locale]/m/[ts]/EditClientShell.tsx
 'use client'
 
 import dynamic from 'next/dynamic'

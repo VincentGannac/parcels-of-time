@@ -6,7 +6,7 @@ export const revalidate = 0
 import { redirect } from 'next/navigation'
 import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
-import EditClient from './EditClientShell'
+import EditSection from './EditSection'
 type Params = { locale: string; ts: string }
 type SearchParams = { autopub?: string; ok?: string; debug?: string }
 
@@ -543,29 +543,30 @@ export default async function Page({
             </summary>
 
             <div style={{ padding: 16, borderTop: '1px solid var(--color-border)' }}>
-              {claim ? (
-                <EditClient
-                  tsISO={tsISO!}
-                  locale={locale}
-                  initial={{
-                    email: claim.email || '',
-                    display_name: claim.display_name || '',
-                    title: claim.title || '',
-                    message: claim.message || '',
-                    link_url: claim.link_url || '',
-                    cert_style: (claim.cert_style as any) || 'neutral',
-                    time_display: (claim.time_display as any) || 'local+utc',
-                    local_date_only: !!claim.local_date_only,
-                    text_color: claim.text_color || '#1a1f2a',
-                    title_public: !!claim.title_public,
-                    message_public: !!claim.message_public,
-                  }}
+            {claim ? (
+            <EditSection
+              tsISO={tsISO!}
+              locale={locale}
+              initial={{
+                email: claim.email || '',
+                display_name: claim.display_name || '',
+                title: claim.title || '',
+                message: claim.message || '',
+                link_url: claim.link_url || '',
+                cert_style: (claim.cert_style as any) || 'neutral',
+                time_display: (claim.time_display as any) || 'local+utc',
+                local_date_only: !!claim.local_date_only,
+                text_color: claim.text_color || '#1a1f2a',
+                title_public: !!claim.title_public,
+                message_public: !!claim.message_public,
+              }}
                 />
               ) : (
                 <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16 }}>
                   <p style={{ margin: 0 }}>Aucune donnée trouvée pour cette journée.</p>
                 </div>
               )}
+              
             </div>
           </details>
         </section>

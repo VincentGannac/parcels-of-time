@@ -5,7 +5,7 @@ import type React from 'react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 
-type CertStyle =
+export type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
 
@@ -201,7 +201,7 @@ function coverToA4JPEG(dataUrl: string, srcW: number, srcH: number) {
   })
 }
 
-type Initial = {
+export type Initial = {
   email: string
   display_name: string
   title: string
@@ -214,6 +214,13 @@ type Initial = {
   title_public: boolean
   message_public: boolean
 }
+
+export type EditClientProps = {
+  tsISO: string
+  locale: string
+  initial: Initial
+}
+
 
 export default function EditClient({
   tsISO,

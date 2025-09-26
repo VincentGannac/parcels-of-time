@@ -1,3 +1,4 @@
+//app/[locale]/m/[ts]/error.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
