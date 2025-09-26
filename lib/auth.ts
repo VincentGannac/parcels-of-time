@@ -28,18 +28,44 @@ export function makeSignedCookieValue(payload: SessionPayload, ttlSec = 60 * 60 
   return `${p64}.${sig}`
 }
 
+function hmacHex(input: string) {
+  return crypto.createHmac('sha256', AUTH_SECRET).update(input).digest('hex')
+}
+
+function constTimeEq(a: string, b: string): boolean {
+  // compare des chaînes ASCII en constant-time, sans throw si tailles ≠
+  const A = Buffer.from(a, 'utf8')
+  const B = Buffer.from(b, 'utf8')
+  if (A.length !== B.length) return false
+  return crypto.timingSafeEqual(A, B)
+}
+
 export function parseSignedCookieValue(value: string | undefined): SessionPayload | null {
   if (!value) return null
   const [p64, sig] = value.split('.')
   if (!p64 || !sig) return null
-  const good = hmac(p64)
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null
+
+  // Signatures attendues :
+  // - courant : base64url
+  // - legacy  : hex (64 chars)
+  const goodB64 = hmac(p64)
+  const goodHex = hmacHex(p64)
+
+  const ok =
+    constTimeEq(sig, goodB64) ||      // format actuel
+    constTimeEq(sig, goodHex)         // compat ancien format hex
+
+  if (!ok) return null
+
   try {
     const obj = JSON.parse(fromB64url(p64))
     if (obj?.exp && typeof obj.exp === 'number' && obj.exp < Math.floor(Date.now() / 1000)) return null
     return obj
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
+
 
 /** Détermine le Domain à utiliser pour ce host (sinon host-only) */
 export function computeCookieDomainForHost(host?: string): string | undefined {
