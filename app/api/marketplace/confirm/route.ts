@@ -1,3 +1,4 @@
+//app/api/marketplace/confirm/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -30,6 +31,24 @@ async function hasColumn(client: any, table: string, col: string) {
   )
   return !!rows.length
 }
+
+async function getColumns(client: any, table: string) {
+    const { rows } = await client.query(
+      `select column_name from information_schema.columns
+        where table_schema='public' and table_name=$1`,
+      [table]
+    )
+    return new Set<string>(rows.map((r:any)=>r.column_name))
+  }
+  function safeBool(v: unknown) { return String(v) === '1' || v === true }
+  function safeHex(v: unknown, fallback='#1a1f2a') {
+    return /^#[0-9a-fA-F]{6}$/.test(String(v||'')) ? String(v).toLowerCase() : fallback
+  }
+  function safeStyle(v: unknown) {
+    const ALLOWED = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
+    const s = String(v||'neutral').toLowerCase()
+    return (ALLOWED as readonly string[]).includes(s as any) ? s : 'neutral'
+  }
 
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
@@ -68,6 +87,34 @@ export async function GET(req: Request) {
     if (!listingId || !buyerEmail || !tsISO) {
       return NextResponse.redirect(`${base}/`, { status: 302 })
     }
+
+    // ➕ payload personnalisé
+    const payloadKey = String(s.metadata?.payload_key || '').trim()
+    const customBgKey = String(s.metadata?.custom_bg_key || '').trim()
+    let P: any = {}
+    if (payloadKey) {
+      const { rows: p } = await pool.query(`select data from checkout_payload_temp where key=$1`, [payloadKey])
+      if (p.length) {
+        P = p[0].data || {}
+        // hygiène : suppression du tampon
+        await pool.query(`delete from checkout_payload_temp where key=$1`, [payloadKey])
+      }
+    }
+    // normalisation des valeurs
+    const p_display_name   = String(P.display_name || '')
+    const p_title          = (P.title ?? '') as string
+    const p_message        = (P.message ?? '') as string
+    const p_link_url       = (P.link_url ?? '') as string
+    const p_style          = safeStyle(P.cert_style)
+    const p_time_display   = ((): any => {
+      const td = String(P.time_display || 'local+utc')
+      return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc'
+    })()
+    const p_local_day      = safeBool(P.local_date_only)
+    const p_text_color     = safeHex(P.text_color)
+    const p_title_public   = safeBool(P.title_public)
+    const p_message_public = safeBool(P.message_public)
+    const p_public_reg     = safeBool(P.public_registry)
 
     // Locale finale si aucune dans l’URL
     if (!qpLocale) {
@@ -137,27 +184,75 @@ export async function GET(req: Request) {
 
       // 3) Upsert acheteur
       const { rows: brow } = await client.query(
-        `insert into owners(email)
-         values($1)
-         on conflict(email) do update set email = excluded.email
-         returning id`,
-        [buyerEmail]
+        `insert into owners(email, display_name)
+        values($1,$2)
+        on conflict(email) do update
+          set display_name = coalesce(excluded.display_name, owners.display_name)
+        returning id`,
+        [buyerEmail, p_display_name || null]
       )
       const buyerId = brow[0].id
       buyerOwnerId = String(buyerId)
 
-      // 4) Transfert de propriété (tolérant au temps exact)
-      await client.query(
-        `update claims
-            set owner_id = $1,
-                price_cents = $2,
-                currency = $3,
-                last_secondary_sold_at = now(),
-                last_secondary_price_cents = $2
-          where date_trunc('day', ts) = $4::timestamptz
-            and owner_id = $5`,
-        [buyerId, L.price_cents, L.currency, tsISO, L.seller_owner_id]
-      )
+      // 4) Transfert de propriété + application des personnalisations (colonnes présentes seulement)
+      const cols = await getColumns(client, 'claims')
+      const sets: string[] = [
+        `owner_id = $1`,
+        `price_cents = $2`,
+        `currency = $3`,
+        `last_secondary_sold_at = now()`,
+        `last_secondary_price_cents = $2`,
+      ]
+      const vals: any[] = [buyerId, L.price_cents, L.currency]
+      let idx = vals.length
+      const push = (sqlFrag: string, v: any) => { vals.push(v); sets.push(`${sqlFrag} = $${++idx}`) }
+      if (cols.has('title'))           push('title', p_title || null)
+      if (cols.has('message'))         push('message', p_message || null)
+      if (cols.has('link_url'))        push('link_url', p_link_url || null)
+      if (cols.has('cert_style'))      push('cert_style', p_style)
+      if (cols.has('time_display'))    push('time_display', p_time_display)
+      if (cols.has('local_date_only')) push('local_date_only', p_local_day)
+      if (cols.has('text_color'))      push('text_color', p_text_color)
+      if (cols.has('title_public'))    push('title_public', p_title_public)
+      if (cols.has('message_public'))  push('message_public', p_message_public)
+
+      const sql = `
+        update claims
+           set ${sets.join(', ')}
+         where date_trunc('day', ts) = $${++idx}::timestamptz
+           and owner_id = $${++idx}
+      `
+      vals.push(tsISO, L.seller_owner_id)
+      await client.query(sql, vals)
+
+      // 4bis) Image custom : temp -> persist si style=custom
+      if (p_style === 'custom' && customBgKey) {
+        const hasTemp = await tableExists(client, 'custom_bg_temp')
+        const hasPersist = await tableExists(client, 'claim_custom_bg')
+        if (hasTemp && hasPersist) {
+          const { rows: tmp } = await client.query('select data_url from custom_bg_temp where key = $1', [customBgKey])
+          if (tmp.length) {
+            await client.query(
+              `insert into claim_custom_bg (ts, data_url)
+               values ($1::timestamptz, $2)
+               on conflict (ts) do update
+                 set data_url = excluded.data_url, created_at = now()`,
+              [tsISO, tmp[0].data_url]
+            )
+            await client.query('delete from custom_bg_temp where key = $1', [customBgKey])
+          }
+        }
+      }
+
+      // 4ter) Publication registre si demandé
+      if (p_public_reg) {
+        await client.query(
+          `insert into minute_public (ts)
+             values ($1::timestamptz)
+             on conflict (ts) do nothing`,
+          [tsISO]
+        )
+      }
 
       // 5) Marquer l’annonce « sold »
       //    (on ne casse pas si buyer_owner_id n’existe pas)

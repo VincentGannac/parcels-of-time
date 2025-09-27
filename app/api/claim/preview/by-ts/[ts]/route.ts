@@ -1,3 +1,4 @@
+//app/api/claim/preview/by-ts/[ts]/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'

@@ -243,9 +243,14 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   const [isLoadingClaim, setIsLoadingClaim] = useState(false)
 
-  // Cache par mois (YYYY-MM) pour accélérer les rafraîchissements
-  const unavailCacheRef = useRef<Map<string, number[]>>(new Map())
+    // Cache par mois (YYYY-MM) : on mémorise rouges + jaunes + lookup
+  type MonthCache = {
+    red: number[]
+    yellow: number[]
+    lookup: Record<number, { id:string; price_cents:number; currency:string }>
+  }
 
+  const monthCacheRef = useRef<Map<string, MonthCache>>(new Map())
   // Pour annuler les requêtes précédentes si on change Y/M rapidement
   const daysReqAbortRef = useRef<AbortController | null>(null)
 
@@ -264,13 +269,14 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     setForSaleDays([])
     setSaleLookup({})
   
-    // 3) Cache (ici: seulement les rouges)
-    const cached = unavailCacheRef.current.get(ym)
+    // 3) Cache complet (rouges + jaunes + lookup)
+    const cached = monthCacheRef.current.get(ym)
     if (cached) {
-      setUnavailableDays(cached)
-      // jaunes & lookup restent vides (on les a reset juste au-dessus)
+      setUnavailableDays(cached.red)
+      setForSaleDays(cached.yellow)
+      setSaleLookup(cached.lookup)
       setIsLoadingDays(false)
-      return // pas de cleanup nécessaire: aucune requête lancée
+      return
     }
   
     // 4) Fetch avec AbortController
@@ -298,7 +304,8 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         }
         setSaleLookup(map)
   
-        unavailCacheRef.current.set(ym, red)
+        // ➕ on mémorise tout dans le cache
+        monthCacheRef.current.set(ym, { red, yellow, lookup: map })
       } catch (e: any) {
         if (e?.name !== 'AbortError') {
           setUnavailableDays([])
@@ -368,8 +375,15 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         const mg = /^(?:offert\s*par|gifted\s*by)\s*:\s*(.+)$/mi.exec(raw)
         if (mg) { giftedBy = mg[1].trim(); raw = raw.replace(mg[0], '').trim() }
   
-        setShow(s => ({ ...s, ownedBy: !hideOwned, giftedBy: !!giftedBy }))
-        if (giftedBy) setIsGift(true)
+        // ➕ règle *tous* les interrupteurs selon les données du certificat chargé
+        setShow({
+          ownedBy: !hideOwned,
+          giftedBy: !!giftedBy,
+          title: !!(j.claim.title || '').trim(),
+          message: !!raw,
+          attestation: true, // attestation séparée (toujours dispo)
+        })
+        setIsGift(!!giftedBy)
   
         setForm(f => ({
           ...f,
@@ -395,6 +409,33 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     })()
   }, [D, forSaleDays, saleLookup, ymdSelected])
   
+
+  // Quand la date sélectionnée n'est PAS en vente → on revient à l'état par défaut
+  useEffect(() => {
+    const isYellow = new Set(forSaleDays).has(D)
+    if (isYellow) return
+    // on permet un nouveau pré-remplissage si on revient plus tard sur une jaune
+    lastPrefilledYmdRef.current = null
+    // vide tous les champs (sauf e-mail et style choisi)
+    setForm(f => ({
+      ...f,
+      display_name: '',
+      title: '',
+      message: '',
+      gifted_by: '',
+      link_url: '',
+      // on conserve email, cert_style, couleurs, etc.
+    }))
+    // re-cocher toutes les cases d'affichage disponibles
+    setShow(s => ({
+      ...s,
+      ownedBy: true,
+      title: true,
+      message: true,
+      attestation: true,
+      giftedBy: isGift ? true : false, // visible seulement si mode cadeau actif
+    }))
+  }, [D, forSaleDays, isGift])
 
 
 
