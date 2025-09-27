@@ -56,11 +56,10 @@ export async function POST(req: Request) {
     let locale: 'fr'|'en' = 'fr'
     let buyerEmail = ''
 
-    // Option pré-stash
     let payload_key = ''
     let custom_bg_key = ''
 
-    // Fallback "léger" si pas de payload_key (aucune image ici)
+    // Fallback si pas de payload_key
     let display_name = ''
     let title = ''
     let message = ''
@@ -150,11 +149,19 @@ export async function POST(req: Request) {
       ? NextResponse.redirect(`${base}/account?err=seller_not_onboarded`, { status: 303 })
       : jsonError('seller_not_onboarded', 400)
 
-    const tsYMD = toYMD(L.ts)
-    const price = Number(L.price_cents) | 0
-    const currency = String(L.currency || 'eur').toLowerCase()
+    // ⚠️ Garde-fous prix/devise (cause n°1 d'erreur Stripe)
+    const price = Number(L.price_cents)
+    if (!Number.isInteger(price) || price < 1) {
+      return isForm
+        ? NextResponse.redirect(`${base}/account?err=listing_bad_price`, { status: 303 })
+        : jsonError('listing_bad_price', 400, { detail: 'unit_amount must be >= 1' })
+    }
+    const currencyRaw = String(L.currency || '').toLowerCase()
+    const currency = /^[a-z]{3}$/.test(currencyRaw) ? currencyRaw : 'eur'
 
-    // Stash payload complet si on n'a pas déjà une clé
+    const tsYMD = toYMD(L.ts)
+
+    // Stash payload si pas déjà fourni
     const payloadKey = payload_key || `pl_${crypto.randomUUID()}`
     if (!payload_key) {
       await pool.query(
@@ -178,41 +185,54 @@ export async function POST(req: Request) {
       )
     }
 
-    // Commission 10% min 1€
-    const applicationFee = Math.max(100, Math.floor(price * 0.10))
+    // Commission 10% min 1€, mais jamais >= price
+    let applicationFee = Math.max(100, Math.floor(price * 0.10))
+    if (applicationFee >= price) applicationFee = Math.max(0, price - 1)
 
     const successUrl = `${base}/api/marketplace/confirm?sid={CHECKOUT_SESSION_ID}&locale=${locale}&ts=${enc(tsYMD)}`
     const cancelUrl  = `${base}/${locale}/m/${enc(tsYMD)}?buy=cancel`
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [{
-        quantity: 1,
-        price_data: {
-          currency,
-          unit_amount: price,
-          product_data: { name: locale==='fr' ? `Journée ${tsYMD}` : `Day ${tsYMD}` },
+    let session
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency,
+            unit_amount: price,
+            product_data: { name: locale==='fr' ? `Journée ${tsYMD}` : `Day ${tsYMD}` },
+          },
+        }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        payment_intent_data: {
+          on_behalf_of: L.stripe_account_id,
+          application_fee_amount: applicationFee,
+          transfer_data: { destination: L.stripe_account_id },
         },
-      }],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      payment_intent_data: {
-        on_behalf_of: L.stripe_account_id,
-        application_fee_amount: applicationFee,
-        transfer_data: { destination: L.stripe_account_id },
-      },
-      customer_email: buyerEmail,
-      metadata: {
-        market_kind: 'secondary',
-        listing_id: String(listingId),
-        ts: tsYMD,
-        buyer_email: buyerEmail,
-        locale,
-        payload_key: payloadKey,
-        custom_bg_key,
-      },
-      automatic_tax: { enabled: false },
-    })
+        customer_email: buyerEmail,
+        metadata: {
+          market_kind: 'secondary',
+          listing_id: String(listingId),
+          ts: tsYMD,
+          buyer_email: buyerEmail,
+          locale,
+          payload_key: payloadKey,
+          custom_bg_key,
+        },
+        automatic_tax: { enabled: false },
+      })
+    } catch (e: any) {
+      // logs détaillés Stripe
+      const errLike = e?.raw || e
+      console.error('[marketplace/checkout] stripe error:', {
+        type: e?.type, code: errLike?.code, param: errLike?.param, message: e?.message
+      })
+      return isForm
+        ? NextResponse.redirect(`${base}/account?err=stripe_error&code=${encodeURIComponent(errLike?.code||'')}`, { status: 303 })
+        : jsonError('stripe_error', 500, { code: errLike?.code, param: errLike?.param, detail: String(e?.message || e) })
+    }
 
     if (isForm) return NextResponse.redirect(session.url!, { status: 303 })
     if (!session.url) return jsonError('no_checkout_url', 500)
