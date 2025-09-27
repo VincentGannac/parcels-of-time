@@ -15,16 +15,19 @@ export async function POST(req: Request) {
   const ctype = (req.headers.get('content-type') || '').toLowerCase()
   let listingId = 0
   let locale: 'fr'|'en' = 'fr'
+  let buyerEmail = ''
 
   if (ctype.includes('application/x-www-form-urlencoded')) {
     const form = await req.formData()
     listingId = Number(form.get('listing_id') || 0)
     const loc = String(form.get('locale') || '')
     locale = (loc === 'en') ? 'en' : 'fr'
+    buyerEmail = String(form.get('buyer_email') || '').trim().toLowerCase()
   } else {
     const body = await req.json().catch(() => ({} as any))
     listingId = Number(body.listing_id || 0)
     locale = (String(body.locale || 'fr').toLowerCase() === 'en') ? 'en' : 'fr'
+    buyerEmail = String(body.buyer_email || '').trim().toLowerCase()
   }
 
   if (!listingId) {
@@ -73,11 +76,12 @@ export async function POST(req: Request) {
   // === Commission plateforme : 10% min 1€
   const applicationFee = Math.max(100, Math.floor(price * 0.10))
 
-  const successUrl = `${base}/${locale}/m/${enc(tsYMD)}?buy=success&sid={CHECKOUT_SESSION_ID}`
+  const successUrl = `${base}/api/marketplace/confirm?sid={CHECKOUT_SESSION_ID}&locale=${locale}&ts=${enc(tsYMD)}`
   const cancelUrl  = `${base}/${locale}/m/${enc(tsYMD)}?buy=cancel`
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    customer_email: buyerEmail || undefined,     // ✅ IMPORTANT
     line_items: [{
       quantity: 1,
       price_data: {
@@ -97,6 +101,7 @@ export async function POST(req: Request) {
       market_kind: 'secondary',
       listing_id: String(listingId),
       ts: tsYMD,
+      buyer_email: buyerEmail || '',
     },
     automatic_tax: { enabled: false },
   })

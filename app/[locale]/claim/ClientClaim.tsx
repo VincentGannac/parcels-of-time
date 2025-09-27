@@ -151,6 +151,12 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
  
   const MIN_GAP_HEADER_PT = 28 // marge min entre "Certificate of Claim" et la date
 
+  
+  const lastPrefilledYmdRef = useRef<string | null>(null)
+  const ymdSelected = useMemo(() => {
+    try { return new Date(Date.UTC(Y, M-1, D)).toISOString().slice(0,10) } catch { return '' }
+  }, [Y, M, D])
+
   // Ajuste le jour si dépasse le nb de jours du mois
   useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M])
 
@@ -333,6 +339,46 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     const d = new Date(Date.UTC(Y, M-1, D, 0, 0, 0, 0))
     setForm(f=>({ ...f, ts: isoDayString(d) }))
   }, [Y, M, D])
+
+  // Quand un jour est "jaune", pré-remplir depuis le certificat existant (sauf l'email)
+  useEffect(() => {
+    const onSale = new Set(forSaleDays).has(D)
+    const listing = saleLookup[D]
+    if (!onSale || !listing || !ymdSelected) return
+
+    // évite de re-préremplir si on revient sur le même YMD
+    if (lastPrefilledYmdRef.current === ymdSelected) return
+    lastPrefilledYmdRef.current = ymdSelected
+
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/claim/preview/by-ts/${encodeURIComponent(ymdSelected)}`)
+        const j = await res.json()
+        if (!j?.claim) return
+        setForm(f => ({
+          ...f,
+          // ⚠️ on ne touche PAS à f.email
+          display_name: j.claim.display_name || '',
+          title: j.claim.title || '',
+          message: j.claim.message || '',
+          link_url: j.claim.link_url || '',
+          cert_style: (j.claim.cert_style || 'neutral'),
+          time_display: (j.claim.time_display || 'local+utc'),
+          local_date_only: !!j.claim.local_date_only,
+          text_color: j.claim.text_color || '#1A1F2A',
+          title_public: !!j.claim.title_public,
+          message_public: !!j.claim.message_public,
+        }))
+
+        // style custom → injecter l'image stockée (A4 2480×3508)
+        if (j.custom_bg_data_url && (j.claim.cert_style === 'custom')) {
+          setCustomBg({ url: j.custom_bg_data_url, dataUrl: j.custom_bg_data_url, w: 2480, h: 3508 })
+        }
+      } catch {}
+    })()
+  }, [D, forSaleDays, saleLookup, ymdSelected])
+
+
 
   // Date choisie
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])

@@ -436,41 +436,6 @@ export default async function Page({
             </div>
           )}
 
-          {/* Visuel — Mes annonces actives */}
-          {isOwner && (
-            <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>Mes annonces actives</div>
-              {myListings.length === 0 ? (
-                <p style={{margin:'8px 0 0', opacity:.8, fontSize:13}}>Aucune date en vente pour l’instant.</p>
-              ) : (
-                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10, marginTop:10}}>
-                  {myListings.map(item=>{
-                    const ymd = new Date(item.ts).toISOString().slice(0,10)
-                    return (
-                      <div key={item.id} style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12}}>
-                        <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
-                        <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
-                        <div style={{display:'flex', gap:8, marginTop:10}}>
-                          <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', color:'var(--color-text)'}}>
-                            Ouvrir
-                          </a>
-                          <form method="post" action="/api/marketplace/cancel">
-                            <input type="hidden" name="listing_id" value={item.id} />
-                            <input type="hidden" name="locale" value={locale} />
-                            <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'#ffb2b2'}}>
-                              Retirer
-                            </button>
-                          </form>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              <p style={{marginTop:10, fontSize:12, opacity:.7}}>Commission 10% appliquée lors de la vente (min 1 €).</p>
-            </section>
-          )}
-
           {/* Registre public */}
           <aside
             style={{

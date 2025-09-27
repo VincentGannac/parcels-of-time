@@ -66,6 +66,31 @@ async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
   }
 }
 
+
+type MyListing = { id: string; ts: string; price_cents: number; currency: string; status: 'active'|'sold'|'canceled' }
+
+async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
+  try {
+    const { rows } = await pool.query(
+      `select id, ts, price_cents, currency, status
+         from listings
+        where seller_owner_id = $1
+          and status = 'active'
+        order by ts asc`,
+      [ownerId]
+    )
+    return rows.map(r => ({
+      id: String(r.id),
+      ts: new Date(r.ts).toISOString(),
+      price_cents: r.price_cents,
+      currency: r.currency || 'EUR',
+      status: r.status
+    }))
+  } catch { return [] }
+}
+
+
+
 export default async function Page({
   params,
   searchParams,
@@ -73,6 +98,7 @@ export default async function Page({
   const { locale } = await params
   const sp = await searchParams
   const sess = await readSession()
+  
   if (!sess) redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
 
   // 1) lecture DB
@@ -92,7 +118,7 @@ export default async function Page({
   }
 
   const claims = await listClaims(sess.ownerId)
-
+  const listings = await readMyActiveListings(sess.ownerId)
   return (
     <main style={{maxWidth: 900, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui'}}>
       <header style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 18}}>
@@ -135,6 +161,48 @@ export default async function Page({
         </form>
       </div>
     </section>
+
+
+      <section style={{marginTop:18}}>
+    <h2 style={{fontSize:18, margin:'0 0 10px'}}>
+      {locale==='fr' ? 'Mes annonces actives' : 'My active listings'}
+    </h2>
+    <div style={{border:'1px solid #eee', borderRadius:12, padding:14}}>
+      {listings.length === 0 ? (
+        <p style={{margin:0, opacity:.8}}>
+          {locale==='fr' ? 'Aucune date en vente pour l’instant.' : 'No active listings yet.'}
+        </p>
+      ) : (
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10}}>
+          {listings.map(item=>{
+            const ymd = new Date(item.ts).toISOString().slice(0,10)
+            return (
+              <div key={item.id} style={{border:'1px solid #eee', borderRadius:12, padding:12}}>
+                <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
+                <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
+                <div style={{display:'flex', gap:8, marginTop:10}}>
+                  <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', borderRadius:10, border:'1px solid #ddd', color:'inherit'}}>
+                    {locale==='fr' ? 'Ouvrir' : 'Open'}
+                  </a>
+                  <form method="post" action="/api/marketplace/cancel">
+                    <input type="hidden" name="listing_id" value={item.id} />
+                    <input type="hidden" name="locale" value={locale} />
+                    <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid #ddd', background:'transparent', color:'#b33'}}>
+                      {locale==='fr' ? 'Retirer' : 'Cancel'}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <p style={{marginTop:10, fontSize:12, opacity:.7}}>
+        {locale==='fr' ? 'Commission 10% (min 1 €) appliquée lors de la vente.' : '10% commission (min €1) on sale.'}
+      </p>
+    </div>
+  </section>
+
 
       <section style={{marginTop:18}}>
         <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
