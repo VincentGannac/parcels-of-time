@@ -193,10 +193,14 @@ async function ownerIdForDaySafe(tsISO: string, tsYMD: string): Promise<string |
 }
 
 export default async function Page({
-  params, searchParams,
-}: { params: Params; searchParams: SearchParams }) {
-  const { locale = 'en', ts: tsParam = '' } = params
-  const sp = searchParams || {}
+  params,
+  searchParams,
+}: {
+  params: Promise<Params>;
+  searchParams: Promise<SearchParams>;
+}) {
+  const { locale = 'en', ts: tsParam = '' } = await params
+  const sp = (await searchParams) || {}
 
   const decodedTs = safeDecode(tsParam)
   const { tsISO, tsYMD } = normalizeTs(decodedTs)
