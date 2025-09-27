@@ -12,7 +12,7 @@ function enc(s: string) { return encodeURIComponent(s) }
 function toYMD(iso: string) { try { return new Date(iso).toISOString().slice(0,10) } catch { return iso } }
 
 export async function GET(req: Request) {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin
+  const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
   const html = `<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex">
   <title>Marketplace Checkout API</title>
   <body style="font:14px system-ui;background:#0B0E14;color:#E6EAF2;padding:24px">
