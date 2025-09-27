@@ -1,4 +1,3 @@
-//api/marketplace/checkout
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -73,15 +72,15 @@ export async function POST(req: Request) {
   const price = Number(L.price_cents) | 0
   const currency = String(L.currency || 'eur').toLowerCase()
 
-  // === Commission plateforme : 10% min 1€
+  // Commission plateforme : 10% min 1€
   const applicationFee = Math.max(100, Math.floor(price * 0.10))
 
+  // ✅ On passe par l’endpoint de confirmation (écrit en DB puis redirige vers /[locale]/m/[ts])
   const successUrl = `${base}/api/marketplace/confirm?sid={CHECKOUT_SESSION_ID}&locale=${locale}&ts=${enc(tsYMD)}`
   const cancelUrl  = `${base}/${locale}/m/${enc(tsYMD)}?buy=cancel`
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
-    customer_email: buyerEmail || undefined,     // ✅ IMPORTANT
     line_items: [{
       quantity: 1,
       price_data: {
@@ -92,21 +91,24 @@ export async function POST(req: Request) {
     }],
     success_url: successUrl,
     cancel_url: cancelUrl,
+    // Connect payout au vendeur + fee plateforme
     payment_intent_data: {
       on_behalf_of: L.stripe_account_id,
       application_fee_amount: applicationFee,
       transfer_data: { destination: L.stripe_account_id },
     },
+    // ✅ fixe l’e-mail côté Stripe (utile si l’utilisateur a déjà saisi un mail dans le formulaire)
+    customer_email: buyerEmail || undefined,
     metadata: {
       market_kind: 'secondary',
       listing_id: String(listingId),
       ts: tsYMD,
       buyer_email: buyerEmail || '',
+      locale,
     },
     automatic_tax: { enabled: false },
   })
 
-  // Si formulaire → redirection immédiate vers Stripe Checkout
   if (ctype.includes('application/x-www-form-urlencoded')) {
     return NextResponse.redirect(session.url!, { status: 303 })
   }
