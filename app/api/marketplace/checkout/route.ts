@@ -56,6 +56,7 @@ export async function POST(req: Request) {
     let locale: 'fr'|'en' = 'fr'
     let buyerEmail = ''
 
+    // Option pré-stash
     let payload_key = ''
     let custom_bg_key = ''
 
@@ -149,7 +150,7 @@ export async function POST(req: Request) {
       ? NextResponse.redirect(`${base}/account?err=seller_not_onboarded`, { status: 303 })
       : jsonError('seller_not_onboarded', 400)
 
-    // ⚠️ Garde-fous prix/devise (cause n°1 d'erreur Stripe)
+    // ⚠️ Garde-fous prix/devise
     const price = Number(L.price_cents)
     if (!Number.isInteger(price) || price < 1) {
       return isForm
@@ -161,28 +162,38 @@ export async function POST(req: Request) {
 
     const tsYMD = toYMD(L.ts)
 
-    // Stash payload si pas déjà fourni
+    // Stash payload si pas déjà fourni → **kind 'create'** (compatible avec la contrainte CHECK existante)
     const payloadKey = payload_key || `pl_${crypto.randomUUID()}`
     if (!payload_key) {
-      await pool.query(
-        `insert into checkout_payload_temp(key, kind, data)
-         values ($1, 'secondary', $2::jsonb)
-         on conflict (key) do update set data = excluded.data, created_at = now()`,
-        [payloadKey, JSON.stringify({
-          display_name,
-          title,
-          message,
-          link_url,
-          cert_style,
-          time_display,
-          local_date_only,
-          text_color,
-          title_public,
-          message_public,
-          public_registry,
-          locale
-        })]
-      )
+      try {
+        await pool.query(
+          `insert into checkout_payload_temp(key, kind, data)
+           values ($1, 'create', $2::jsonb)
+           on conflict (key) do update set data = excluded.data, created_at = now()`,
+          [payloadKey, JSON.stringify({
+            display_name,
+            title,
+            message,
+            link_url,
+            cert_style,
+            time_display,
+            local_date_only,
+            text_color,
+            title_public,
+            message_public,
+            public_registry,
+            locale
+          })]
+        )
+      } catch (e:any) {
+        const msg = String(e?.message || e)
+        if (msg.includes('checkout_payload_temp_kind_check')) {
+          return isForm
+            ? NextResponse.redirect(`${base}/account?err=db_payload_kind_invalid`, { status: 303 })
+            : jsonError('db_payload_kind_invalid', 500, { detail: msg })
+        }
+        throw e
+      }
     }
 
     // Commission 10% min 1€, mais jamais >= price
@@ -224,7 +235,6 @@ export async function POST(req: Request) {
         automatic_tax: { enabled: false },
       })
     } catch (e: any) {
-      // logs détaillés Stripe
       const errLike = e?.raw || e
       console.error('[marketplace/checkout] stripe error:', {
         type: e?.type, code: errLike?.code, param: errLike?.param, message: e?.message
