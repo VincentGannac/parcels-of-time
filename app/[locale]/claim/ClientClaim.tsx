@@ -731,8 +731,6 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       }
 
 
-
-
     // Interdit les jours indisponibles
     if (unavailableDays.includes(D)) {
       setStatus('error'); setError('Ce jour est indisponible. Merci d’en choisir un autre.'); return
