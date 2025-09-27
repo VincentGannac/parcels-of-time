@@ -639,96 +639,59 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       setStatus('error'); setError(`La date choisie dépasse la limite autorisée (${ymdUTC(maxDateUtc)}).`); return
     }
 
-      // 🔁 Jour en vente ? → flow Marketplace
-      const dayNum = D
-      const listing = saleLookup[dayNum]
-      if (listing) {
-        // compose les champs finaux AVANT
-        const safeUserMsg = show.message ? (form.message || '') : ''
-        const cappedUserMsg = userMsgMaxChars > 0 ? safeUserMsg.slice(0, userMsgMaxChars) : ''
-        const msgParts: string[] = []
-        if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
-        if (show.attestation) msgParts.push(attestationText)
-        if (isGift && show.giftedBy && form.gifted_by.trim()) {
-          msgParts.push(`${giftLabel}: ${form.gifted_by.trim().slice(0, GIFT_MAX)}`)
-        }
-        if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
-        const finalMessage = msgParts.length ? msgParts.join('\n') : ''
-
-        const d = parseToDateOrNull(form.ts)!
-        const payload: any = {
-          listing_id: listing.id,
-          buyer_email: form.email,
-          locale: (() => {
-            try { return (window.location.pathname.split('/')[1] || '').slice(0,2) === 'en' ? 'en' : 'fr' } catch { return 'fr' }
-          })(),
-          // fallback "léger" si pas de payload_key côté serveur :
-          display_name: form.display_name || '',
-          title:        form.title || '',
-          message:      finalMessage,
-          link_url:     '',
-          cert_style:   form.cert_style || 'neutral',
-          time_display: 'local+utc',
-          local_date_only: '1',
-          text_color:   form.text_color || '#1A1F2A',
-          title_public: '0',
-          message_public:'0',
-          public_registry: form.public_registry ? '1' : '0',
-        }
-
-        try {
-          if (!form.email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) {
-            setStatus('error')
-            setError('Merci de saisir un e-mail valide.')
-            return
-          }
-        
-          const res = await fetch('/api/marketplace/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          })
-        
-          if (!res.ok) {
-            // Essaye JSON, sinon texte
-            const ct = (res.headers.get('content-type') || '').toLowerCase()
-            let j: any = {}
-            if (ct.includes('application/json')) {
-              j = await res.json().catch(() => ({}))
-            } else {
-              const txt = await res.text().catch(()=> '')
-              // récupère éventuellement ?err=something dans une redirection suivie par fetch (rare ici)
-              const m = /[?&]err=([a-z0-9_]+)/i.exec(txt)
-              if (m) j.error = m[1].toLowerCase()
-            }
-            const map: Record<string,string> = {
-              missing_buyer_email: 'Merci d’indiquer votre e-mail.',
-              missing_listing_id: 'Annonce manquante.',
-              listing_not_found: 'Annonce introuvable.',
-              listing_not_active: 'Annonce inactive.',
-              seller_not_onboarded: 'Vendeur non connecté à Stripe.',
-              stripe_key_missing: 'Configuration Stripe absente.',
-              no_checkout_url: 'Session Stripe indisponible.',
-              stripe_error: 'Erreur Stripe côté serveur.',
-            }
-            setStatus('error')
-            setError(map[j.error] || `Erreur inconnue (HTTP ${res.status})`)
-            return
-          }
-        
-          const data = await res.json()
-          if (!data?.url) {
-            setStatus('error')
-            setError('Session de paiement indisponible.')
-            return
-          }
-          window.location.href = data.url
-        } catch (e) {
-          setStatus('error')
-          setError('Réseau indisponible')
-        }        
-        return
+    // 🔁 Jour en vente ? → flow Marketplace
+    const dayNum = D
+    const listing = saleLookup[dayNum]
+    if (listing) {
+      // compose les champs finaux AVANT
+      const safeUserMsg = show.message ? (form.message || '') : ''
+      const cappedUserMsg = userMsgMaxChars > 0 ? safeUserMsg.slice(0, userMsgMaxChars) : ''
+      const msgParts: string[] = []
+      if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
+      if (show.attestation) msgParts.push(attestationText)
+      if (isGift && show.giftedBy && form.gifted_by.trim()) {
+        msgParts.push(`${giftLabel}: ${form.gifted_by.trim().slice(0, GIFT_MAX)}`)
       }
+      if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
+      const finalMessage = msgParts.length ? msgParts.join('\n') : ''
+
+      const d = parseToDateOrNull(form.ts)!
+
+      const payload:any = {
+        ts: d.toISOString(),
+        buyer_email: form.email,
+        display_name: form.display_name || '',
+        title: form.title || '',
+        message: finalMessage,
+        link_url: '',
+        cert_style: form.cert_style || 'neutral',
+        time_display: 'local+utc',
+        local_date_only: '1',
+        text_color: form.text_color || '#1A1F2A',
+        title_public: '0',
+        message_public: '0',
+        public_registry: form.public_registry ? '1' : '0',
+      }
+
+
+      // POST par <form> pour /api/marketplace/checkout
+      const formEl = document.createElement('form')
+      formEl.method = 'POST'
+      formEl.action = '/api/marketplace/checkout'
+      const hid = (n:string,v:string) => { const i=document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; formEl.appendChild(i) }
+      hid('listing_id', listing.id)
+      hid('market_kind', 'secondary')
+      // tous les champs utiles :
+      Object.entries(payload).forEach(([k,v]) => hid(k, String(v)))
+      try {
+        const loc = (window.location.pathname.split('/')[1] || '').slice(0,2) || 'en'
+        hid('locale', loc)
+      } catch {}
+      document.body.appendChild(formEl)
+      formEl.submit()
+      return
+    }
+
 
 
     // Interdit les jours indisponibles
