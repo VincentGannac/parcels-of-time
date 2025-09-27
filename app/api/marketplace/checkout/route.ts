@@ -11,38 +11,23 @@ import crypto from 'node:crypto'
 function enc(s: string) { return encodeURIComponent(s) }
 function toYMD(iso: string) { try { return new Date(iso).toISOString().slice(0,10) } catch { return iso } }
 
-/** --- GET: page d’info plutôt qu’un “écran blanc” --- */
 export async function GET(req: Request) {
-  const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
-  const html = `<!doctype html><html lang="fr">
-  <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <meta name="robots" content="noindex"/>
+  const base = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin
+  const html = `<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex">
   <title>Marketplace Checkout API</title>
-  <style>
-    :root{color-scheme:dark light}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;margin:0;padding:32px;background:#0B0E14;color:#E6EAF2}
-    a{color:#E4B73D}
-    code{background:#111726;border:1px solid #1E2A3C;border-radius:8px;padding:.2em .4em}
-    .card{max-width:720px;margin:0 auto;background:#111726;border:1px solid #1E2A3C;border-radius:12px;padding:20px}
-  </style></head>
-  <body>
-    <div class="card">
+  <body style="font:14px system-ui;background:#0B0E14;color:#E6EAF2;padding:24px">
+    <div style="max-width:720px;margin:auto;background:#111726;border:1px solid #1E2A3C;border-radius:12px;padding:18px">
       <h1>Marketplace Checkout API</h1>
-      <p>Cette URL est une <strong>API</strong> : utilisez <code>POST</code> pour créer une session Stripe.</p>
-      <p>Essayez depuis l’interface de réservation, ou revenez à l’accueil.</p>
-      <p><a href="${base}">&larr; Retour au site</a></p>
-      <p style="opacity:.7">Méthodes acceptées : <code>POST</code>, <code>OPTIONS</code>.</p>
+      <p>Cette URL est une API. Utilisez <code>POST</code> depuis la page de réservation.</p>
+      <p><a href="${base}" style="color:#E4B73D">&larr; Retour</a></p>
     </div>
-  </body></html>`
+  </body>`
   return new NextResponse(html, {
-    status: 405,
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
-      'allow': 'POST, OPTIONS, GET'
-    }
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
   })
 }
+
 
 /** Pré-vol/CORS minimal (utile si tu appelles en fetch depuis un autre domaine un jour) */
 export async function OPTIONS() {
