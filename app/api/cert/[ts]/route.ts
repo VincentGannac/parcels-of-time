@@ -1,5 +1,4 @@
 //api/cert/[ts]
-//wxcv
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'

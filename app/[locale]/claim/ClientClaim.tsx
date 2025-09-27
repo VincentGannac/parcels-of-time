@@ -672,9 +672,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         message_public: '0',
         public_registry: form.public_registry ? '1' : '0',
       }
-      if (form.cert_style === 'custom' && customBg?.dataUrl) {
-        payload.custom_bg_data_url = customBg.dataUrl // le route marketplace stockera -> custom_bg_key
-      }
+
 
       // POST par <form> pour /api/marketplace/checkout
       const formEl = document.createElement('form')
