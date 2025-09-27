@@ -677,31 +677,56 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         }
 
         try {
+          if (!form.email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) {
+            setStatus('error')
+            setError('Merci de saisir un e-mail valide.')
+            return
+          }
+        
           const res = await fetch('/api/marketplace/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           })
+        
           if (!res.ok) {
-            const j = await res.json().catch(() => ({}))
+            // Essaye JSON, sinon texte
+            const ct = (res.headers.get('content-type') || '').toLowerCase()
+            let j: any = {}
+            if (ct.includes('application/json')) {
+              j = await res.json().catch(() => ({}))
+            } else {
+              const txt = await res.text().catch(()=> '')
+              // récupère éventuellement ?err=something dans une redirection suivie par fetch (rare ici)
+              const m = /[?&]err=([a-z0-9_]+)/i.exec(txt)
+              if (m) j.error = m[1].toLowerCase()
+            }
             const map: Record<string,string> = {
+              missing_buyer_email: 'Merci d’indiquer votre e-mail.',
               missing_listing_id: 'Annonce manquante.',
               listing_not_found: 'Annonce introuvable.',
               listing_not_active: 'Annonce inactive.',
               seller_not_onboarded: 'Vendeur non connecté à Stripe.',
-              stripe_key_missing: 'Config Stripe manquante.',
+              stripe_key_missing: 'Configuration Stripe absente.',
+              no_checkout_url: 'Session Stripe indisponible.',
               stripe_error: 'Erreur Stripe côté serveur.',
             }
             setStatus('error')
-            setError(map[j.error] || j.error || 'Erreur inconnue')
+            setError(map[j.error] || `Erreur inconnue (HTTP ${res.status})`)
             return
           }
+        
           const data = await res.json()
-          window.location.href = data.url // ✅ redirection Stripe côté client
+          if (!data?.url) {
+            setStatus('error')
+            setError('Session de paiement indisponible.')
+            return
+          }
+          window.location.href = data.url
         } catch (e) {
           setStatus('error')
           setError('Réseau indisponible')
-        }
+        }        
         return
       }
 
