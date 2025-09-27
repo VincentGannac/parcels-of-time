@@ -1,4 +1,3 @@
-// app/api/connect/onboard/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -27,20 +26,14 @@ export async function POST(req: Request) {
       type: 'express',
       country: 'FR',
       email: sess.email,
-      business_type: 'individual', // 👈 particulier
+      business_type: 'individual', // particulier
       default_currency: 'eur',
-      capabilities: {
-        transfers: { requested: true },
-        card_payments: { requested: true },
-      },
+      capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
       business_profile: {
-        product_description: 'Vente/achat de certificats numériques Parcels of Time (revente C2C).',
+        product_description: 'Revente C2C de certificats numériques Parcels of Time',
         url: base,
       },
       metadata: { pot_owner_id: String(sess.ownerId) },
-      settings: {
-        payouts: { schedule: { interval: 'manual' } }, // optionnel : contrôles des transferts
-      },
     })
     accountId = acct.id
     await pool.query(
@@ -51,7 +44,7 @@ export async function POST(req: Request) {
     )
   }
 
-  // 2) Lien d’onboarding / mise à jour
+  // 2) Account Link
   const link = await stripe.accountLinks.create({
     account: accountId,
     refresh_url: `${base}/api/connect/refresh`,
@@ -59,5 +52,10 @@ export async function POST(req: Request) {
     type: 'account_onboarding',
   })
 
+  // ✅ si c'est un <form> → on redirige, sinon on renvoie du JSON (utilisable en fetch)
+  const ctype = req.headers.get('content-type') || ''
+  if (ctype.includes('application/x-www-form-urlencoded')) {
+    return NextResponse.redirect(link.url, { status: 303 })
+  }
   return NextResponse.json({ url: link.url })
 }

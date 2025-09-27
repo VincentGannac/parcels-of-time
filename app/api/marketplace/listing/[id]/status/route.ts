@@ -17,9 +17,10 @@ export async function POST(req: Request, ctx: any) {
   const allowed = new Set(['pause','resume','cancel'])
   if (!allowed.has(body.action)) return NextResponse.json({ error: 'bad_action' }, { status: 400 })
 
-  const nextStatus = body.action === 'pause' ? 'paused'
-                  : body.action === 'resume' ? 'active'
-                  : 'cancelled'
+  const nextStatus =
+    body.action === 'pause'  ? 'paused'  :
+    body.action === 'resume' ? 'active'  :
+    'canceled' // ✅ orthographe DB
 
   const { rows } = await pool.query(
     `update listings
