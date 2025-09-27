@@ -138,6 +138,31 @@ type ListingRow = {
   status: 'active' | 'sold' | 'canceled'
   seller_display_name: string | null
 }
+
+type MyListing = { id: string; ts: string; price_cents: number; currency: string; status: 'active'|'sold'|'canceled' }
+async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
+  try {
+    const { rows } = await pool.query(
+      `select id, ts, price_cents, currency, status
+         from listings
+        where seller_owner_id = $1
+          and status = 'active'
+        order by ts asc`,
+      [ownerId]
+    )
+    return rows.map(r => ({
+      id: String(r.id),
+      ts: new Date(r.ts).toISOString(),
+      price_cents: r.price_cents,
+      currency: r.currency || 'EUR',
+      status: r.status
+    }))
+  } catch { return [] }
+}
+
+
+
+
 async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
   try {
     const { rows } = await pool.query(
@@ -168,14 +193,10 @@ async function ownerIdForDaySafe(tsISO: string, tsYMD: string): Promise<string |
 }
 
 export default async function Page({
-  params,
-  searchParams,
-}: {
-  params: Promise<Params>
-  searchParams: Promise<SearchParams>
-}) {
-  const { locale = 'en', ts: tsParam = '' } = await params
-  const sp = (await searchParams) || {}
+  params, searchParams,
+}: { params: Params; searchParams: SearchParams }) {
+  const { locale = 'en', ts: tsParam = '' } = params
+  const sp = searchParams || {}
 
   const decodedTs = safeDecode(tsParam)
   const { tsISO, tsYMD } = normalizeTs(decodedTs)
@@ -201,6 +222,16 @@ export default async function Page({
     // filets de sécurité pour éviter l'erreur 500
     redirect(`/${locale}/account?err=internal`)
   }
+
+  // après avoir déterminé session/isOwner
+  let myListings: Awaited<ReturnType<typeof readMyActiveListings>> = []
+  if (isOwner && session?.ownerId) {
+    myListings = await readMyActiveListings(session.ownerId)
+  }
+
+  // lire un éventuel feedback "listing=ok"
+  const listingOk = (sp as any).listing === 'ok'
+
 
   // 3) État public + autopub (owner only)
   const isPublicDb = await getPublicStateDb(tsISO!)
@@ -386,6 +417,55 @@ export default async function Page({
             </section>
           )}
 
+
+          {/* Feedback succès listing */}
+          {isOwner && listingOk && (
+            <div style={{
+              marginTop:12, marginBottom:6,
+              padding:'10px 12px',
+              border:'1px solid rgba(14,170,80,.4)',
+              background:'rgba(14,170,80,.12)',
+              borderRadius:10,
+              fontSize:14
+            }}>
+              ✅ Votre annonce a été publiée sur la marketplace.
+            </div>
+          )}
+
+          {/* Visuel — Mes annonces actives */}
+          {isOwner && (
+            <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>Mes annonces actives</div>
+              {myListings.length === 0 ? (
+                <p style={{margin:'8px 0 0', opacity:.8, fontSize:13}}>Aucune date en vente pour l’instant.</p>
+              ) : (
+                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10, marginTop:10}}>
+                  {myListings.map(item=>{
+                    const ymd = new Date(item.ts).toISOString().slice(0,10)
+                    return (
+                      <div key={item.id} style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12}}>
+                        <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
+                        <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
+                        <div style={{display:'flex', gap:8, marginTop:10}}>
+                          <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', color:'var(--color-text)'}}>
+                            Ouvrir
+                          </a>
+                          <form method="post" action="/api/marketplace/cancel">
+                            <input type="hidden" name="listing_id" value={item.id} />
+                            <input type="hidden" name="locale" value={locale} />
+                            <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'#ffb2b2'}}>
+                              Retirer
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              <p style={{marginTop:10, fontSize:12, opacity:.7}}>Commission 10% appliquée lors de la vente (min 1 €).</p>
+            </section>
+          )}
 
           {/* Registre public */}
           <aside

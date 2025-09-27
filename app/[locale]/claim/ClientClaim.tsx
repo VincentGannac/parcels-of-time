@@ -226,16 +226,14 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     giftedBy: true, // seulement si isGift
   })
 
-  
-
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
   // Jours indisponibles (du mois courant) — affichés en rouge et désactivés
   const [unavailableDays, setUnavailableDays] = useState<number[]>([])
   const [isLoadingDays, setIsLoadingDays] = useState(false)
-
   const [forSaleDays, setForSaleDays] = useState<number[]>([])
+  const [saleLookup, setSaleLookup] = useState<Record<number, { id:string; price_cents:number; currency:string }>>({})
 
   // Cache par mois (YYYY-MM) pour accélérer les rafraîchissements
   const unavailCacheRef = useRef<Map<string, number[]>>(new Map())
@@ -246,24 +244,28 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   useEffect(() => {
     const ym = `${Y}-${String(M).padStart(2,'0')}`
   
-    // 1) Cancel la requête précédente si encore en vol
+    // 1) Annule la requête précédente si encore en vol
     if (daysReqAbortRef.current) {
       try { daysReqAbortRef.current.abort() } catch {}
+      daysReqAbortRef.current = null
     }
   
-    // 2) Reset optimiste pour rafraîchir l’affichage tout de suite
+    // 2) Reset optimiste
     setIsLoadingDays(true)
     setUnavailableDays([])
+    setForSaleDays([])
+    setSaleLookup({})
   
-    // 3) Cache : si on l’a déjà, on le pousse instantanément
+    // 3) Cache (ici: seulement les rouges)
     const cached = unavailCacheRef.current.get(ym)
     if (cached) {
       setUnavailableDays(cached)
+      // jaunes & lookup restent vides (on les a reset juste au-dessus)
       setIsLoadingDays(false)
-      return
+      return // pas de cleanup nécessaire: aucune requête lancée
     }
   
-    // 4) Sinon on fetch, avec AbortController
+    // 4) Fetch avec AbortController
     const ctrl = new AbortController()
     daysReqAbortRef.current = ctrl
   
@@ -274,28 +276,27 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   
         const data = await res.json()
         const red = Array.isArray(data?.unavailable) ? data.unavailable : []
-      const yellow = Array.isArray(data?.for_sale) ? data.for_sale : []
-      setUnavailableDays(red)
-      setForSaleDays(yellow)
-        const raw: any[] = Array.isArray(data) ? data : (data?.days ?? data?.unavailable ?? [])
-        const set = new Set<number>()
-        for (const v of raw) {
-          if (typeof v === 'number') {
-            if (v >= 1 && v <= 31) set.add(v)
-          } else if (typeof v === 'string') {
-            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v)
-            if (m && Number(m[1]) === Y && Number(m[2]) === M) set.add(Number(m[3]))
-            else {
-              const n = parseInt(v, 10)
-              if (!Number.isNaN(n) && n >= 1 && n <= 31) set.add(n)
-            }
+        const yellow = Array.isArray(data?.for_sale) ? data.for_sale : []
+        const listingList = Array.isArray(data?.listings) ? data.listings : []
+  
+        setUnavailableDays(red)
+        setForSaleDays(yellow)
+  
+        const map: Record<number, {id:string; price_cents:number; currency:string}> = {}
+        for (const it of listingList) {
+          if (typeof it?.d === 'number') {
+            map[it.d] = { id: String(it.id), price_cents: it.price_cents, currency: it.currency || 'EUR' }
           }
         }
-        const arr = Array.from(set).sort((a,b)=>a-b)
-        unavailCacheRef.current.set(ym, arr)   // 🔒 mise en cache
-        setUnavailableDays(arr)
-      } catch (e:any) {
-        if (e?.name !== 'AbortError') setUnavailableDays([])
+        setSaleLookup(map)
+  
+        unavailCacheRef.current.set(ym, red)
+      } catch (e: any) {
+        if (e?.name !== 'AbortError') {
+          setUnavailableDays([])
+          setForSaleDays([])
+          setSaleLookup({})
+        }
       } finally {
         if (daysReqAbortRef.current === ctrl) {
           daysReqAbortRef.current = null
@@ -303,7 +304,16 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         setIsLoadingDays(false)
       }
     })()
+  
+    // ✅ cleanup enregistré par useEffect (unmount ou changement Y/M)
+    return () => {
+      if (daysReqAbortRef.current === ctrl) {
+        try { daysReqAbortRef.current.abort() } catch {}
+        daysReqAbortRef.current = null
+      }
+    }
   }, [Y, M])
+  
   
 
   // Si le jour sélectionné devient indisponible, tente de choisir le 1er jour dispo
@@ -517,12 +527,35 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
+  
     const d = parseToDateOrNull(form.ts)
     if (!d) { setStatus('error'); setError('Merci de saisir une date valide.'); return }
-    // Borne max
     if (d.getTime() > maxDateUtc.getTime()) {
       setStatus('error'); setError(`La date choisie dépasse la limite autorisée (${ymdUTC(maxDateUtc)}).`); return
     }
+
+    // 🔁 Jaune ? → flow Marketplace (autre endpoint)
+    const dayNum = D
+    const listing = saleLookup[dayNum]
+    if (listing) {
+    // on passe par un <form> POST comme sur la page /m/[ts]
+    const formEl = document.createElement('form')
+    formEl.method = 'POST'
+    formEl.action = '/api/marketplace/checkout'
+    const hid = (n:string,v:string) => { const i=document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; formEl.appendChild(i) }
+    hid('listing_id', listing.id)
+    hid('buyer_email', form.email)
+    // optionnel: passer la locale déduite de l’URL
+    try {
+      const loc = (window.location.pathname.split('/')[1] || '').slice(0,2) || 'en'
+      hid('locale', loc)
+    } catch {}
+    document.body.appendChild(formEl)
+    formEl.submit()
+    return
+  }
+
+
     // Interdit les jours indisponibles
     if (unavailableDays.includes(D)) {
       setStatus('error'); setError('Ce jour est indisponible. Merci d’en choisir un autre.'); return
@@ -1007,22 +1040,26 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                         aria-busy={isLoadingDays || undefined}
                         style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                       >
-                        {days.map(d=>{
-                         const unavailable = setRed.has(d)
-                         const onSale = setYellow.has(d)
-                         const label = d.toString().padStart(2,'0') + (unavailable ? ' — indisponible' : onSale ? ' — en vente' : '')
-                          return (
-                            <option
-                              key={d}
-                              value={d}
-                              disabled={unavailable}
-                              aria-disabled={unavailable}
-                              style={{ color: unavailable ? '#ff4d4d' : onSale ? '#e0a800' : '#000' }}
-                            >
-                             {(unavailable ? '⛔ ' : onSale ? '🟡 ' : '') + label}
-                            </option>
-                          )
-                        })}
+                      {days.map(d=>{
+                        const unavailable = setRed.has(d)
+                        const onSale = setYellow.has(d)
+                        const listing = saleLookup[d]
+                        const priceStr = listing ? `${(listing.price_cents/100).toFixed(0)} €` : ''
+                        const labelBase = d.toString().padStart(2,'0')
+                        const suffix = unavailable ? ' — indisponible' : onSale ? ` — en vente • ${priceStr}` : ''
+                        const label = labelBase + suffix
+                        return (
+                          <option
+                            key={d}
+                            value={d}
+                            disabled={unavailable}            // ✅ un jaune n’est plus “unavailable”
+                            aria-disabled={unavailable}
+                            style={{ color: unavailable ? '#ff4d4d' : onSale ? '#e0a800' : '#000' }}
+                          >
+                            {(unavailable ? '⛔ ' : onSale ? '🟡 ' : '') + label}
+                          </option>
+                        )
+                      })}
                       </select>
                     )
                   })()}
@@ -1040,6 +1077,10 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </div>
               <div style={{marginTop:8, fontSize:12, color:'#ff8a8a'}}>
                 Les jours en rouge sont indisponibles.
+              </div>
+              <div style={{marginTop:8, fontSize:12, color:'#e0a800'}}>
+                Les jours en jaune sont <strong>revendus</strong> par un autre utilisateur (marketplace).
+                Parcels of Time prélève une <strong>commission de 10%</strong> côté vendeur.
               </div>
             </div>
 
