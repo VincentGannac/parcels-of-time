@@ -346,7 +346,8 @@ export default async function Page({
                 Revendre ce certificat (Marketplace)
               </div>
               <form method="post" action="/api/marketplace/listing">
-                <input type="hidden" name="ts" value={tsISO!} />
+              <input type="hidden" name="ts" value={tsYMD!} />
+              <input type="hidden" name="locale" value={locale} />
                 <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
                   <label>Prix (€){' '}
                     <input name="price" type="number" min={1} step={1} required
@@ -372,8 +373,8 @@ export default async function Page({
                   </div>
                 </div>
                 <form id="mk-checkout" method="post" action="/api/marketplace/checkout" style={{display:'flex', gap:8}}>
-                  <input type="hidden" name="listing_id" value={String(listing.id)} />
-                  <input type="hidden" name="ts" value={tsISO!} />
+                <input type="hidden" name="listing_id" value={String(listing.id)} />
+                <input type="hidden" name="locale" value={locale} />
                   <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
                         style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10}} />
                   <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
@@ -384,6 +385,7 @@ export default async function Page({
               <p style={{fontSize:12, opacity:.7, marginTop:8}}>Paiement sécurisé Stripe. PDF transféré au nouvel acquéreur.</p>
             </section>
           )}
+
 
           {/* Registre public */}
           <aside

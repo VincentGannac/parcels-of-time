@@ -1,4 +1,3 @@
-//app/api/marketplace/by-ts/[ts]
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -14,7 +13,7 @@ export async function GET(_req: Request, ctx: any) {
             o.display_name as seller_display_name
        from listings l
        join owners o on o.id = l.seller_owner_id
-      where l.ts = $1 and l.status in ('active','paused')`,
+      where l.ts = $1 and l.status = 'active'`,
     [tsISO]
   )
   if (!rows.length) return NextResponse.json({ listing:null })
