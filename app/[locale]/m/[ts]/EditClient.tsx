@@ -285,6 +285,18 @@ export default function EditClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Retire [[HIDE_OWNED_BY]] du message et décoche l'affichage du "Owned by"
+  useEffect(() => {
+    setForm(f => {
+      const msg = String(f.message || '')
+      if (!/\[\[\s*HIDE_OWNED_BY\s*\]\]/i.test(msg)) return f
+      return { ...f, message: msg.replace(/\s*\[\[\s*HIDE_OWNED_BY\s*\]\]\s*/gi, '').trim() }
+    })
+    setShow(s => ({ ...s, ownedBy: false }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+
   /** ===== Custom background (édition) =====
    * customBgUrl : l'image actuelle stockée (chargée depuis /api/claim-bg/<ts>)
    * customBgLocal : nouvelle image choisie par l'utilisateur (prioritaire dans la preview & submit)

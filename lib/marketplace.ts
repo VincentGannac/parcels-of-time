@@ -2,174 +2,174 @@
 import Stripe from 'stripe'
 import { pool } from '@/lib/db'
 
-/** Normalise une date quelconque vers le jour (00:00:00 UTC) → ISO */
-function normIsoDay(s: string): string | null {
-  if (!s) return null
-  const d = new Date(s)
-  if (isNaN(d.getTime())) return null
-  d.setUTCHours(0, 0, 0, 0)
-  return d.toISOString()
+function normIsoDay(s:string){ const d=new Date(s); if(isNaN(d.getTime())) return null; d.setUTCHours(0,0,0,0); return d.toISOString() }
+const asBool1 = (v: unknown) => String(v) === '1' || v === true
+const asHex = (v: unknown, fallback = '#1a1f2a') =>
+  /^#[0-9a-fA-F]{6}$/.test(String(v||'')) ? String(v).toLowerCase() : fallback
+const asStyle = (v: unknown) => {
+  const A = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
+  const s = String(v||'neutral').toLowerCase()
+  return (A as readonly string[]).includes(s as any) ? (s as any) : 'neutral'
 }
-
+const asTimeDisplay = (v: unknown) => {
+  const td = String(v || 'local+utc')
+  return (td === 'utc' || td === 'utc+local' || td === 'local+utc') ? td : 'local+utc'
+}
 async function tableExists(client: any, table: string) {
-  const { rows } = await client.query(
-    `select to_regclass($1) as ok`,
-    [`public.${table}`]
-  )
-  return !!rows[0]?.ok
+  const { rows } = await client.query(`select to_regclass($1) as ok`, [`public.${table}`]); return !!rows[0]?.ok
 }
-
-async function hasColumn(client: any, table: string, col: string) {
+async function hasColumn(client:any, table:string, col:string){
   const { rows } = await client.query(
-    `select 1
-       from information_schema.columns
-      where table_schema='public' and table_name=$1 and column_name=$2
-      limit 1`,
+    `select 1 from information_schema.columns where table_schema='public' and table_name=$1 and column_name=$2 limit 1`,
     [table, col]
   )
   return !!rows.length
 }
 
-/**
- * Applique une vente secondaire (marketplace) à partir d'une session Stripe Checkout.
- * - idempotent (vérifie secondary_sales si présent)
- * - tolérant aux variations de schéma (price_cents vs gross/fee/net, buyer_owner_id, etc.)
- * - mise à jour atomique (BEGIN/COMMIT)
- */
 export async function applySecondarySaleFromSession(s: Stripe.Checkout.Session) {
   const listingId = Number(s.metadata?.listing_id || 0)
   const tsISO = normIsoDay(String(s.metadata?.ts || ''))
-  const buyerEmail = String(
-    s.customer_details?.email ||
-    (s.metadata?.buyer_email ?? s.metadata?.email) ||
-    ''
-  ).trim().toLowerCase()
+  const buyerEmail = String(s.customer_details?.email || s.metadata?.email || '').trim().toLowerCase()
+  if (!listingId || !tsISO || !buyerEmail) throw new Error('bad_metadata')
 
-  if (!listingId || !tsISO || !buyerEmail) {
-    throw new Error('bad_metadata')
-  }
+  // champs modifiables reçus du checkout marketplace
+  const display_name: string | null = (s.customer_details?.name || s.metadata?.display_name || '') || null
+  const title: string | null        = (s.metadata?.title   || '') || null
+  const message: string | null      = (s.metadata?.message || '') || null
+  const link_url: string | null     = (s.metadata?.link_url|| '') || null
+  const cert_style                  = asStyle(s.metadata?.cert_style)
+  const time_display                = asTimeDisplay(s.metadata?.time_display)
+  const local_date_only             = asBool1(s.metadata?.local_date_only)
+  const text_color                  = asHex(s.metadata?.text_color)
+  const title_public                = asBool1(s.metadata?.title_public)
+  const message_public              = asBool1(s.metadata?.message_public)
+  const wantsPublic                 = asBool1(s.metadata?.public_registry)
+  const custom_bg_key               = String(s.metadata?.custom_bg_key || '')
 
-  const piId = typeof s.payment_intent === 'string'
-    ? s.payment_intent
-    : (s.payment_intent?.id || null)
+  // montant payé (en cents) — pour cohérence avec le listing
+  const amount =
+    s.amount_total ??
+    (typeof s.payment_intent !== 'string' && s.payment_intent
+      ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
+      : 0)
 
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
 
-    // Verrouille l’annonce et récupère l’owner actuel du claim
+    // verrou annonce + claim
     const { rows: L } = await client.query(
-      `select
-         l.id, l.ts, l.price_cents, l.currency, l.status, l.seller_owner_id,
-         c.owner_id as claim_owner
-       from listings l
-       join claims c on c.ts = l.ts
-       where l.id = $1
-       for update`,
+      `select l.*, c.owner_id as claim_owner
+         from listings l
+         join claims c on c.ts = l.ts
+        where l.id=$1
+        for update`,
       [listingId]
     )
     const listing = L[0]
     if (!listing) throw new Error('listing_not_found')
+    if (listing.status !== 'active') { await client.query('COMMIT'); return { ok: true } }
 
-    // Si l’annonce n’est plus "active", on considère la vente déjà appliquée (confirm route ou run précédent)
-    if (listing.status !== 'active') {
-      await client.query('COMMIT')
-      return { ok: true }
-    }
+    // validations
+    if (listing.claim_owner !== listing.seller_owner_id) throw new Error('seller_mismatch')
+    if (Number(amount) !== Number(listing.price_cents)) throw new Error('amount_mismatch')
 
-    // Idempotence supplémentaire si la table existe : on ne réinsère pas la vente
-    const hasSecondary = await tableExists(client, 'secondary_sales')
-    if (hasSecondary) {
-      const { rows: dupe } = await client.query(
-        `select 1 from secondary_sales
-          where stripe_session_id = $1 or stripe_payment_intent_id = $2
-          limit 1`,
-        [s.id, piId]
-      )
-      if (dupe.length) {
-        // On peut tout de même marquer l’annonce "sold" si ce n’est pas encore le cas
-        await client.query(
-          `update listings set status='sold', updated_at=now() where id=$1`,
-          [listingId]
-        )
-        await client.query('COMMIT')
-        return { ok: true }
-      }
-    }
-
-    // Upsert acheteur
+    // upsert acheteur (avec display_name si fourni)
     const { rows: buyerRows } = await client.query(
-      `insert into owners(email)
-       values ($1)
-       on conflict (email) do update set email = excluded.email
+      `insert into owners(email, display_name)
+       values ($1, $2)
+       on conflict (email) do update
+         set display_name = coalesce(excluded.display_name, owners.display_name)
        returning id`,
-      [buyerEmail]
+      [buyerEmail, display_name]
     )
     const buyerId = buyerRows[0].id
 
-    // Transfert de propriété (tolérant : on cible le JOUR)
+    // transfert de propriété + ✅ appliquer les MODIFS (titre, message, style, couleur, etc.)
     await client.query(
       `update claims
-          set owner_id = $1,
-              price_cents = $2,
-              currency = $3,
-              last_secondary_sold_at = now(),
-              last_secondary_price_cents = $2
-        where date_trunc('day', ts) = $4::timestamptz`,
-      [buyerId, listing.price_cents, listing.currency, tsISO]
+          set owner_id        = $1,
+              price_cents     = $2,
+              currency        = $3,
+              title           = $4,
+              message         = $5,
+              link_url        = $6,
+              cert_style      = $7,
+              time_display    = $8,
+              local_date_only = $9,
+              text_color      = $10,
+              title_public    = $11,
+              message_public  = $12
+        where date_trunc('day', ts) = $13::timestamptz`,
+      [
+        buyerId,
+        listing.price_cents, listing.currency,
+        title, message, link_url,
+        cert_style, time_display, local_date_only, text_color,
+        title_public, message_public,
+        tsISO
+      ]
     )
 
-    // Marquer l’annonce "sold" (avec buyer_owner_id si présent)
-    const hasBuyerCol = await hasColumn(client, 'listings', 'buyer_owner_id')
-    if (hasBuyerCol) {
+    // ➕ background custom : temp → persist (si présent)
+    if (cert_style === 'custom' && custom_bg_key) {
+      const hasTemp = await tableExists(client, 'custom_bg_temp')
+      const hasPersist = await tableExists(client, 'claim_custom_bg')
+      if (hasTemp && hasPersist) {
+        const { rows: tmp } = await client.query('select data_url from custom_bg_temp where key = $1', [custom_bg_key])
+        if (tmp.length) {
+          await client.query(
+            `insert into claim_custom_bg (ts, data_url)
+             values ($1::timestamptz, $2)
+             on conflict (ts) do update set data_url = excluded.data_url, created_at = now()`,
+            [tsISO, tmp[0].data_url]
+          )
+          await client.query('delete from custom_bg_temp where key = $1', [custom_bg_key])
+        }
+      }
+    }
+
+    // annonce -> sold
+    await client.query(
+      `update listings set status='sold', updated_at=now() where id=$1`,
+      [listingId]
+    )
+
+    // registre public si demandé
+    if (wantsPublic) {
       await client.query(
-        `update listings
-            set status='sold',
-                buyer_owner_id=$2,
-                updated_at=now()
-          where id=$1`,
-        [listingId, buyerId]
-      )
-    } else {
-      await client.query(
-        `update listings
-            set status='sold',
-                updated_at=now()
-          where id=$1`,
-        [listingId]
+        `insert into minute_public(ts) values($1::timestamptz) on conflict (ts) do nothing`,
+        [tsISO]
       )
     }
 
-    // Journal de vente (best-effort, schéma variable)
-    if (hasSecondary) {
-      const hasGross = await hasColumn(client, 'secondary_sales', 'gross_cents')
-      const hasPrice = await hasColumn(client, 'secondary_sales', 'price_cents')
-
-      if (hasGross) {
+    // journal vente (tolérant au schéma)
+    try {
+      const { rows: cols } = await client.query(
+        `select column_name from information_schema.columns
+          where table_schema='public' and table_name='secondary_sales'`
+      )
+      const names = cols.map((r:any)=>r.column_name)
+      const pi = typeof s.payment_intent === 'string' ? s.payment_intent : (s.payment_intent?.id || null)
+      if (names.includes('gross_cents')) {
         const gross = Number(listing.price_cents) | 0
         const fee = Math.max(100, Math.round(gross * 0.10))
         const net = Math.max(0, gross - fee)
         await client.query(
-          `insert into secondary_sales(
-             listing_id, ts, seller_owner_id, buyer_owner_id,
-             gross_cents, fee_cents, net_cents, currency,
-             stripe_session_id, stripe_payment_intent_id
-           )
+          `insert into secondary_sales(listing_id, ts, seller_owner_id, buyer_owner_id,
+             gross_cents, fee_cents, net_cents, currency, stripe_session_id, stripe_payment_intent_id)
            values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [listingId, tsISO, listing.seller_owner_id, buyerId, gross, fee, net, listing.currency, s.id, piId]
+          [listingId, tsISO, listing.seller_owner_id, buyerId, gross, fee, net, listing.currency, s.id, pi]
         )
-      } else if (hasPrice) {
+      } else if (names.includes('price_cents')) {
         await client.query(
-          `insert into secondary_sales(
-             listing_id, ts, seller_owner_id, buyer_owner_id,
-             price_cents, currency, stripe_session_id, stripe_payment_intent_id
-           )
+          `insert into secondary_sales(listing_id, ts, seller_owner_id, buyer_owner_id,
+             price_cents, currency, stripe_session_id, stripe_payment_intent_id)
            values($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [listingId, tsISO, listing.seller_owner_id, buyerId, listing.price_cents, listing.currency, s.id, piId]
+          [listingId, tsISO, listing.seller_owner_id, buyerId, listing.price_cents, listing.currency, s.id, pi]
         )
       }
-      // si aucune des colonnes attendues : on ne casse pas la vente
-    }
+    } catch {}
 
     await client.query('COMMIT')
     return { ok: true }

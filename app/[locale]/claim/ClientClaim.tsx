@@ -241,6 +241,8 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const [forSaleDays, setForSaleDays] = useState<number[]>([])
   const [saleLookup, setSaleLookup] = useState<Record<number, { id:string; price_cents:number; currency:string }>>({})
 
+  const [isLoadingClaim, setIsLoadingClaim] = useState(false)
+
   // Cache par mois (YYYY-MM) pour accélérer les rafraîchissements
   const unavailCacheRef = useRef<Map<string, number[]>>(new Map())
 
@@ -345,38 +347,54 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     const onSale = new Set(forSaleDays).has(D)
     const listing = saleLookup[D]
     if (!onSale || !listing || !ymdSelected) return
-
-    // évite de re-préremplir si on revient sur le même YMD
     if (lastPrefilledYmdRef.current === ymdSelected) return
     lastPrefilledYmdRef.current = ymdSelected
-
+  
+    setIsLoadingClaim(true) // ⬅️ start mini-loader
     ;(async () => {
       try {
         const res = await fetch(`/api/claim/preview/by-ts/${encodeURIComponent(ymdSelected)}`)
         const j = await res.json()
         if (!j?.claim) return
+  
+        // === Nettoyage message & détection options ===
+        let raw = String(j.claim.message || '')
+        // HIDE_OWNED_BY → décoche la section et supprime le marqueur du texte
+        const hideOwned = /\[\[\s*HIDE_OWNED_BY\s*\]\]/i.test(raw)
+        raw = raw.replace(/\s*\[\[\s*HIDE_OWNED_BY\s*\]\]\s*/gi, '').trim()
+  
+        // Gifted by / Offert par → active giftedBy + extrait le nom
+        let giftedBy = ''
+        const mg = /^(?:offert\s*par|gifted\s*by)\s*:\s*(.+)$/mi.exec(raw)
+        if (mg) { giftedBy = mg[1].trim(); raw = raw.replace(mg[0], '').trim() }
+  
+        setShow(s => ({ ...s, ownedBy: !hideOwned, giftedBy: !!giftedBy }))
+        if (giftedBy) setIsGift(true)
+  
         setForm(f => ({
           ...f,
-          // ⚠️ on ne touche PAS à f.email
           display_name: j.claim.display_name || '',
-          title: j.claim.title || '',
-          message: j.claim.message || '',
-          link_url: j.claim.link_url || '',
-          cert_style: (j.claim.cert_style || 'neutral'),
+          title:        j.claim.title || '',
+          message:      raw,
+          gifted_by:    giftedBy,
+          link_url:     j.claim.link_url || '',
+          cert_style:   (j.claim.cert_style || 'neutral'),
           time_display: (j.claim.time_display || 'local+utc'),
           local_date_only: !!j.claim.local_date_only,
-          text_color: j.claim.text_color || '#1A1F2A',
+          text_color:   j.claim.text_color || '#1A1F2A',
           title_public: !!j.claim.title_public,
           message_public: !!j.claim.message_public,
         }))
-
-        // style custom → injecter l'image stockée (A4 2480×3508)
+  
         if (j.custom_bg_data_url && (j.claim.cert_style === 'custom')) {
           setCustomBg({ url: j.custom_bg_data_url, dataUrl: j.custom_bg_data_url, w: 2480, h: 3508 })
         }
-      } catch {}
+      } catch {} finally {
+        setIsLoadingClaim(false) // ⬅️ stop mini-loader
+      }
     })()
   }, [D, forSaleDays, saleLookup, ymdSelected])
+  
 
 
 
@@ -580,26 +598,61 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       setStatus('error'); setError(`La date choisie dépasse la limite autorisée (${ymdUTC(maxDateUtc)}).`); return
     }
 
-    // 🔁 Jaune ? → flow Marketplace (autre endpoint)
+    // 🔁 Jour en vente ? → flow Marketplace
     const dayNum = D
     const listing = saleLookup[dayNum]
     if (listing) {
-    // on passe par un <form> POST comme sur la page /m/[ts]
-    const formEl = document.createElement('form')
-    formEl.method = 'POST'
-    formEl.action = '/api/marketplace/checkout'
-    const hid = (n:string,v:string) => { const i=document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; formEl.appendChild(i) }
-    hid('listing_id', listing.id)
-    hid('buyer_email', form.email)
-    // optionnel: passer la locale déduite de l’URL
-    try {
-      const loc = (window.location.pathname.split('/')[1] || '').slice(0,2) || 'en'
-      hid('locale', loc)
-    } catch {}
-    document.body.appendChild(formEl)
-    formEl.submit()
-    return
-  }
+      // compose les champs finaux AVANT
+      const safeUserMsg = show.message ? (form.message || '') : ''
+      const cappedUserMsg = userMsgMaxChars > 0 ? safeUserMsg.slice(0, userMsgMaxChars) : ''
+      const msgParts: string[] = []
+      if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
+      if (show.attestation) msgParts.push(attestationText)
+      if (isGift && show.giftedBy && form.gifted_by.trim()) {
+        msgParts.push(`${giftLabel}: ${form.gifted_by.trim().slice(0, GIFT_MAX)}`)
+      }
+      if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
+      const finalMessage = msgParts.length ? msgParts.join('\n') : ''
+
+      const d = parseToDateOrNull(form.ts)!
+
+      const payload:any = {
+        ts: d.toISOString(),
+        buyer_email: form.email,
+        display_name: form.display_name || '',
+        title: form.title || '',
+        message: finalMessage,
+        link_url: '',
+        cert_style: form.cert_style || 'neutral',
+        time_display: 'local+utc',
+        local_date_only: '1',
+        text_color: form.text_color || '#1A1F2A',
+        title_public: '0',
+        message_public: '0',
+        public_registry: form.public_registry ? '1' : '0',
+      }
+      if (form.cert_style === 'custom' && customBg?.dataUrl) {
+        payload.custom_bg_data_url = customBg.dataUrl // le route marketplace stockera -> custom_bg_key
+      }
+
+      // POST par <form> pour /api/marketplace/checkout
+      const formEl = document.createElement('form')
+      formEl.method = 'POST'
+      formEl.action = '/api/marketplace/checkout'
+      const hid = (n:string,v:string) => { const i=document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; formEl.appendChild(i) }
+      hid('listing_id', listing.id)
+      hid('market_kind', 'secondary')
+      // tous les champs utiles :
+      Object.entries(payload).forEach(([k,v]) => hid(k, String(v)))
+      try {
+        const loc = (window.location.pathname.split('/')[1] || '').slice(0,2) || 'en'
+        hid('locale', loc)
+      } catch {}
+      document.body.appendChild(formEl)
+      formEl.submit()
+      return
+    }
+
 
 
     // Interdit les jours indisponibles
@@ -1071,7 +1124,10 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
                 {/* Jour (borné si année/mois max) + indisponibles en rouge & désactivés */}
                 <label style={{display:'grid', gap:6}}>
-                  <span>Jour {isLoadingDays && <em style={{fontSize:12, opacity:.7}}>— Maj…</em>}</span>
+                <span>
+                  Jour {isLoadingDays && <em style={{fontSize:12, opacity:.7}}>— Maj…</em>}
+                      {isLoadingClaim && <em style={{fontSize:12, opacity:.7, marginLeft:6}}>— chargement du certificat…</em>}
+                </span>
                   {(() => {
                     const dim = daysInMonth(Y, M)
                     const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
