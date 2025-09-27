@@ -6,15 +6,11 @@ export const revalidate = 0
 import { redirect } from 'next/navigation'
 import { readSession } from '@/lib/auth'
 import { pool } from '@/lib/db'
+import Stripe from 'stripe'
 
 type Params = { locale: 'fr' | 'en' }
 
-type ClaimRow = {
-  ts: string
-  title: string | null
-  message: string | null
-  cert_style: string | null
-}
+type ClaimRow = { ts: string; title: string | null; message: string | null; cert_style: string | null }
 
 async function listClaims(ownerId: string): Promise<ClaimRow[]> {
   try {
@@ -27,18 +23,18 @@ async function listClaims(ownerId: string): Promise<ClaimRow[]> {
        limit 200`,
       [ownerId]
     )
-    return rows.map(r => ({
-      ts: String(r.ts),
-      title: r.title ?? null,
-      message: r.message ?? null,
-      cert_style: r.cert_style ?? null,
-    }))
-  } catch {
-    return []
-  }
+    return rows.map(r => ({ ts: String(r.ts), title: r.title ?? null, message: r.message ?? null, cert_style: r.cert_style ?? null }))
+  } catch { return [] }
 }
 
-async function readMerchant(ownerId: string) {
+type MerchantRow = {
+  stripe_account_id: string | null
+  charges_enabled: boolean | null
+  payouts_enabled: boolean | null
+  requirements_due: string[] | null
+}
+
+async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
   const { rows } = await pool.query(
     `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
        from merchant_accounts where owner_id=$1`,
@@ -47,15 +43,55 @@ async function readMerchant(ownerId: string) {
   return rows[0] || null
 }
 
-export default async function Page({ params }: { params: Promise<Params> }) {
+async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
+  // lit l’acct id
+  const { rows } = await pool.query(`select stripe_account_id from merchant_accounts where owner_id=$1`, [ownerId])
+  const acctId = rows[0]?.stripe_account_id
+  if (!acctId) return null
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
+  const acct = await stripe.accounts.retrieve(acctId)
+  await pool.query(
+    `update merchant_accounts
+        set charges_enabled=$2,
+            payouts_enabled=$3,
+            requirements_due=$4::jsonb
+      where owner_id=$1`,
+    [ownerId, !!acct.charges_enabled, !!acct.payouts_enabled, JSON.stringify(acct.requirements?.currently_due || [])]
+  )
+  return {
+    stripe_account_id: acct.id,
+    charges_enabled: !!acct.charges_enabled,
+    payouts_enabled: !!acct.payouts_enabled,
+    requirements_due: (acct.requirements?.currently_due || []) as any,
+  }
+}
+
+export default async function Page({
+  params,
+  searchParams,
+}: { params: Promise<Params>, searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { locale } = await params
+  const sp = await searchParams
   const sess = await readSession()
   if (!sess) redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
 
-  const [claims, merchant] = await Promise.all([
-    listClaims(sess.ownerId),
-    readMerchant(sess.ownerId),
-  ])
+  // 1) lecture DB
+  let merchant = await readMerchant(sess.ownerId)
+
+  // 2) conditions d’auto-sync : retour d’onboarding OU statut incomplet
+  const needsSync =
+    sp?.connect === 'done' ||
+    (merchant && (
+      !merchant.charges_enabled ||
+      !merchant.payouts_enabled ||
+      (merchant.requirements_due && merchant.requirements_due.length > 0)
+    ))
+
+  if (needsSync) {
+    try { merchant = await syncMerchantNow(sess.ownerId) || merchant } catch {}
+  }
+
+  const claims = await listClaims(sess.ownerId)
 
   return (
     <main style={{maxWidth: 900, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui'}}>
