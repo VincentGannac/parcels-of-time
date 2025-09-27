@@ -1,10 +1,11 @@
-//app/api/marketplace/confirm/route.ts
+// app/api/marketplace/confirm/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { pool } from '@/lib/db'
 import { setSessionCookieOnResponse } from '@/lib/auth'
+import crypto from 'node:crypto'
 
 function isoDay(s: string) {
   const d = new Date(s)
@@ -14,13 +15,9 @@ function isoDay(s: string) {
 }
 
 async function tableExists(client: any, table: string) {
-  const { rows } = await client.query(
-    `select to_regclass($1) as ok`,
-    [`public.${table}`]
-  )
+  const { rows } = await client.query(`select to_regclass($1) as ok`, [`public.${table}`])
   return !!rows[0]?.ok
 }
-
 async function hasColumn(client: any, table: string, col: string) {
   const { rows } = await client.query(
     `select 1
@@ -31,24 +28,24 @@ async function hasColumn(client: any, table: string, col: string) {
   )
   return !!rows.length
 }
-
 async function getColumns(client: any, table: string) {
-    const { rows } = await client.query(
-      `select column_name from information_schema.columns
-        where table_schema='public' and table_name=$1`,
-      [table]
-    )
-    return new Set<string>(rows.map((r:any)=>r.column_name))
-  }
-  function safeBool(v: unknown) { return String(v) === '1' || v === true }
-  function safeHex(v: unknown, fallback='#1a1f2a') {
-    return /^#[0-9a-fA-F]{6}$/.test(String(v||'')) ? String(v).toLowerCase() : fallback
-  }
-  function safeStyle(v: unknown) {
-    const ALLOWED = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
-    const s = String(v||'neutral').toLowerCase()
-    return (ALLOWED as readonly string[]).includes(s as any) ? s : 'neutral'
-  }
+  const { rows } = await client.query(
+    `select column_name from information_schema.columns
+      where table_schema='public' and table_name=$1`,
+    [table]
+  )
+  return new Set<string>(rows.map((r:any)=>r.column_name))
+}
+
+function safeBool(v: unknown) { return String(v) === '1' || v === true }
+function safeHex(v: unknown, fallback='#1a1f2a') {
+  return /^#[0-9a-fA-F]{6}$/.test(String(v||'')) ? String(v).toLowerCase() : fallback
+}
+function safeStyle(v: unknown) {
+  const ALLOWED = ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'] as const
+  const s = String(v||'neutral').toLowerCase()
+  return (ALLOWED as readonly string[]).includes(s as any) ? s : 'neutral'
+}
 
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
@@ -60,7 +57,6 @@ export async function GET(req: Request) {
   const urlLocale: 'fr' | 'en' = qpLocale === 'en' ? 'en' : qpLocale === 'fr' ? 'fr' : 'fr'
   const tsYParam = url.searchParams.get('ts') || ''
 
-  // Valeurs par défaut de secours si on doit rediriger même en cas d'erreur
   let fallbackYMD = ''
   let finalLocale: 'fr' | 'en' = urlLocale
 
@@ -71,7 +67,7 @@ export async function GET(req: Request) {
     const s = await stripe.checkout.sessions.retrieve(sid, { expand: ['payment_intent'] })
     const paid = s.payment_status === 'paid'
 
-    // Normalise TS (métadonnées Stripe → ISO minuit UTC)
+    // Normalise TS
     const tsISO = isoDay(String(s.metadata?.ts || tsYParam || ''))
     if (tsISO) fallbackYMD = tsISO.slice(0, 10)
 
@@ -96,7 +92,6 @@ export async function GET(req: Request) {
       const { rows: p } = await pool.query(`select data from checkout_payload_temp where key=$1`, [payloadKey])
       if (p.length) {
         P = p[0].data || {}
-        // hygiène : suppression du tampon
         await pool.query(`delete from checkout_payload_temp where key=$1`, [payloadKey])
       }
     }
@@ -116,7 +111,7 @@ export async function GET(req: Request) {
     const p_message_public = safeBool(P.message_public)
     const p_public_reg     = safeBool(P.public_registry)
 
-    // Locale finale si aucune dans l’URL
+    // Locale finale si absente de l’URL
     if (!qpLocale) {
       const locGuess = String(s.locale || '').toLowerCase()
       finalLocale = locGuess.startsWith('en') ? 'en' : locGuess.startsWith('fr') ? 'fr' : 'fr'
@@ -124,7 +119,7 @@ export async function GET(req: Request) {
 
     const piId = typeof s.payment_intent === 'string' ? s.payment_intent : s.payment_intent?.id
 
-    // ===== Transaction atomique et tolérante au schéma =====
+    // ===== Transaction atomique =====
     const client = await pool.connect()
     let buyerOwnerId = ''
     try {
@@ -142,16 +137,15 @@ export async function GET(req: Request) {
       const L = lrows[0]
 
       if (L.status !== 'active') {
-        // Déjà vendue → on sort proprement
         await client.query('COMMIT')
         const ymd = tsISO.slice(0, 10)
         const res = NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(ymd)}?buy=already`, { status: 302 })
         return res
       }
 
-      // 2) Idempotence (si la table existe)
-      const hasSecondarySales = await tableExists(client, 'secondary_sales')
-      if (hasSecondarySales) {
+      // 2) Idempotence (si table présente) — calculée UNE FOIS
+      const hasSecondarySalesTbl = await tableExists(client, 'secondary_sales')
+      if (hasSecondarySalesTbl) {
         const { rows: dup } = await client.query(
           `select 1 from secondary_sales
             where stripe_session_id=$1 or stripe_payment_intent_id=$2
@@ -162,7 +156,6 @@ export async function GET(req: Request) {
           await client.query('COMMIT')
           const ymd = tsISO.slice(0, 10)
           const res = NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(ymd)}`, { status: 303 })
-          // On (ré)pose le cookie si on peut retrouver l’owner ensuite
           try {
             const { rows: who } = await client.query(
               `select owner_id from claims where date_trunc('day', ts) = $1::timestamptz`,
@@ -194,7 +187,7 @@ export async function GET(req: Request) {
       const buyerId = brow[0].id
       buyerOwnerId = String(buyerId)
 
-      // 4) Transfert de propriété + application des personnalisations (colonnes présentes seulement)
+      // 4) Transfert + personnalisations tolérantes au schéma
       const cols = await getColumns(client, 'claims')
       const sets: string[] = [
         `owner_id = $1`,
@@ -223,9 +216,10 @@ export async function GET(req: Request) {
            and owner_id = $${++idx}
       `
       vals.push(tsISO, L.seller_owner_id)
-      await client.query(sql, vals)
+      const { rowCount: upCount } = await client.query(sql, vals)
+      if (!upCount) throw new Error('claim_not_updated')
 
-      // 4bis) Image custom : temp -> persist si style=custom
+      // 4bis) Image custom
       if (p_style === 'custom' && customBgKey) {
         const hasTemp = await tableExists(client, 'custom_bg_temp')
         const hasPersist = await tableExists(client, 'claim_custom_bg')
@@ -244,7 +238,7 @@ export async function GET(req: Request) {
         }
       }
 
-      // 4ter) Publication registre si demandé
+      // 4ter) Publication registre
       if (p_public_reg) {
         await client.query(
           `insert into minute_public (ts)
@@ -255,7 +249,6 @@ export async function GET(req: Request) {
       }
 
       // 5) Marquer l’annonce « sold »
-      //    (on ne casse pas si buyer_owner_id n’existe pas)
       const hasBuyerCol = await hasColumn(client, 'listings', 'buyer_owner_id')
       if (hasBuyerCol) {
         await client.query(
@@ -276,16 +269,15 @@ export async function GET(req: Request) {
         )
       }
 
-      // 6) Journalisation secondaire (si table présente)
-      if (hasSecondarySales) {
-        // Détecte version du schéma
+      // 6) Journalisation vente secondaire (réutilise hasSecondarySalesTbl)
+      if (hasSecondarySalesTbl) {
         const hasGross = await hasColumn(client, 'secondary_sales', 'gross_cents')
         const hasPrice = await hasColumn(client, 'secondary_sales', 'price_cents')
+        const gross = Number(L.price_cents) | 0
+        const fee = Math.max(100, Math.round(gross * 0.10))
+        const net = Math.max(0, gross - fee)
 
         if (hasGross) {
-          const gross = Number(L.price_cents) | 0
-          const fee = Math.max(100, Math.round(gross * 0.10))
-          const net = Math.max(0, gross - fee)
           await client.query(
             `insert into secondary_sales(
                listing_id, ts, seller_owner_id, buyer_owner_id,
@@ -307,9 +299,44 @@ export async function GET(req: Request) {
         }
       }
 
+      // 7) 🔁 Recalcule et stocke le certificat (identique aux autres flux)
+      {
+        const { rows: cur } = await client.query(
+          `select owner_id, price_cents, created_at
+             from claims
+            where date_trunc('day', ts) = $1::timestamptz
+            limit 1`,
+          [tsISO]
+        )
+        if (cur.length) {
+          const owner_id = cur[0].owner_id
+          const price_cents = Number(cur[0].price_cents) | 0
+          const createdISO =
+            cur[0].created_at instanceof Date
+              ? cur[0].created_at.toISOString()
+              : new Date(cur[0].created_at).toISOString()
+
+          const salt = process.env.SECRET_SALT || 'dev_salt'
+          const data = `${tsISO}|${owner_id}|${price_cents}|${createdISO}|${salt}`
+          const hash = crypto.createHash('sha256').update(data).digest('hex')
+          const cert_url = `/api/cert/${encodeURIComponent(tsISO.slice(0,10))}`
+
+          const cols2 = await getColumns(client, 'claims')
+          if (cols2.has('cert_hash') || cols2.has('cert_url')) {
+            await client.query(
+              `update claims
+                  set ${cols2.has('cert_hash') ? 'cert_hash = $1' : 'cert_hash = cert_hash'},
+                      ${cols2.has('cert_url')  ? 'cert_url  = $2' : 'cert_url  = cert_url'}
+                where date_trunc('day', ts) = $3::timestamptz`,
+              [hash, cert_url, tsISO]
+            )
+          }
+        }
+      }
+
       await client.query('COMMIT')
 
-      // 7) E-mails (best-effort)
+      // 8) E-mails (best-effort)
       try {
         const ymd = tsISO.slice(0, 10)
         const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}`
@@ -321,8 +348,9 @@ export async function GET(req: Request) {
         }).catch(()=>{})
       } catch {}
 
-      // 8) Redirection finale + cookie de session
-      const to = `${base}/${finalLocale}/m/${encodeURIComponent(tsISO.slice(0,10))}?buy=success`
+      // 9) Redirection finale + cookie
+      const ymd = tsISO.slice(0,10)
+      const to = `${base}/${finalLocale}/m/${encodeURIComponent(ymd)}?buy=success${p_public_reg ? '&autopub=1' : ''}`
       const res = NextResponse.redirect(to, { status: 303 })
       setSessionCookieOnResponse(res, {
         ownerId: buyerOwnerId,
@@ -333,12 +361,10 @@ export async function GET(req: Request) {
       return res
     } catch (err) {
       try { await pool.query('ROLLBACK') } catch {}
-      // Erreur DB/logic → on redirige quand même vers la page du jour pour que le webhook rattrape
       const ymd = fallbackYMD || '1970-01-01'
       return NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(ymd)}?buy=pending`, { status: 302 })
     }
   } catch {
-    // Erreur Stripe ou autre : renvoi vers la page si possible, sinon home
     if (fallbackYMD) {
       return NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(fallbackYMD)}?buy=pending`, { status: 302 })
     }
