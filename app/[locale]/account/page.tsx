@@ -34,14 +34,35 @@ type MerchantRow = {
   requirements_due: string[] | null
 }
 
+function asStringArray(v: unknown): string[] {
+  if (!v) return []
+  if (Array.isArray(v)) return v.map(x => String(x))
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v)
+      return Array.isArray(parsed) ? parsed.map(x => String(x)) : []
+    } catch { return [] }
+  }
+  return []
+}
+
+
 async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
   const { rows } = await pool.query(
     `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
        from merchant_accounts where owner_id=$1`,
     [ownerId]
   )
-  return rows[0] || null
+  const r = rows[0]
+  if (!r) return null
+  return {
+    stripe_account_id: r.stripe_account_id ?? null,
+    charges_enabled:   !!r.charges_enabled,
+    payouts_enabled:   !!r.payouts_enabled,
+    requirements_due:  asStringArray(r.requirements_due),
+  }
 }
+
 
 async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
   // lit l’acct id
@@ -56,8 +77,9 @@ async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
             payouts_enabled=$3,
             requirements_due=$4::jsonb
       where owner_id=$1`,
-    [ownerId, !!acct.charges_enabled, !!acct.payouts_enabled, JSON.stringify(acct.requirements?.currently_due || [])]
+    [ownerId, !!acct.charges_enabled, !!acct.payouts_enabled, acct.requirements?.currently_due || []] // ← pas besoin de stringify
   )
+  
   return {
     stripe_account_id: acct.id,
     charges_enabled: !!acct.charges_enabled,
@@ -81,7 +103,7 @@ async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
     )
     return rows.map(r => ({
       id: String(r.id),
-      ts: new Date(r.ts).toISOString(),
+      ts: (()=>{ try { return new Date(r.ts).toISOString() } catch { return new Date(String(r.ts)).toISOString() } })(),
       price_cents: r.price_cents,
       currency: r.currency || 'EUR',
       status: r.status
@@ -106,12 +128,13 @@ export default async function Page({
 
   // 2) conditions d’auto-sync : retour d’onboarding OU statut incomplet
   const needsSync =
-    sp?.connect === 'done' ||
-    (merchant && (
-      !merchant.charges_enabled ||
-      !merchant.payouts_enabled ||
-      (merchant.requirements_due && merchant.requirements_due.length > 0)
-    ))
+  sp?.connect === 'done' ||
+  (merchant && (
+    !merchant.charges_enabled ||
+    !merchant.payouts_enabled ||
+    (Array.isArray(merchant.requirements_due) && merchant.requirements_due.length > 0)
+  ))
+
 
   if (needsSync) {
     try { merchant = await syncMerchantNow(sess.ownerId) || merchant } catch {}
@@ -144,9 +167,11 @@ export default async function Page({
           <>
             <div>Stripe: <code>{merchant.stripe_account_id}</code></div>
             <div>Charges: <strong>{merchant.charges_enabled ? '✅' : '❌'}</strong> — Payouts: <strong>{merchant.payouts_enabled ? '✅' : '❌'}</strong></div>
-            {!!merchant.requirements_due?.length && (
-              <div style={{fontSize:13, color:'#b36'}}>Éléments requis: {merchant.requirements_due.join(', ')}</div>
-            )}
+            {Array.isArray(merchant.requirements_due) && merchant.requirements_due.length > 0 && (
+            <div style={{fontSize:13, color:'#b36'}}>
+              Éléments requis: {merchant.requirements_due.join(', ')}
+            </div>
+          )}
             <form method="post" action="/api/connect/sync"><button style={{padding:'8px 12px', borderRadius:10, border:'1px solid #ddd'}}>Rafraîchir statut</button></form>
           </>
         ) : (
