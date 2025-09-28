@@ -23,9 +23,10 @@ function toTimeLabelMode(td?: string) {
   return 'utc'
 }
 
-export async function GET(req: Request, { params }: any) {
-  const rawParam = String(params?.ts || '')
-  const decoded = decodeURIComponent(rawParam).split('.')[0] // retire éventuel suffixe
+export async function GET(req: Request, ctx: any) {
+  // Param dynamique : accepte "YYYY-MM-DD" (et ignore un éventuel suffixe après un point)
+  const rawParam = String(ctx?.params?.ts || '')
+  const decoded = decodeURIComponent(rawParam).split('.')[0]
   const tsISO = normIsoDay(decoded)
   if (!tsISO) {
     return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
@@ -78,7 +79,7 @@ export async function GET(req: Request, { params }: any) {
   // URL publique (basée sur le JOUR normalisé)
   const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO)}`
 
-  // Génération PDF
+  // Génération PDF (reflète les modifs DB post-vente)
   const pdfBytes = await generateCertificatePDF({
     ts: tsISO,
     display_name: row.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
