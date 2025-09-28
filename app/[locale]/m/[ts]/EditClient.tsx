@@ -313,8 +313,8 @@ export default function EditClient({
     let objectUrl: string | null = null
 
     if (form.cert_style === 'custom' && !customBgLocal) {
-      const url = `/api/claim-bg/${encodeURIComponent(tsISO)}`
-      fetch(url)
+       const url = `/api/claim-bg/${encodeURIComponent(tsISO)}?v=${Date.now()}`
+       fetch(url, { cache: 'no-store' })
         .then(r => r.ok ? r.blob() : Promise.reject(r.status))
         .then(b => {
           objectUrl = URL.createObjectURL(b)

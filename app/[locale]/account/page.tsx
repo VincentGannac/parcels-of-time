@@ -210,13 +210,12 @@ export default async function Page({
                     {locale==='fr' ? 'Ouvrir' : 'Open'}
                   </a>
                   <form method="post" action={`/api/marketplace/listing/${item.id}/status`}>
-                    <input type="hidden" name="action" value="cancel" />
-                    <input type="hidden" name="locale" value={locale} />
-                    <button type="submit"
-                      style={{padding:'8px 10px', borderRadius:10, border:'1px solid #ddd', background:'transparent', color:'#b33'}}>
-                      {locale==='fr' ? 'Retirer' : 'Cancel'}
-                    </button>
-                  </form>
+                  <input type="hidden" name="action" value="cancel" />
+                  <input type="hidden" name="locale" value={locale} />
+                  {/* facultatif : */}
+                   <input type="hidden" name="next" value={`/${locale}/account`} /> 
+                  <button type="submit">Retirer</button>
+                </form>
                 </div>
               </div>
             )
