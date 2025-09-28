@@ -236,6 +236,9 @@ export default async function Page({
   // lire un éventuel feedback "listing=ok"
   const listingOk = (sp as any).listing === 'ok'
 
+  const myListingForThisDay = isOwner
+  ? myListings.find(l => (new Date(l.ts).toISOString().slice(0,10) === tsYMD))
+  : null
 
   // 3) État public + autopub (owner only)
   const isPublicDb = await getPublicStateDb(tsISO!)
@@ -434,6 +437,30 @@ export default async function Page({
             }}>
               ✅ Votre annonce a été publiée sur la marketplace.
             </div>
+          )}
+
+          {/* Bloc Marketplace (owner → retirer) */}
+          {isOwner && myListingForThisDay && (
+            <section style={{marginTop:18, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
+                Annonce active
+              </div>
+              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap'}}>
+                <div style={{fontSize:16}}>
+                  {myListingForThisDay.price_cents/100} € — statut : <strong>active</strong>
+                </div>
+                <form method="post" action={`/api/marketplace/listing/${myListingForThisDay.id}/status`}>
+                  <input type="hidden" name="status" value="canceled" />
+                  <input type="hidden" name="next" value={`/${locale}/m/${encodeURIComponent(tsYMD)}?listing=off`} />
+                  <button
+                    type="submit"
+                    style={{padding:'10px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', fontWeight:800}}
+                  >
+                    Retirer de la vente
+                  </button>
+                </form>
+              </div>
+            </section>
           )}
 
           {/* Registre public */}

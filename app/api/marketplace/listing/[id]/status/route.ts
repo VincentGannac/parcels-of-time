@@ -1,67 +1,51 @@
-//app/api/marketplace/listing/[id]/status/route.ts
+// app/api/marketplace/listing/[id]/status/route.ts
 export const runtime = 'nodejs'
 
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { pool } from '@/lib/db'
 import { readSession } from '@/lib/auth'
 
-type Body = { action: 'cancel' }
-
-
-export async function GET(req: Request) {
-  const url = new URL(req.url)
-  const locale = url.searchParams.get('locale') === 'en' ? 'en' : 'fr'
-  const base = process.env.NEXT_PUBLIC_BASE_URL || url.origin
-  // Juste un fallback UX pour éviter la page blanche
-  return NextResponse.redirect(`${base}/${locale}/account`, { status: 303 })
-}
-
-
-export async function POST(req: Request, ctx: any) {
-  const sess = await readSession()
-  if (!sess) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-
-  const id = Number(ctx.params?.id || 0)
-
-  const ctype = (req.headers.get('content-type') || '').toLowerCase()
-  let action = ''
-  let locale = 'fr'
-  if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
-    const form = await req.formData()
-    action = String(form.get('action') || '')
-    locale = String(form.get('locale') || 'fr')
-  } else {
-    const body = await req.json().catch(()=>({}))
-    action = String((body as any).action || '')
-    locale = String((body as any).locale || 'fr')
+async function handle(req: NextRequest, ctx: any) {
+  const id = String(ctx?.params?.id || '').trim()
+  if (!/^\d+$/.test(id)) {
+    return NextResponse.json({ error: 'bad_id' }, { status: 400 })
   }
 
-  if (action !== 'cancel') return NextResponse.json({ error: 'bad_action' }, { status: 400 })
+  const session = await readSession()
+  if (!session) {
+    // redirige vers login
+    const next = req.nextUrl.searchParams.get('next') || '/'
+    return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(next)}`, req.url))
+  }
 
-  const { rows } = await pool.query(
+  // status demandé (par défaut: canceled)
+  const nextStatus =
+    (req.method === 'POST'
+      ? (await req.formData()).get('status')?.toString()
+      : req.nextUrl.searchParams.get('status')) || 'canceled'
+
+  if (!['canceled'].includes(nextStatus)) {
+    return NextResponse.json({ error: 'unsupported_status' }, { status: 400 })
+  }
+
+  // Mise à jour protégée (seul le vendeur peut annuler)
+  const { rowCount } = await pool.query(
     `update listings
-        set status = 'canceled', updated_at=now()
-      where id = $1
+        set status = 'canceled'
+      where id = $1::bigint
         and seller_owner_id = $2
-        and status = 'active'
-      returning id, status`,
-    [id, sess.ownerId]
+        and status = 'active'`,
+    [id, session.ownerId]
   )
 
-  if (!rows.length) {
-    // si requête formulaire → redirige avec erreur
-    if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
-      const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
-      return NextResponse.redirect(`${base}/${locale}/account?cancel=err`, { status: 303 })
-    }
-    return NextResponse.json({ error: 'not_allowed' }, { status: 403 })
-  }
+  const nextUrl =
+    (req.method === 'POST'
+      ? (await req.formData()).get('next')?.toString()
+      : req.nextUrl.searchParams.get('next')) || `/${(req.nextUrl.pathname.split('/')[1] || 'en')}/account`
 
-  // si requête formulaire → redirige vers /account avec un flag
-  if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
-    const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
-    return NextResponse.redirect(`${base}/${locale}/account?cancel=ok`, { status: 303 })
-  }
-
-  return NextResponse.json({ ok: true, listing: rows[0] })
+  // Si pas modifié (0), on redirige quand même
+  return NextResponse.redirect(new URL(nextUrl, req.url))
 }
+
+export const GET  = handle
+export const POST = handle
