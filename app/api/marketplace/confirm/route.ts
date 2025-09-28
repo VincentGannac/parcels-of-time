@@ -107,8 +107,16 @@ export async function GET(req: Request) {
           for update`,
         [listingId]
       )
+
       if (!lrows.length) throw new Error('listing_not_found')
       const L = lrows[0]
+
+      if (L.status !== 'active') {
+        // évite un second transfert si une autre confirmation est passée entre-temps
+        await client.query('ROLLBACK')
+        const ymd = tsISO.slice(0,10)
+        return NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(ymd)}?buy=already_sold`, { status: 303 })
+      }
 
       // 2) Idempotence (si journal présent)
       const hasSecondary = await tableExists(client, 'secondary_sales')

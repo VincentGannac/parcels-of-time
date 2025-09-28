@@ -201,6 +201,13 @@ function coverToA4JPEG(dataUrl: string, srcW: number, srcH: number) {
   })
 }
 
+function stripAttestationText(input: string): string {
+  if (!input) return ''
+  return input
+    .replace(/\s*Ce certificat atteste que[\s\S]+?Le présent document confirme[\s\S]+?cette acquisition\.\s*/gi, '')
+    .trim()
+}
+
 type Initial = {
   email: string
   display_name: string
@@ -265,7 +272,7 @@ export default function EditClient({
     email: initial.email || '',
     display_name: initial.display_name || '',
     title: initial.title || '',
-    message: initial.message || '',
+    message: stripAttestationText(initial.message || ''),
     gifted_by: '', // re-rempli si on détecte la mention
     link_url: initial.link_url || '',
     ts: isoDayString(parsedDate),

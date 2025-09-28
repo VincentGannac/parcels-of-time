@@ -113,6 +113,14 @@ function makeMeasurer(scale:number){
   return { wrap }
 }
 
+function stripAttestationText(input: string): string {
+  if (!input) return ''
+  return input
+    .replace(/\s*Ce certificat atteste que[\s\S]+?Le présent document confirme[\s\S]+?cette acquisition\.\s*/gi, '')
+    .trim()
+}
+
+
 export default function ClientClaim({ prefillEmail }: { prefillEmail?: string }) {
   const params = useSearchParams()
   const prefillRaw = params.get('ts') || ''
@@ -364,25 +372,30 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         const j = await res.json()
         if (!j?.claim) return
   
-        // === Nettoyage message & détection options ===
+       // === Nettoyage message & détection options ===
         let raw = String(j.claim.message || '')
-        // HIDE_OWNED_BY → décoche la section et supprime le marqueur du texte
+
+        // 1) retirer l’attestation éventuelle
+        raw = stripAttestationText(raw)
+
+        // 2) HIDE_OWNED_BY
         const hideOwned = /\[\[\s*HIDE_OWNED_BY\s*\]\]/i.test(raw)
         raw = raw.replace(/\s*\[\[\s*HIDE_OWNED_BY\s*\]\]\s*/gi, '').trim()
-  
-        // Gifted by / Offert par → active giftedBy + extrait le nom
+
+        // 3) Gifted by / Offert par
         let giftedBy = ''
         const mg = /^(?:offert\s*par|gifted\s*by)\s*:\s*(.+)$/mi.exec(raw)
         if (mg) { giftedBy = mg[1].trim(); raw = raw.replace(mg[0], '').trim() }
-  
-        // ➕ règle *tous* les interrupteurs selon les données du certificat chargé
+
+        // 4) Interrupteurs (on laisse attestation gérée par son toggle dédié)
         setShow({
           ownedBy: !hideOwned,
           giftedBy: !!giftedBy,
           title: !!(j.claim.title || '').trim(),
           message: !!raw,
-          attestation: true, // attestation séparée (toujours dispo)
+          attestation: true,
         })
+
         setIsGift(!!giftedBy)
   
         setForm(f => ({
@@ -1497,6 +1510,26 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
           <aside aria-label="Aperçu du certificat"
             style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
             <div ref={previewWrapRef} style={{position:'relative', width:'100%', aspectRatio: `${A4_W_PT}/${A4_H_PT}`, borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
+              
+            {isLoadingClaim && (
+                <div
+                  aria-live="polite"
+                  style={{
+                    position:'absolute', inset:0, zIndex:2,
+                    background:'rgba(0,0,0,.28)',
+                    display:'grid', placeItems:'center'
+                  }}
+                >
+                  <div style={{
+                    padding:'10px 12px', borderRadius:12,
+                    border:'1px solid var(--color-border)',
+                    background:'var(--color-surface)', color:'var(--color-text)', fontSize:13
+                  }}>
+                    Chargement du certificat…
+                  </div>
+                </div>
+              )}
+
               <img
                 key={(form.cert_style==='custom' ? customBg?.url : form.cert_style) || 'none'}
                 src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png') : `/cert_bg/${form.cert_style}.png`}
