@@ -23,9 +23,8 @@ function toTimeLabelMode(td?: string) {
   return 'utc'
 }
 
-export async function GET(req: Request, ctx: any) {
-  // Param dynamique : accepte "YYYY-MM-DD" (évent. suffixe ".xxx")
-  const rawParam = String(ctx?.params?.ts || '')
+export async function GET(req: Request, { params }: any) {
+  const rawParam = String(params?.ts || '')
   const decoded = decodeURIComponent(rawParam).split('.')[0] // retire éventuel suffixe
   const tsISO = normIsoDay(decoded)
   if (!tsISO) {
