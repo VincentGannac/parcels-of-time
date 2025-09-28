@@ -24,7 +24,7 @@ function toTimeLabelMode(td?: string) {
 }
 
 export async function GET(req: Request, ctx: any) {
-  // Param dynamique : accepte "YYYY-MM-DD" (et ignore un éventuel suffixe après un point)
+  // Param dynamique : "YYYY-MM-DD" (ignore le suffixe après un point)
   const rawParam = String(ctx?.params?.ts || '')
   const decoded = decodeURIComponent(rawParam).split('.')[0]
   const tsISO = normIsoDay(decoded)
@@ -38,7 +38,7 @@ export async function GET(req: Request, ctx: any) {
     const locale: 'fr' | 'en' = accLang.startsWith('fr') ? 'fr' : 'en'
     const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
 
-    // 1) Dernier claim pour ce jour (courant)
+    // Claim le plus récent pour ce jour
     const { rows } = await pool.query(
       `
       select
@@ -61,35 +61,24 @@ export async function GET(req: Request, ctx: any) {
       `,
       [tsISO]
     )
-
     if (!rows.length) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
-
     const claim = rows[0]
 
-    // 2) Fond custom STRICTEMENT lié à ce claim (plus aucun fallback "par jour")
+    // Fond custom STRICTEMENT lié à ce ts (pas de fallback par jour)
     let customBgDataUrl: string | undefined
-    if ((claim.cert_style || '').toLowerCase() === 'custom') {
+    if (String(claim.cert_style || '').toLowerCase() === 'custom') {
       const { rows: bgRows } = await pool.query(
-        `
-        select data -- bytea
-        from claim_bg
-        where claim_id = $1
-        order by created_at desc
-        limit 1
-        `,
-        [claim.claim_id]
+        `select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`,
+        [tsISO]
       )
-      const buf: Buffer | undefined = bgRows?.[0]?.data as Buffer | undefined
-      if (buf && buf.length > 0) {
-        const b64 = buf.toString('base64')
-        // Par défaut on considère PNG si le mime n'est pas stocké
-        customBgDataUrl = `data:image/png;base64,${b64}`
+      if (bgRows[0]?.data_url) {
+        customBgDataUrl = String(bgRows[0].data_url)
       }
     }
 
-    // 3) Options d’affichage (ex: /api/cert/2024-01-01?public=1&hide_meta=1)
+    // Options d’affichage (ex: /api/cert/2024-01-01?public=1&hide_meta=1)
     const url = new URL(req.url)
     const hideQr =
       url.searchParams.has('public') ||
@@ -99,10 +88,10 @@ export async function GET(req: Request, ctx: any) {
       url.searchParams.get('hide_meta') === '1' ||
       url.searchParams.has('hide_meta')
 
-    // URL publique (basée sur le JOUR normalisé)
+    // URL publique
     const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO)}`
 
-    // 4) Génération PDF (interface legacy de lib/cert)
+    // Génération PDF (interface legacy)
     const pdfBytes = await generateCertificatePDF({
       ts: tsISO,
       display_name: claim.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
@@ -117,7 +106,7 @@ export async function GET(req: Request, ctx: any) {
       timeLabelMode: toTimeLabelMode(claim.time_display) as any, // compat
       localDateOnly: !!claim.local_date_only,
       textColorHex: claim.text_color || '#1a1f2a',
-      customBgDataUrl, // ← strictement lié à ce claim
+      customBgDataUrl, // ← lié exactement à ce ts
       hideQr,
       hideMeta,
     })
@@ -127,12 +116,11 @@ export async function GET(req: Request, ctx: any) {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
-        // Pas de mise en cache agressive côté edge : reflète immédiatement les changements
         'Cache-Control': 'no-store',
         'Vary': 'Accept-Language',
       },
     })
-  } catch (_e) {
+  } catch (e) {
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

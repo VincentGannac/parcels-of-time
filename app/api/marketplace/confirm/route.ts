@@ -165,14 +165,19 @@ export async function GET(req: Request) {
         vals
       )
 
-      // 4ter) Image custom : temp -> persist si style=custom
+             // 4ter) Image custom : temp -> persist si style=custom
       const styleLower = String(updates.cert_style || '').toLowerCase()
-      if (styleLower === 'custom' && customBgKey) {
-        const hasTemp = await tableExists(client, 'custom_bg_temp')
+      if (styleLower === 'custom') {
         const hasPersist = await tableExists(client, 'claim_custom_bg')
-        if (hasTemp && hasPersist) {
-          const { rows: tmp } = await client.query('select data_url from custom_bg_temp where key = $1', [customBgKey])
-          if (tmp.length) {
+
+        // a) voie 'custom_bg_temp' si key fourni
+        const hasTemp = await tableExists(client, 'custom_bg_temp')
+        if (hasTemp && customBgKey) {
+          const { rows: tmp } = await client.query(
+            'select data_url from custom_bg_temp where key = $1',
+            [customBgKey]
+          )
+          if (tmp.length && hasPersist) {
             await client.query(
               `insert into claim_custom_bg (ts, data_url)
                values ($1::timestamptz, $2)
@@ -183,7 +188,23 @@ export async function GET(req: Request) {
             await client.query('delete from custom_bg_temp where key = $1', [customBgKey])
           }
         }
+
+        // b) fallback direct : data_url dans le payload
+        const rawDataUrl = String(P.custom_bg_data_url || '')
+        if (rawDataUrl && hasPersist) {
+          const ok = /^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=]+$/.test(rawDataUrl)
+          if (ok) {
+            await client.query(
+              `insert into claim_custom_bg (ts, data_url)
+               values ($1::timestamptz, $2)
+               on conflict (ts) do update
+                 set data_url = excluded.data_url, created_at = now()`,
+              [tsISO, rawDataUrl]
+            )
+          }
+        }
       }
+
 
       // 4quater) Registre public si demandé
       if (updates.public_registry === true) {
