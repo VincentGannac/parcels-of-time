@@ -265,6 +265,9 @@ export default function EditClient({
 
   const MIN_GAP_HEADER_PT = 28
 
+  const hideOwnedInitially =/\[\[\s*HIDE_OWNED_BY\s*\]\]/i.test(initial.message || '')
+  const hadAttestationInitially =  /Ce certificat atteste que[\s\S]+?cette acquisition\./i.test(initial.message || '')
+  const initialMessageClean = stripAttestationText(String(initial.message || '').replace(/\s*\[\[\s*HIDE_OWNED_BY\s*\]\]\s*/gi, '')).trim()
 
   // ==== Form ====
   const [isGift, setIsGift] = useState<boolean>(/^\s*Offert par:/mi.test(initial.message || ''))
@@ -272,7 +275,7 @@ export default function EditClient({
     email: initial.email || '',
     display_name: initial.display_name || '',
     title: initial.title || '',
-    message: stripAttestationText(initial.message || ''),
+    message: initialMessageClean,
     gifted_by: '', // re-rempli si on détecte la mention
     link_url: initial.link_url || '',
     ts: isoDayString(parsedDate),
@@ -289,17 +292,6 @@ export default function EditClient({
   useEffect(() => {
     const m = /^(?:offert par|gifted by)\s*:\s*(.+)$/i.exec(form.message || '')
     if (m) setForm(f => ({ ...f, gifted_by: m[1].trim() }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Retire [[HIDE_OWNED_BY]] du message et décoche l'affichage du "Owned by"
-  useEffect(() => {
-    setForm(f => {
-      const msg = String(f.message || '')
-      if (!/\[\[\s*HIDE_OWNED_BY\s*\]\]/i.test(msg)) return f
-      return { ...f, message: msg.replace(/\s*\[\[\s*HIDE_OWNED_BY\s*\]\]\s*/gi, '').trim() }
-    })
-    setShow(s => ({ ...s, ownedBy: false }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -362,12 +354,15 @@ export default function EditClient({
     }
   }
 
+  
+
+
   // Visibilité (on présente les mêmes toggles que ClientClaim)
   const [show, setShow] = useState({
-    ownedBy: true,
-    title: true,
-    message: true,
-    attestation: true,  // ✅ nouveau
+    ownedBy: !hideOwnedInitially,
+    title: !!(initial.title || '').trim(),
+    message: !!initialMessageClean,
+    attestation: hadAttestationInitially,
     giftedBy: isGift,
   })
 

@@ -59,9 +59,10 @@ export async function POST(req: Request) {
     let buyerEmail = ''
     let locale: 'fr'|'en' = 'fr'
 
-    // Stash optionnel
+     // Stash optionnel
     let payload_key = ''
-    let custom_bg_key = ''
+    let custom_bg_key = '' // (laisse pour compat si tu l'utilises ailleurs)
+    let custom_bg_data_url = '' // 👈 nouveau
 
     // Fallback léger si pas de payload_key (texte court UNIQUEMENT)
     let display_name = ''
@@ -83,6 +84,7 @@ export async function POST(req: Request) {
       locale         = (String(form.get('locale') || '').toLowerCase() === 'en') ? 'en' : 'fr'
       payload_key    = String(form.get('payload_key') || '')
       custom_bg_key  = String(form.get('custom_bg_key') || '')
+      custom_bg_data_url = String(form.get('custom_bg_data_url') || '')
       if (!payload_key) {
         display_name    = String(form.get('display_name') || '')
         title           = String(form.get('title') || '')
@@ -104,6 +106,8 @@ export async function POST(req: Request) {
       locale         = (String(body.locale || 'fr').toLowerCase() === 'en') ? 'en' : 'fr'
       payload_key    = String(body.payload_key || '')
       custom_bg_key  = String(body.custom_bg_key || '')
+      custom_bg_data_url = String(body.custom_bg_data_url || '')
+
       if (!payload_key) {
         display_name    = String(body.display_name || '')
         title           = String(body.title || '')
@@ -180,7 +184,8 @@ export async function POST(req: Request) {
             title_public,
             message_public,
             public_registry,
-            locale
+            locale,
+            custom_bg_data_url: custom_bg_data_url || undefined,
           })]
         )
       } catch (e: any) {

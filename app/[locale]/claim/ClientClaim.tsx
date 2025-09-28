@@ -372,12 +372,12 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         const j = await res.json()
         if (!j?.claim) return
   
-       // === Nettoyage message & détection options ===
         let raw = String(j.claim.message || '')
-
-        // 1) retirer l’attestation éventuelle
+        // 1) attestation : mémorise si elle était présente, puis retire du message d'édition
+        const hadAttestation =
+          /Ce certificat atteste que[\s\S]+?cette acquisition\./i.test(raw)
         raw = stripAttestationText(raw)
-
+        
         // 2) HIDE_OWNED_BY
         const hideOwned = /\[\[\s*HIDE_OWNED_BY\s*\]\]/i.test(raw)
         raw = raw.replace(/\s*\[\[\s*HIDE_OWNED_BY\s*\]\]\s*/gi, '').trim()
@@ -393,7 +393,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
           giftedBy: !!giftedBy,
           title: !!(j.claim.title || '').trim(),
           message: !!raw,
-          attestation: true,
+          attestation: hadAttestation,
         })
 
         setIsGift(!!giftedBy)
@@ -449,7 +449,6 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       giftedBy: isGift ? true : false, // visible seulement si mode cadeau actif
     }))
   }, [D, forSaleDays, isGift])
-
 
 
   // Date choisie
@@ -686,26 +685,38 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         public_registry: form.public_registry ? '1' : '0',
       }
 
-
-      // POST par <form> pour /api/marketplace/checkout
-      const formEl = document.createElement('form')
-      formEl.method = 'POST'
-      formEl.action = '/api/marketplace/checkout'
-      const hid = (n:string,v:string) => { const i=document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; formEl.appendChild(i) }
-      hid('listing_id', listing.id)
-      hid('market_kind', 'secondary')
-      // tous les champs utiles :
-      Object.entries(payload).forEach(([k,v]) => hid(k, String(v)))
+            // ✅ JSON POST (supporté par l'API) — on peut inclure l'image custom sans limite Stripe
       try {
         const loc = (window.location.pathname.split('/')[1] || '').slice(0,2) || 'en'
-        hid('locale', loc)
-      } catch {}
-      document.body.appendChild(formEl)
-      formEl.submit()
-      return
+        const body:any = {
+          listing_id: Number(listing.id),
+          buyer_email: form.email,
+          locale: (loc === 'en' ? 'en' : 'fr'),
+          // on stashe côté serveur => pas besoin de metadata volumineuses
+          ...payload,
+        }
+        if (payload.cert_style === 'custom' && customBg?.dataUrl) {
+          body.custom_bg_data_url = customBg.dataUrl
+        }
+        const res2 = await fetch('/api/marketplace/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!res2.ok) {
+          const j = await res2.json().catch(()=>null)
+          throw new Error(j?.error || 'checkout_error')
+        }
+        const j = await res2.json()
+        window.location.href = j.url
+        return
+      } catch (e:any) {
+        setStatus('error')
+        setError('Erreur de création de session de paiement.')
+        console.error('[Marketplace checkout]', e)
+        return
+      }    
     }
-
-
 
     // Interdit les jours indisponibles
     if (unavailableDays.includes(D)) {

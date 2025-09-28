@@ -7,6 +7,16 @@ import { readSession } from '@/lib/auth'
 
 type Body = { action: 'cancel' }
 
+
+export async function GET(req: Request) {
+  const url = new URL(req.url)
+  const locale = url.searchParams.get('locale') === 'en' ? 'en' : 'fr'
+  const base = process.env.NEXT_PUBLIC_BASE_URL || url.origin
+  // Juste un fallback UX pour éviter la page blanche
+  return NextResponse.redirect(`${base}/${locale}/account`, { status: 303 })
+}
+
+
 export async function POST(req: Request, ctx: any) {
   const sess = await readSession()
   if (!sess) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })

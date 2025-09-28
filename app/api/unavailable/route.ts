@@ -9,7 +9,6 @@ import { pool } from '@/lib/db'
 type ClaimRow = { ts: string | Date }
 type ListingDayRow = { d: number; id: string; price_cents: number; currency: string }
 
-
 function startEndUTC(ym: string) {
   const m = /^(\d{4})-(\d{2})$/.exec(ym)
   if (!m) return null
@@ -25,11 +24,11 @@ export async function GET(req: Request) {
   const ym = url.searchParams.get('ym') || ''
   const range = startEndUTC(ym)
   if (!range) {
-    return NextResponse.json({ error: 'bad_ym' }, { status: 400 })
+    return NextResponse.json({ error: 'bad_ym' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   }
 
   try {
-    // 1) Jours avec claim (mois)
+    // 1) Jours ayant déjà un claim dans le mois (rouges)
     const { rows: claimRows } = await pool.query<ClaimRow>(
       `select ts
          from claims
@@ -37,13 +36,14 @@ export async function GET(req: Request) {
           and ts <  $2::timestamptz`,
       [range.start.toISOString(), range.end.toISOString()]
     )
+
     const claimDays = new Set(
       claimRows
         .map(r => new Date(r.ts as any).getUTCDate())
         .filter(d => d >= 1 && d <= 31)
     )
 
-    // 2) Listings actifs (jaunes) du mois — avec prix & id
+    // 2) Listings actifs du mois (jaunes) — on EXCLUT les offres annulées ou vendues
     const monthStart = `${range.start.getUTCFullYear()}-${String(range.m).padStart(2, '0')}-01`
     const { rows: saleRows } = await pool.query<ListingDayRow>(
       `select
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
        from listings l
       where l.ts >= $1::date
         and l.ts <  ($1::date + interval '1 month')
-        and l.status = 'active'`,
+        and l.status = 'active'`,           // <-- seules les annonces ACTIVES (pas 'canceled' ni 'sold')
       [monthStart]
     )
 
@@ -66,18 +66,22 @@ export async function GET(req: Request) {
       }
     }
 
-    // 3) Jaunes & rouges
-    const for_sale = Array.from(saleByDay.keys()).sort((a,b)=>a-b)
-    // ⚠️ IMPORTANT : on retire les jours en vente du set indisponible
-    for (const d of for_sale) claimDays.delete(d)
-    const unavailable = Array.from(claimDays).sort((a,b)=>a-b)
+    // 3) Calcul des listes : for_sale (jaunes) & unavailable (rouges)
+    const for_sale = Array.from(saleByDay.keys()).sort((a, b) => a - b)
 
-    // 4) listings enrichis (pour le prix dans l’UI)
+    // IMPORTANT : un jour en vente (jaune) n'est pas "indisponible" (rouge)
+    for (const d of for_sale) claimDays.delete(d)
+    const unavailable = Array.from(claimDays).sort((a, b) => a - b)
+
+    // 4) listings enrichis (pour l’UI)
     const listings = for_sale.map(d => ({ d, ...saleByDay.get(d)! }))
 
-    return NextResponse.json({ unavailable, for_sale, listings })
+    return NextResponse.json(
+      { unavailable, for_sale, listings },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
   } catch (e: any) {
     console.error('[unavailable] db error:', e?.message || e)
-    return NextResponse.json({ error: 'db_error' }, { status: 500 })
+    return NextResponse.json({ error: 'db_error' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
   }
 }
