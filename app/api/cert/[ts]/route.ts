@@ -23,7 +23,7 @@ function toTimeLabelMode(td?: string) {
   return 'utc'
 }
 
-export async function GET(req: Request, ctx: { params: { ts: string } }) {
+export async function GET(req: Request, ctx: any) {
   // Param dynamique : accepte "YYYY-MM-DD" (évent. suffixe ".xxx")
   const rawParam = String(ctx?.params?.ts || '')
   const decoded = decodeURIComponent(rawParam).split('.')[0] // retire éventuel suffixe
@@ -79,9 +79,9 @@ export async function GET(req: Request, ctx: { params: { ts: string } }) {
   // URL publique (basée sur le JOUR normalisé)
   const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO)}`
 
-  // Génération PDF (les valeurs reflètent la DB -> donc les modifs post-vente)
+  // Génération PDF
   const pdfBytes = await generateCertificatePDF({
-    ts: tsISO, // jour UTC normalisé
+    ts: tsISO,
     display_name: row.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
     title: row.title,
     message: row.message,
@@ -105,7 +105,6 @@ export async function GET(req: Request, ctx: { params: { ts: string } }) {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0,10))}.pdf"`,
-      // le PDF d’un jour donné est stable : cache public agressif côté CDN
       'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
       'Vary': 'Accept-Language',
     },
