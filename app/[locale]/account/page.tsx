@@ -36,10 +36,10 @@ async function listClaims(ownerId: string): Promise<ClaimRow[]> {
       ts: String(r.ts),
       title: r.title ?? null,
       message: r.message ?? null,
-      cert_style: r.cert_style ?? 'neutral'
+      cert_style: r.cert_style ?? 'neutral',
     }))
-  } catch (e) {
-    console.error('[account] listClaims failed:', (e as any)?.message)
+  } catch (e: any) {
+    console.error('[account] listClaims failed:', e?.message)
     return []
   }
 }
@@ -54,12 +54,24 @@ function asStringArray(v: unknown): string[] {
   if (!v) return []
   if (Array.isArray(v)) return v.map(x => String(x))
   if (typeof v === 'string') {
-    try { const parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed.map(x => String(x)) : [] } catch { return [] }
+    try {
+      const parsed = JSON.parse(v)
+      return Array.isArray(parsed) ? parsed.map(x => String(x)) : []
+    } catch { return [] }
   }
   return []
 }
 
-// ✅ blindage readMerchant (évite 500 en cas de pépin DB)
+function ymdSafe(input: string) {
+  try {
+    const d = new Date(input)
+    if (isNaN(d.getTime())) return String(input).slice(0, 10)
+    return d.toISOString().slice(0, 10)
+  } catch {
+    return String(input).slice(0, 10)
+  }
+}
+
 async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
   try {
     const { rows } = await pool.query(
@@ -71,23 +83,52 @@ async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
     if (!r) return null
     return {
       stripe_account_id: r.stripe_account_id ?? null,
-      charges_enabled:   !!r.charges_enabled,
-      payouts_enabled:   !!r.payouts_enabled,
-      requirements_due:  asStringArray(r.requirements_due),
+      charges_enabled: !!r.charges_enabled,
+      payouts_enabled: !!r.payouts_enabled,
+      requirements_due: asStringArray(r.requirements_due),
     }
-  } catch (e) {
-    console.error('[account] readMerchant failed:', (e as any)?.message)
+  } catch (e: any) {
+    console.error('[account] readMerchant failed:', e?.message)
     return null
   }
 }
 
-function ymdSafe(input: string) {
+// 🔁 Lazy-import Stripe & update en JSONB correct
+async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
   try {
-    const d = new Date(input)
-    if (isNaN(d.getTime())) return String(input).slice(0, 10)
-    return d.toISOString().slice(0, 10)
-  } catch {
-    return String(input).slice(0, 10)
+    const { default: Stripe } = await import('stripe')
+    const key = process.env.STRIPE_SECRET_KEY
+    if (!key) return null
+    const stripe = new Stripe(key as string)
+    const { rows } = await pool.query(
+      `select stripe_account_id from merchant_accounts where owner_id=$1`,
+      [ownerId]
+    )
+    const acctId = rows[0]?.stripe_account_id
+    if (!acctId) return null
+    const acct = await stripe.accounts.retrieve(acctId)
+    await pool.query(
+      `update merchant_accounts
+          set charges_enabled=$2,
+              payouts_enabled=$3,
+              requirements_due=$4::jsonb
+        where owner_id=$1`,
+      [
+        ownerId,
+        !!acct.charges_enabled,
+        !!acct.payouts_enabled,
+        JSON.stringify(acct.requirements?.currently_due || []),
+      ]
+    )
+    return {
+      stripe_account_id: acct.id,
+      charges_enabled: !!acct.charges_enabled,
+      payouts_enabled: !!acct.payouts_enabled,
+      requirements_due: (acct.requirements?.currently_due || []) as any,
+    }
+  } catch (e: any) {
+    console.error('[account] syncMerchantNow inner failed:', e?.message)
+    return null
   }
 }
 
@@ -104,40 +145,42 @@ async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
     )
     return rows.map(r => ({
       id: String(r.id),
-      ts: (()=>{ try { return new Date(r.ts).toISOString() } catch { return new Date(String(r.ts)).toISOString() } })(),
+      ts: (() => { try { return new Date(r.ts).toISOString() } catch { return new Date(String(r.ts)).toISOString() } })(),
       price_cents: r.price_cents,
       currency: r.currency || 'EUR',
       status: r.status
     }))
-  } catch (e) {
-    console.error('[account] readMyActiveListings failed:', (e as any)?.message)
+  } catch (e: any) {
+    console.error('[account] readMyActiveListings failed:', e?.message)
     return []
   }
+}
+
+function firstString(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v
 }
 
 export default async function Page({
   params,
   searchParams,
 }: {
-  // ✅ types runtime-corrects (pas besoin de Promise<> ici)
   params: Params,
   searchParams: Record<string, string | string[] | undefined>
 }) {
-  const locale = params?.locale === 'fr' ? 'fr' : 'en'
+  const locale: 'fr' | 'en' = params?.locale === 'fr' ? 'fr' : 'en'
 
-  // ✅ sécuriser readSession: si ça jette, on redirige
+  // Sécuriser readSession : jamais de throw SSR
   let sess: Awaited<ReturnType<typeof readSession>> | null = null
   try {
     sess = await readSession()
-  } catch (e) {
-    console.error('[account] readSession threw:', (e as any)?.message)
-    // Optionnel: on pourrait aussi invalider le cookie ici via un endpoint logout
+  } catch (e: any) {
+    console.error('[account] readSession threw:', e?.message)
   }
   if (!sess) {
     redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
   }
 
-  // ✅ faire les chargements en parallèle et tolérer les échecs partiels
+  // Chargements parallèles + tolérance aux échecs
   const [claimsRes, listingsRes, merchantRes] = await Promise.allSettled([
     listClaims(sess.ownerId),
     readMyActiveListings(sess.ownerId),
@@ -147,36 +190,14 @@ export default async function Page({
   const listings = listingsRes.status === 'fulfilled' ? listingsRes.value : []
   let merchant   = merchantRes.status === 'fulfilled' ? merchantRes.value : null
 
-  // ✅ Ne resynchroniser Stripe QUE sur retour d’onboarding (et on ignore toute erreur)
-  const needsSync = (searchParams?.connect === 'done')
+  // Resync Stripe uniquement au retour d’onboarding
+  const spConnect = firstString(searchParams?.connect)
+  const needsSync = spConnect === 'done'
   if (needsSync) {
     try {
-      const { default: Stripe } = await import('stripe')
-      const key = process.env.STRIPE_SECRET_KEY
-      if (key) {
-        const { rows } = await pool.query(`select stripe_account_id from merchant_accounts where owner_id=$1`, [sess.ownerId])
-        const acctId = rows[0]?.stripe_account_id
-        if (acctId) {
-          const stripe = new Stripe(key as string)
-          const acct = await stripe.accounts.retrieve(acctId)
-          await pool.query(
-            `update merchant_accounts
-                set charges_enabled=$2,
-                    payouts_enabled=$3,
-                    requirements_due=$4::jsonb
-              where owner_id=$1`,
-            [sess.ownerId, !!acct.charges_enabled, !!acct.payouts_enabled, acct.requirements?.currently_due || []]
-          )
-          merchant = {
-            stripe_account_id: acct.id,
-            charges_enabled: !!acct.charges_enabled,
-            payouts_enabled: !!acct.payouts_enabled,
-            requirements_due: (acct.requirements?.currently_due || []) as any,
-          }
-        }
-      }
-    } catch (e) {
-      console.error('[account] syncMerchantNow failed:', (e as any)?.message)
+      merchant = await syncMerchantNow(sess.ownerId) || merchant
+    } catch (e: any) {
+      console.error('[account] syncMerchantNow failed:', e?.message)
     }
   }
 
