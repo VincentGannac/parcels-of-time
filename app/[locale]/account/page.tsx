@@ -20,26 +20,67 @@ const TOKENS = {
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
-type ClaimRow = { ts: string; title: string | null; message: string | null; cert_style: string | null }
-async function listClaims(ownerId: string): Promise<ClaimRow[]> {
+/** ----- Utils ----- */
+function ymdSafe(input: string) {
   try {
-    const { rows } = await pool.query(
-      `select to_char(date_trunc('day', ts) at time zone 'UTC', 'YYYY-MM-DD') as ts,
-              title, message, cert_style
-         from claims
-        where owner_id = $1
-        order by ts desc
-        limit 200`,
-      [ownerId]
-    )
-    return rows.map(r => ({
-      ts: String(r.ts),
-      title: r.title ?? null,
-      message: r.message ?? null,
-      cert_style: r.cert_style ?? 'neutral',
-    }))
-  } catch (e: any) {
-    console.error('[account] listClaims failed:', e?.message)
+    const d = new Date(input)
+    if (isNaN(d.getTime())) return String(input).slice(0, 10)
+    return d.toISOString().slice(0, 10)
+  } catch {
+    return String(input).slice(0, 10)
+  }
+}
+function firstString(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v
+}
+async function withRetry<T>(fn: () => Promise<T>, label: string, attempts = 2): Promise<T> {
+  let lastErr: any
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn() } catch (e: any) {
+      lastErr = e
+      // petite pause pour laisser le pool respirer
+      await new Promise(r => setTimeout(r, 80))
+    }
+  }
+  console.error(`[account] ${label} failed after ${attempts} attempts:`, lastErr?.message || lastErr)
+  throw lastErr
+}
+
+/** ----- Queries (allégées) ----- */
+type ClaimDateRow = { ymd: string }
+async function listClaimDays(ownerId: string): Promise<ClaimDateRow[]> {
+  try {
+    return await withRetry(async () => {
+      const { rows } = await pool.query(
+        `select to_char(date_trunc('day', ts) at time zone 'UTC', 'YYYY-MM-DD') as ymd
+           from claims
+          where owner_id = $1
+          order by ts desc
+          limit 200`,
+        [ownerId]
+      )
+      return rows.map(r => ({ ymd: String(r.ymd) }))
+    }, 'listClaimDays')
+  } catch {
+    return []
+  }
+}
+
+type ListingDayRow = { ymd: string }
+async function listMyActiveListingDays(ownerId: string): Promise<ListingDayRow[]> {
+  try {
+    return await withRetry(async () => {
+      const { rows } = await pool.query(
+        `select to_char(date_trunc('day', ts) at time zone 'UTC', 'YYYY-MM-DD') as ymd
+           from listings
+          where seller_owner_id = $1
+            and status = 'active'
+          order by ts asc`,
+        [ownerId]
+      )
+      return rows.map(r => ({ ymd: String(r.ymd) }))
+    }, 'listMyActiveListingDays')
+  } catch {
     return []
   }
 }
@@ -58,44 +99,35 @@ function asStringArray(v: unknown): string[] {
   }
   return []
 }
-
-function ymdSafe(input: string) {
-  try {
-    const d = new Date(input)
-    if (isNaN(d.getTime())) return String(input).slice(0, 10)
-    return d.toISOString().slice(0, 10)
-  } catch {
-    return String(input).slice(0, 10)
-  }
-}
-
 async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
   try {
-    const { rows } = await pool.query(
-      `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
-         from merchant_accounts where owner_id=$1`,
-      [ownerId]
-    )
-    const r = rows[0]
-    if (!r) return null
-    return {
-      stripe_account_id: r.stripe_account_id ?? null,
-      charges_enabled:   !!r.charges_enabled,
-      payouts_enabled:   !!r.payouts_enabled,
-      requirements_due:  asStringArray(r.requirements_due),
-    }
-  } catch (e: any) {
-    console.error('[account] readMerchant failed:', e?.message)
+    return await withRetry(async () => {
+      const { rows } = await pool.query(
+        `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
+           from merchant_accounts where owner_id=$1`,
+        [ownerId]
+      )
+      const r = rows[0]
+      if (!r) return null
+      return {
+        stripe_account_id: r.stripe_account_id ?? null,
+        charges_enabled: !!r.charges_enabled,
+        payouts_enabled: !!r.payouts_enabled,
+        requirements_due: asStringArray(r.requirements_due),
+      }
+    }, 'readMerchant')
+  } catch {
     return null
   }
 }
 
-// 🔁 Lazy-import Stripe & update avec JSONB correct
+// 🔁 Resync Stripe uniquement si retour d’onboarding (cast JSONB correct)
 async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
   try {
     const { default: Stripe } = await import('stripe')
     const key = process.env.STRIPE_SECRET_KEY
     if (!key) return null
+    const stripe = new Stripe(key as string)
 
     const { rows } = await pool.query(
       `select stripe_account_id from merchant_accounts where owner_id=$1`,
@@ -104,9 +136,7 @@ async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
     const acctId = rows[0]?.stripe_account_id
     if (!acctId) return null
 
-    const stripe = new Stripe(key as string)
     const acct = await stripe.accounts.retrieve(acctId)
-
     await pool.query(
       `update merchant_accounts
           set charges_enabled=$2,
@@ -117,10 +147,9 @@ async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
         ownerId,
         !!acct.charges_enabled,
         !!acct.payouts_enabled,
-        JSON.stringify(acct.requirements?.currently_due || []), // ⬅ important
+        JSON.stringify(acct.requirements?.currently_due || []),
       ]
     )
-
     return {
       stripe_account_id: acct.id,
       charges_enabled: !!acct.charges_enabled,
@@ -133,35 +162,11 @@ async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
   }
 }
 
-type MyListing = { id: string; ts: string; price_cents: number; currency: string; status: 'active'|'sold'|'canceled' }
-async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
-  try {
-    const { rows } = await pool.query(
-      `select id, ts, price_cents, currency, status
-         from listings
-        where seller_owner_id = $1
-          and status = 'active'
-        order by ts asc`,
-      [ownerId]
-    )
-    return rows.map(r => ({
-      id: String(r.id),
-      ts: (()=>{ try { return new Date(r.ts).toISOString() } catch { return new Date(String(r.ts)).toISOString() } })(),
-      price_cents: r.price_cents,
-      currency: r.currency || 'EUR',
-      status: r.status
-    }))
-  } catch (e: any) {
-    console.error('[account] readMyActiveListings failed:', e?.message)
-    return []
-  }
-}
-
+/** ----- Page ----- */
 export default async function Page({
   params,
   searchParams,
 }: {
-  // ⬇️ signature Promise (conforme à tes types de projet)
   params: Promise<Params>,
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
@@ -169,40 +174,30 @@ export default async function Page({
   const locale: 'fr' | 'en' = rawLocale === 'fr' ? 'fr' : 'en'
   const sp = await searchParams
 
-  // readSession ne doit jamais faire tomber le SSR
+  // Session robuste
   let sess: Awaited<ReturnType<typeof readSession>> | null = null
-  try {
-    sess = await readSession()
-  } catch (e: any) {
-    console.error('[account] readSession threw:', e?.message)
-  }
-  if (!sess) {
-    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
-  }
+  try { sess = await readSession() } catch (e: any) { console.error('[account] readSession threw:', e?.message) }
+  if (!sess) redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
 
-  // Chargements parallèles + tolérance aux échecs
+  // Chargements parallèles et légers
   const [claimsRes, listingsRes, merchantRes] = await Promise.allSettled([
-    listClaims(sess.ownerId),
-    readMyActiveListings(sess.ownerId),
+    listClaimDays(sess.ownerId),
+    listMyActiveListingDays(sess.ownerId),
     readMerchant(sess.ownerId),
   ])
-  const claims   = claimsRes.status === 'fulfilled'   ? claimsRes.value   : []
-  const listings = listingsRes.status === 'fulfilled' ? listingsRes.value : []
-  let merchant   = merchantRes.status === 'fulfilled' ? merchantRes.value : null
+  let claims = claimsRes.status === 'fulfilled' ? claimsRes.value : []
+  let listingDays = listingsRes.status === 'fulfilled' ? listingsRes.value : []
+  let merchant = merchantRes.status === 'fulfilled' ? merchantRes.value : null
 
-  // Resync Stripe uniquement si retour onboarding
-  const connectParam = Array.isArray(sp?.connect) ? sp.connect[0] : sp?.connect
-  const needsSync = connectParam === 'done'
-  if (needsSync) {
-    try {
-      merchant = await syncMerchantNow(sess.ownerId) || merchant
-    } catch (e: any) {
+  // Resync Stripe si retour onboarding
+  const connectParam = firstString(sp?.connect)
+  if (connectParam === 'done') {
+    try { merchant = await syncMerchantNow(sess.ownerId) || merchant } catch (e: any) {
       console.error('[account] syncMerchantNow failed:', e?.message)
     }
   }
 
   const year = new Date().getUTCFullYear()
-  const activeYmd = new Set(listings.map(l => ymdSafe(l.ts)))
 
   return (
     <main
@@ -275,7 +270,6 @@ export default async function Page({
 
             {/* Onboarding selector */}
             <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}}>
-              {/* On passe la locale au backend */}
               <input type="hidden" name="locale" value={locale} />
               <fieldset style={{border:'1px solid var(--color-border)', borderRadius:10, padding:12}}>
                 <legend style={{padding:'0 6px'}}>
@@ -316,48 +310,46 @@ export default async function Page({
             </form>
           </section>
 
-          {/* Active listings */}
+          {/* Active listings — only dates → /m/YYYY-MM-DD */}
           <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
             <h2 style={{fontSize:18, margin:'0 0 10px'}}>
               {locale==='fr' ? 'Mes annonces actives' : 'My active listings'}
             </h2>
-            {listings.length === 0 ? (
+
+            {listingDays.length === 0 ? (
               <p style={{margin:0, opacity:.8}}>
                 {locale==='fr' ? 'Aucune date en vente pour l’instant.' : 'No active listings yet.'}
               </p>
             ) : (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10}}>
-                {listings.map(item=>{
-                  const ymd = ymdSafe(item.ts)
+              <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
+                {listingDays.map(d => {
+                  const ymd = ymdSafe(d.ymd)
                   return (
-                    <div key={item.id} style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)'}}>
-                      <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
-                      <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
-                      <div style={{display:'flex', gap:8, marginTop:10}}>
-                        <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', color:'var(--color-text)'}}>
-                          {locale==='fr' ? 'Ouvrir' : 'Open'}
-                        </a>
-                        <form method="post" action={`/api/marketplace/listing/${item.id}/status`}>
-                          <input type="hidden" name="action" value="cancel" />
-                          <input type="hidden" name="locale" value={locale} />
-                          <input type="hidden" name="next" value={`/${locale}/account`} />
-                          <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'#ffb2b2'}}>
-                            {locale==='fr' ? 'Retirer' : 'Cancel'}
-                          </button>
-                        </form>
-                      </div>
-                    </div>
+                    <a key={ymd} href={`/${locale}/m/${encodeURIComponent(ymd)}`}
+                      style={{
+                        textDecoration:'none',
+                        padding:'8px 12px',
+                        borderRadius:10,
+                        border:'1px solid var(--color-border)',
+                        background:'rgba(255,255,255,.02)',
+                        color:'var(--color-text)',
+                        fontWeight:700
+                      }}
+                    >
+                      {ymd}
+                    </a>
                   )
                 })}
               </div>
             )}
+
             <p style={{marginTop:10, fontSize:12, opacity:.7}}>
               {locale==='fr' ? 'Commission 10% (min 1 €) appliquée lors de la vente.' : '10% commission (min €1) on sale.'}
             </p>
           </section>
         </div>
 
-        {/* Certificates gallery — date first */}
+        {/* Certificates — only dates → /m/YYYY-MM-DD */}
         <section style={{marginTop:18}}>
           <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
             <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
@@ -367,53 +359,22 @@ export default async function Page({
                 {locale === 'fr' ? 'Aucun certificat pour le moment.' : 'No certificates yet.'}
               </div>
             ) : (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:12}}>
+              <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
                 {claims.map(c => {
-                  const href = `/${locale}/m/${encodeURIComponent(c.ts)}`
-                  const isOnSale = activeYmd.has(c.ts)
-
+                  const ymd = ymdSafe(c.ymd)
                   return (
-                    <a key={c.ts} href={href}
+                    <a key={ymd} href={`/${locale}/m/${encodeURIComponent(ymd)}`}
                       style={{
-                        display:'grid',
-                        gridTemplateRows:'140px auto',
-                        border:'1px solid var(--color-border)',
-                        borderRadius:12,
-                        overflow:'hidden',
                         textDecoration:'none',
-                        color:'var(--color-text)',
+                        padding:'10px 14px',
+                        borderRadius:10,
+                        border:'1px solid var(--color-border)',
                         background:'rgba(255,255,255,.02)',
-                        boxShadow:'var(--shadow-elev1)'
+                        color:'var(--color-text)',
+                        fontWeight:800
                       }}
                     >
-                      {/* Vignette simple : date très lisible */}
-                      <div style={{position:'relative', display:'grid', placeItems:'center', background:'linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02))', borderBottom:'1px solid var(--color-border)'}}>
-                        {isOnSale && (
-                          <span style={{
-                            position:'absolute', top:8, left:8,
-                            padding:'6px 10px',
-                            borderRadius:999,
-                            background:'rgba(14,170,80,.18)',
-                            border:'1px solid rgba(14,170,80,.4)',
-                            fontSize:12
-                          }}>
-                            {locale==='fr' ? 'En vente' : 'On sale'}
-                          </span>
-                        )}
-                        <div style={{textAlign:'center', lineHeight:1.06}}>
-                          <div style={{fontFamily:'Fraunces, serif', fontWeight:900, fontSize:32}}>
-                            {c.ts}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Infos */}
-                      <div style={{padding:12}}>
-                        {c.title && <div style={{fontWeight:800}}>{c.title}</div>}
-                        <div style={{opacity:.75, marginTop: c.title ? 6 : 0, whiteSpace:'pre-wrap', maxHeight:48, overflow:'hidden', textOverflow:'ellipsis'}}>
-                          {c.message || (locale==='fr' ? 'Ouvrir le certificat' : 'Open certificate')}
-                        </div>
-                      </div>
+                      {ymd}
                     </a>
                   )
                 })}
