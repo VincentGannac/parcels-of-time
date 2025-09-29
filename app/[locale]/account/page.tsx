@@ -132,6 +132,13 @@ export default async function Page({
   const listings = await readMyActiveListings(sess.ownerId)
   const year = new Date().getUTCFullYear()
 
+  // Pour afficher un badge “En vente” sur les vignettes correspondantes
+  const activeYmd = new Set(
+    listings.map(l => {
+      try { return new Date(l.ts).toISOString().slice(0,10) } catch { return String(l.ts).slice(0,10) }
+    })
+  )
+
   return (
     <main
       style={{
@@ -283,10 +290,11 @@ export default async function Page({
           </section>
         </div>
 
-        {/* Certificates gallery with images */}
+        {/* Certificates gallery with fixed A4 previews */}
         <section style={{marginTop:18}}>
           <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
             <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
+
             {claims.length === 0 ? (
               <div style={{border:'1px dashed var(--color-border)', padding:16, borderRadius:12, opacity:.8}}>
                 {locale === 'fr' ? 'Aucun certificat pour le moment.' : 'No certificates yet.'}
@@ -296,34 +304,81 @@ export default async function Page({
                 {claims.map(c => {
                   const href = `/${locale}/m/${encodeURIComponent(c.ts)}`
                   const styleName = (c.cert_style || 'neutral').replace(/[^a-z0-9_-]/gi, '').toLowerCase()
-                  const bg = `/cert_bg/${styleName}_thumb.jpg`
+
+                  // Images de fond par style
+                  const thumb = `/cert_bg/${styleName}_thumb.jpg`
+                  const full  = `/cert_bg/${styleName}.png`
+
+                  // Si style "custom", on tente d’afficher le fond perso enregistré pour ce jour
+                  const customBg = `/api/claim-bg/${encodeURIComponent(c.ts)}?v=1`
+
+                  const isOnSale = activeYmd.has(c.ts)
+
                   return (
                     <a key={c.ts} href={href}
-                      style={{
-                        display:'grid',
-                        gridTemplateRows:'140px auto',
-                        border:'1px solid var(--color-border)',
-                        borderRadius:12,
-                        overflow:'hidden',
-                        textDecoration:'none',
-                        color:'var(--color-text)',
-                        background:'rgba(255,255,255,.02)',
-                        boxShadow:'var(--shadow-elev1)'
-                      }}
+                       style={{
+                         display:'grid',
+                         gridTemplateRows:'auto auto',
+                         border:'1px solid var(--color-border)',
+                         borderRadius:12,
+                         overflow:'hidden',
+                         textDecoration:'none',
+                         color:'var(--color-text)',
+                         background:'rgba(255,255,255,.02)',
+                         boxShadow:'var(--shadow-elev1)',
+                         transition:'transform .2s ease'
+                       }}
                     >
+                      {/* Aperçu A4 fidèle (pas d’étirement) */}
                       <div
                         style={{
-                          backgroundImage:`url(${bg})`,
+                          position:'relative',
+                          width:'100%',
+                          aspectRatio:'595.28/841.89',
+                          borderBottom:'1px solid var(--color-border)',
+                          // 1) custom → fallback neutre
+                          // 2) styles → thumb puis full
+                          backgroundImage: styleName === 'custom'
+                            ? `url(${customBg}), url(/cert_bg/neutral.png)`
+                            : `url(${thumb}), url(${full})`,
                           backgroundSize:'cover',
                           backgroundPosition:'center',
-                          borderBottom:'1px solid var(--color-border)'
+                          backgroundColor:'#0E1017'
                         }}
                         aria-hidden
-                      />
+                      >
+                        {/* Badge en vente */}
+                        {isOnSale && (
+                          <span style={{
+                            position:'absolute', top:8, left:8,
+                            padding:'6px 10px',
+                            borderRadius:999,
+                            background:'rgba(14,170,80,.18)',
+                            border:'1px solid rgba(14,170,80,.4)',
+                            fontSize:12
+                          }}>
+                            {locale==='fr' ? 'En vente' : 'On sale'}
+                          </span>
+                        )}
+                        {/* Date en overlay pour repère visuel */}
+                        <span style={{
+                          position:'absolute', bottom:8, right:8,
+                          padding:'6px 10px',
+                          borderRadius:8,
+                          background:'rgba(0,0,0,.28)',
+                          border:'1px solid rgba(255,255,255,.12)',
+                          fontSize:12
+                        }}>
+                          {c.ts}
+                        </span>
+                      </div>
+
+                      {/* Infos */}
                       <div style={{padding:12}}>
-                        <div style={{fontWeight:800}}>{c.ts}</div>
-                        {c.title && <div style={{opacity:.85, marginTop:4}}>{c.title}</div>}
-                        {c.message && <div style={{opacity:.65, marginTop:2, whiteSpace:'pre-wrap', maxHeight:48, overflow:'hidden', textOverflow:'ellipsis'}}>{c.message}</div>}
+                        {c.title && <div style={{fontWeight:800, lineHeight:1.2}}>{c.title}</div>}
+                        <div style={{opacity:.75, marginTop: c.title ? 6 : 0, whiteSpace:'pre-wrap', maxHeight:48, overflow:'hidden', textOverflow:'ellipsis'}}>
+                          {c.message || (locale==='fr' ? 'Ouvrir le certificat' : 'Open certificate')}
+                        </div>
                       </div>
                     </a>
                   )
