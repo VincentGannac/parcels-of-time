@@ -2,6 +2,7 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const preferredRegion = ['cdg1','fra1']
 
 import { redirect } from 'next/navigation'
 import { pool } from '@/lib/db'

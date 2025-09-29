@@ -1,6 +1,7 @@
 // app/api/reports/sales/route.ts
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const preferredRegion = ['cdg1','fra1']
 
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
