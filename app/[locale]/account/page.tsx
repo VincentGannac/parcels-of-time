@@ -290,7 +290,7 @@ export default async function Page({
           </section>
         </div>
 
-        {/* Certificates gallery — REAL PDF previews + big date */}
+        {/* Certificates gallery with TRUE PDF previews */}
         <section style={{marginTop:18}}>
           <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
             <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
@@ -303,72 +303,71 @@ export default async function Page({
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:12}}>
                 {claims.map(c => {
                   const href = `/${locale}/m/${encodeURIComponent(c.ts)}`
+                  const pdfSrc = `/api/cert/${encodeURIComponent(c.ts)}#page=1&view=FitH&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=0`
                   const isOnSale = activeYmd.has(c.ts)
-                  const styleName = (c.cert_style || 'neutral').replace(/[^a-z0-9_-]/gi, '').toLowerCase()
-                  const fallbackBg = `/cert_bg/${styleName}.png`
-                  const pdfSrc = `/api/cert/${encodeURIComponent(c.ts)}?public=1&hide_meta=1`
 
                   return (
-                    <div
-                      key={c.ts}
+                    <a key={c.ts} href={href}
                       style={{
+                        display:'grid',
+                        gridTemplateRows:'auto auto',
                         border:'1px solid var(--color-border)',
                         borderRadius:12,
                         overflow:'hidden',
+                        textDecoration:'none',
+                        color:'var(--color-text)',
                         background:'rgba(255,255,255,.02)',
-                        boxShadow:'var(--shadow-elev1)',
-                        display:'grid',
-                        gridTemplateRows:'auto auto'
+                        boxShadow:'var(--shadow-elev1)'
                       }}
                     >
-                      {/* Preview wrapper */}
-                      <div style={{position:'relative', width:'100%', aspectRatio:'595.28/841.89', borderBottom:'1px solid var(--color-border)'}}>
-                        {/* REAL certificate preview (PDF) */}
-                        <object
-                          data={pdfSrc}
-                          type="application/pdf"
-                          aria-label={`Aperçu du certificat ${c.ts}`}
-                          style={{position:'absolute', inset:0, width:'100%', height:'100%', border:'none'}}
-                        >
-                          {/* Fallback image if PDF preview unsupported (iOS/Safari) */}
-                          <img
-                            src={fallbackBg}
-                            alt=""
-                            style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', background:'#0E1017'}}
-                          />
-                        </object>
-
-                        {/* Click overlay to ensure the whole card navigates */}
-                        <a
-                          href={href}
-                          aria-label={locale==='fr' ? `Ouvrir le certificat du ${c.ts}` : `Open certificate ${c.ts}`}
-                          style={{position:'absolute', inset:0, zIndex:2}}
-                        />
-
-                        {/* On-sale badge */}
+                      {/* VRAI certificat (PDF) — affiché dans un conteneur A4 */}
+                      <div
+                        style={{
+                          position:'relative',
+                          width:'100%',
+                          aspectRatio:'595.28/841.89',
+                          borderBottom:'1px solid var(--color-border)',
+                          background:'#0E1017'
+                        }}
+                      >
+                        {/* Badge en vente */}
                         {isOnSale && (
-                          <span
-                            style={{
-                              position:'absolute', top:8, left:8, zIndex:3,
-                              padding:'6px 10px',
-                              borderRadius:999,
-                              background:'rgba(14,170,80,.18)',
-                              border:'1px solid rgba(14,170,80,.4)',
-                              fontSize:12
-                            }}
-                          >
+                          <span style={{
+                            position:'absolute', top:8, left:8, zIndex:2,
+                            padding:'6px 10px',
+                            borderRadius:999,
+                            background:'rgba(14,170,80,.18)',
+                            border:'1px solid rgba(14,170,80,.4)',
+                            fontSize:12
+                          }}>
                             {locale==='fr' ? 'En vente' : 'On sale'}
                           </span>
                         )}
+
+                        <iframe
+                          src={pdfSrc}
+                          title={`Certificat ${c.ts}`}
+                          loading="lazy"
+                          style={{
+                            position:'absolute',
+                            inset:0,
+                            width:'100%',
+                            height:'100%',
+                            border:'none',
+                            // important : on laisse le clic à l'anchor parent
+                            pointerEvents:'none',
+                            background:'#0E1017'
+                          }}
+                        />
                       </div>
 
-                      {/* Big date only */}
-                      <a href={href} style={{textDecoration:'none', color:'var(--color-text)'}}>
-                        <div style={{padding:'12px 12px 14px', textAlign:'center'}}>
-                          <div style={{fontWeight:900, fontSize:20, letterSpacing:.3}}>{c.ts}</div>
+                      {/* Sous la prévisualisation : GROSSE DATE */}
+                      <div style={{padding:12, textAlign:'center'}}>
+                        <div style={{fontFamily:'Fraunces, serif', fontWeight:900, fontSize:22, letterSpacing:.2}}>
+                          {c.ts}
                         </div>
-                      </a>
-                    </div>
+                      </div>
+                    </a>
                   )
                 })}
               </div>
