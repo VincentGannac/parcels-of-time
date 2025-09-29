@@ -26,10 +26,10 @@ async function listClaims(ownerId: string): Promise<ClaimRow[]> {
     const { rows } = await pool.query(
       `select to_char(date_trunc('day', ts) at time zone 'UTC', 'YYYY-MM-DD') as ts,
               title, message, cert_style
-       from claims
-       where owner_id = $1
-       order by ts desc
-       limit 200`,
+         from claims
+        where owner_id = $1
+        order by ts desc
+        limit 200`,
       [ownerId]
     )
     return rows.map(r => ({
@@ -54,10 +54,7 @@ function asStringArray(v: unknown): string[] {
   if (!v) return []
   if (Array.isArray(v)) return v.map(x => String(x))
   if (typeof v === 'string') {
-    try {
-      const parsed = JSON.parse(v)
-      return Array.isArray(parsed) ? parsed.map(x => String(x)) : []
-    } catch { return [] }
+    try { const parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed.map(String) : [] } catch { return [] }
   }
   return []
 }
@@ -83,9 +80,9 @@ async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
     if (!r) return null
     return {
       stripe_account_id: r.stripe_account_id ?? null,
-      charges_enabled: !!r.charges_enabled,
-      payouts_enabled: !!r.payouts_enabled,
-      requirements_due: asStringArray(r.requirements_due),
+      charges_enabled:   !!r.charges_enabled,
+      payouts_enabled:   !!r.payouts_enabled,
+      requirements_due:  asStringArray(r.requirements_due),
     }
   } catch (e: any) {
     console.error('[account] readMerchant failed:', e?.message)
@@ -93,20 +90,23 @@ async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
   }
 }
 
-// 🔁 Lazy-import Stripe & update en JSONB correct
+// 🔁 Lazy-import Stripe & update avec JSONB correct
 async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
   try {
     const { default: Stripe } = await import('stripe')
     const key = process.env.STRIPE_SECRET_KEY
     if (!key) return null
-    const stripe = new Stripe(key as string)
+
     const { rows } = await pool.query(
       `select stripe_account_id from merchant_accounts where owner_id=$1`,
       [ownerId]
     )
     const acctId = rows[0]?.stripe_account_id
     if (!acctId) return null
+
+    const stripe = new Stripe(key as string)
     const acct = await stripe.accounts.retrieve(acctId)
+
     await pool.query(
       `update merchant_accounts
           set charges_enabled=$2,
@@ -117,9 +117,10 @@ async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
         ownerId,
         !!acct.charges_enabled,
         !!acct.payouts_enabled,
-        JSON.stringify(acct.requirements?.currently_due || []),
+        JSON.stringify(acct.requirements?.currently_due || []), // ⬅ important
       ]
     )
+
     return {
       stripe_account_id: acct.id,
       charges_enabled: !!acct.charges_enabled,
@@ -145,7 +146,7 @@ async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
     )
     return rows.map(r => ({
       id: String(r.id),
-      ts: (() => { try { return new Date(r.ts).toISOString() } catch { return new Date(String(r.ts)).toISOString() } })(),
+      ts: (()=>{ try { return new Date(r.ts).toISOString() } catch { return new Date(String(r.ts)).toISOString() } })(),
       price_cents: r.price_cents,
       currency: r.currency || 'EUR',
       status: r.status
@@ -156,20 +157,19 @@ async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
   }
 }
 
-function firstString(v: string | string[] | undefined): string | undefined {
-  return Array.isArray(v) ? v[0] : v
-}
-
 export default async function Page({
   params,
   searchParams,
 }: {
-  params: Params,
-  searchParams: Record<string, string | string[] | undefined>
+  // ⬇️ signature Promise (conforme à tes types de projet)
+  params: Promise<Params>,
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const locale: 'fr' | 'en' = params?.locale === 'fr' ? 'fr' : 'en'
+  const { locale: rawLocale } = await params
+  const locale: 'fr' | 'en' = rawLocale === 'fr' ? 'fr' : 'en'
+  const sp = await searchParams
 
-  // Sécuriser readSession : jamais de throw SSR
+  // readSession ne doit jamais faire tomber le SSR
   let sess: Awaited<ReturnType<typeof readSession>> | null = null
   try {
     sess = await readSession()
@@ -190,9 +190,9 @@ export default async function Page({
   const listings = listingsRes.status === 'fulfilled' ? listingsRes.value : []
   let merchant   = merchantRes.status === 'fulfilled' ? merchantRes.value : null
 
-  // Resync Stripe uniquement au retour d’onboarding
-  const spConnect = firstString(searchParams?.connect)
-  const needsSync = spConnect === 'done'
+  // Resync Stripe uniquement si retour onboarding
+  const connectParam = Array.isArray(sp?.connect) ? sp.connect[0] : sp?.connect
+  const needsSync = connectParam === 'done'
   if (needsSync) {
     try {
       merchant = await syncMerchantNow(sess.ownerId) || merchant
