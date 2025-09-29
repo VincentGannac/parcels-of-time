@@ -6,21 +6,46 @@ import Stripe from 'stripe'
 import { pool } from '@/lib/db'
 import { readSession } from '@/lib/auth'
 
-/** Utilitaires */
+/** Helpers */
 function getBaseFromReq(req: Request) {
   return process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
 }
-
 function sellerPublicUrl(base: string, ownerId: string) {
-  // Si tu as une page vendeur, remplace par `${base}/u/${ownerId}`
+  // Si tu as une page vendeur: return `${base}/u/${ownerId}`
   return base
 }
+type SellerKind = 'individual' | 'company'
+function parseSellerKind(req: Request): SellerKind {
+  const ctype = (req.headers.get('content-type') || '').toLowerCase()
+  if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
+    // @ts-ignore - next runtime FormData
+    return (async () => {
+      const form = await req.formData()
+      const v = String(form.get('seller_kind') || '').toLowerCase()
+      return v === 'company' ? 'company' : 'individual'
+    })() as any
+  } else {
+    return (async () => {
+      try {
+        const body = await req.json()
+        const v = String(body?.seller_kind || '').toLowerCase()
+        return v === 'company' ? 'company' : 'individual'
+      } catch { return 'individual' }
+    })() as any
+  }
+}
 
-/** Création / récupération + PREFILL du compte Connect (mcc, url, description…) */
-async function ensurePrefilledAccount(stripe: Stripe, ownerId: string, email: string, base: string) {
+/** Création / récupération + PREFILL du compte Connect */
+async function ensurePrefilledAccount(
+  stripe: Stripe,
+  ownerId: string,
+  email: string,
+  base: string,
+  sellerKind: SellerKind
+) {
   const sellerUrl = sellerPublicUrl(base, ownerId)
 
-  // 1) Lire un éventuel compte existant
+  // 1) Lire compte existant
   const { rows } = await pool.query(
     'select stripe_account_id from merchant_accounts where owner_id=$1',
     [ownerId]
@@ -33,21 +58,24 @@ async function ensurePrefilledAccount(stripe: Stripe, ownerId: string, email: st
       type: 'express',
       country: 'FR',
       email,
-      business_type: 'individual',              // particuliers (C2C)
+      business_type: sellerKind === 'company' ? 'company' : 'individual',
       default_currency: 'eur',
       capabilities: {
         transfers: { requested: true },
         card_payments: { requested: true },
       },
+      // ✅ Particulier : on préremplit pour éviter l’écran “secteur / site”
       business_profile: {
-        // ✅ Pré-remplissage pour éviter l’écran "Secteur d’activité / Site web"
-        mcc: '5815', // Digital goods – ajuste au besoin
+        mcc: '5815', // digital goods (ajuste si besoin)
         url: sellerUrl,
         product_description: 'C2C resale of Parcels of Time certificates (marketplace)',
         support_url: `${base}/help`,
         support_email: 'support@parcelsoftime.com',
       },
-      metadata: { pot_owner_id: String(ownerId) },
+      metadata: {
+        pot_owner_id: String(ownerId),
+        seller_kind: sellerKind,
+      },
     })
     accountId = acct.id
 
@@ -58,8 +86,9 @@ async function ensurePrefilledAccount(stripe: Stripe, ownerId: string, email: st
       [ownerId, accountId, !!acct.charges_enabled, !!acct.payouts_enabled]
     )
   } else {
-    // 3) Mettre à jour le profil (si le compte existe déjà)
+    // 3) Mettre à jour le profil & le type si besoin (ex: passage pro)
     await stripe.accounts.update(accountId, {
+      business_type: sellerKind === 'company' ? 'company' : 'individual',
       business_profile: {
         mcc: '5815',
         url: sellerUrl,
@@ -67,36 +96,37 @@ async function ensurePrefilledAccount(stripe: Stripe, ownerId: string, email: st
         support_url: `${base}/help`,
         support_email: 'support@parcelsoftime.com',
       },
+      metadata: { seller_kind: sellerKind },
     })
   }
 
   return accountId!
 }
 
-/** Lien d’onboarding (collecte minimale immédiate) */
-async function makeOnboardingLink(stripe: Stripe, accountId: string, base: string) {
+/** Lien d’onboarding : collecte minimale immédiate */
+function makeOnboardingLink(stripe: Stripe, accountId: string, base: string) {
   return stripe.accountLinks.create({
     account: accountId,
     refresh_url: `${base}/api/connect/refresh`,
     return_url: `${base}/account?connect=done`,
     type: 'account_onboarding',
-    collect: 'eventually_due', // réduit la friction initiale, Stripe demandera le reste avant le premier payout
+    collect: 'eventually_due', // Stripe demandera le reste avant le 1er payout
   })
 }
 
-/** POST: appelé depuis un <form> ou via fetch */
+/** POST : depuis le formulaire avec radio Particulier/Pro (ou via fetch JSON) */
 export async function POST(req: Request) {
   const sess = await readSession()
   if (!sess) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
   const base = getBaseFromReq(req)
+  const sellerKind = await parseSellerKind(req)
 
   try {
-    const accountId = await ensurePrefilledAccount(stripe, sess.ownerId, sess.email, base)
+    const accountId = await ensurePrefilledAccount(stripe, sess.ownerId, sess.email, base, sellerKind)
     const link = await makeOnboardingLink(stripe, accountId, base)
 
-    // ✅ si c'est un <form> → redirige, sinon JSON
     const ctype = (req.headers.get('content-type') || '').toLowerCase()
     if (ctype.includes('application/x-www-form-urlencoded')) {
       return NextResponse.redirect(link.url, { status: 303 })
@@ -112,19 +142,20 @@ export async function POST(req: Request) {
   }
 }
 
-/** GET: permet de (re)lancer l’onboarding par simple lien */
+/** GET : simple lien pour relancer l’onboarding (par défaut “Particulier”) */
 export async function GET(req: Request) {
   const sess = await readSession()
   if (!sess) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
   const base = getBaseFromReq(req)
+  const sellerKind: SellerKind = 'individual' // défaut si GET direct
 
   try {
-    const accountId = await ensurePrefilledAccount(stripe, sess.ownerId, sess.email, base)
+    const accountId = await ensurePrefilledAccount(stripe, sess.ownerId, sess.email, base, sellerKind)
     const link = await makeOnboardingLink(stripe, accountId, base)
     return NextResponse.redirect(link.url, { status: 303 })
-  } catch (e: any) {
+  } catch {
     return NextResponse.redirect(`${base}/account?connect=err`, { status: 303 })
   }
 }
