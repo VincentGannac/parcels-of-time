@@ -132,7 +132,7 @@ export default async function Page({
   const listings = await readMyActiveListings(sess.ownerId)
   const year = new Date().getUTCFullYear()
 
-  // Pour afficher un badge “En vente” sur les vignettes correspondantes
+  // Vignettes : badge “En vente” pour les dates listées
   const activeYmd = new Set(
     listings.map(l => {
       try { return new Date(l.ts).toISOString().slice(0,10) } catch { return String(l.ts).slice(0,10) }
@@ -290,7 +290,7 @@ export default async function Page({
           </section>
         </div>
 
-        {/* Certificates gallery with TRUE PDF previews */}
+        {/* Certificates gallery — date first */}
         <section style={{marginTop:18}}>
           <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
             <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
@@ -300,17 +300,16 @@ export default async function Page({
                 {locale === 'fr' ? 'Aucun certificat pour le moment.' : 'No certificates yet.'}
               </div>
             ) : (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:12}}>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:12}}>
                 {claims.map(c => {
                   const href = `/${locale}/m/${encodeURIComponent(c.ts)}`
-                  const pdfSrc = `/api/cert/${encodeURIComponent(c.ts)}#page=1&view=FitH&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=0`
                   const isOnSale = activeYmd.has(c.ts)
 
                   return (
                     <a key={c.ts} href={href}
                       style={{
                         display:'grid',
-                        gridTemplateRows:'auto auto',
+                        gridTemplateRows:'140px auto',
                         border:'1px solid var(--color-border)',
                         borderRadius:12,
                         overflow:'hidden',
@@ -320,20 +319,11 @@ export default async function Page({
                         boxShadow:'var(--shadow-elev1)'
                       }}
                     >
-                      {/* VRAI certificat (PDF) — affiché dans un conteneur A4 */}
-                      <div
-                        style={{
-                          position:'relative',
-                          width:'100%',
-                          aspectRatio:'595.28/841.89',
-                          borderBottom:'1px solid var(--color-border)',
-                          background:'#0E1017'
-                        }}
-                      >
-                        {/* Badge en vente */}
+                      {/* Vignette simple : date très lisible */}
+                      <div style={{position:'relative', display:'grid', placeItems:'center', background:'linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02))', borderBottom:'1px solid var(--color-border)'}}>
                         {isOnSale && (
                           <span style={{
-                            position:'absolute', top:8, left:8, zIndex:2,
+                            position:'absolute', top:8, left:8,
                             padding:'6px 10px',
                             borderRadius:999,
                             background:'rgba(14,170,80,.18)',
@@ -343,28 +333,21 @@ export default async function Page({
                             {locale==='fr' ? 'En vente' : 'On sale'}
                           </span>
                         )}
-
-                        <iframe
-                          src={pdfSrc}
-                          title={`Certificat ${c.ts}`}
-                          loading="lazy"
-                          style={{
-                            position:'absolute',
-                            inset:0,
-                            width:'100%',
-                            height:'100%',
-                            border:'none',
-                            // important : on laisse le clic à l'anchor parent
-                            pointerEvents:'none',
-                            background:'#0E1017'
-                          }}
-                        />
+                        <div style={{textAlign:'center', lineHeight:1.06}}>
+                          <div style={{fontFamily:'Fraunces, serif', fontWeight:900, fontSize:32}}>
+                            {c.ts}
+                          </div>
+                          {/* Mini sous-titre optionnel (style) si tu veux l’afficher un jour
+                          <div style={{opacity:.7, fontSize:12, marginTop:4}}>{(c.cert_style || 'neutral')}</div>
+                          */}
+                        </div>
                       </div>
 
-                      {/* Sous la prévisualisation : GROSSE DATE */}
-                      <div style={{padding:12, textAlign:'center'}}>
-                        <div style={{fontFamily:'Fraunces, serif', fontWeight:900, fontSize:22, letterSpacing:.2}}>
-                          {c.ts}
+                      {/* Infos */}
+                      <div style={{padding:12}}>
+                        {c.title && <div style={{fontWeight:800}}>{c.title}</div>}
+                        <div style={{opacity:.75, marginTop: c.title ? 6 : 0, whiteSpace:'pre-wrap', maxHeight:48, overflow:'hidden', textOverflow:'ellipsis'}}>
+                          {c.message || (locale==='fr' ? 'Ouvrir le certificat' : 'Open certificate')}
                         </div>
                       </div>
                     </a>
