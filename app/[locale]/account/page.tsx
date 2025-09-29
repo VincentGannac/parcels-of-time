@@ -32,8 +32,16 @@ async function listClaims(ownerId: string): Promise<ClaimRow[]> {
        limit 200`,
       [ownerId]
     )
-    return rows.map(r => ({ ts: String(r.ts), title: r.title ?? null, message: r.message ?? null, cert_style: r.cert_style ?? 'neutral' }))
-  } catch { return [] }
+    return rows.map(r => ({
+      ts: String(r.ts),
+      title: r.title ?? null,
+      message: r.message ?? null,
+      cert_style: r.cert_style ?? 'neutral'
+    }))
+  } catch (e) {
+    console.error('[account] listClaims failed:', (e as any)?.message)
+    return []
+  }
 }
 
 type MerchantRow = {
@@ -51,6 +59,28 @@ function asStringArray(v: unknown): string[] {
   return []
 }
 
+// ✅ blindage readMerchant (évite 500 en cas de pépin DB)
+async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
+  try {
+    const { rows } = await pool.query(
+      `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
+         from merchant_accounts where owner_id=$1`,
+      [ownerId]
+    )
+    const r = rows[0]
+    if (!r) return null
+    return {
+      stripe_account_id: r.stripe_account_id ?? null,
+      charges_enabled:   !!r.charges_enabled,
+      payouts_enabled:   !!r.payouts_enabled,
+      requirements_due:  asStringArray(r.requirements_due),
+    }
+  } catch (e) {
+    console.error('[account] readMerchant failed:', (e as any)?.message)
+    return null
+  }
+}
+
 function ymdSafe(input: string) {
   try {
     const d = new Date(input)
@@ -58,48 +88,6 @@ function ymdSafe(input: string) {
     return d.toISOString().slice(0, 10)
   } catch {
     return String(input).slice(0, 10)
-  }
-}
-
-async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
-  const { rows } = await pool.query(
-    `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
-       from merchant_accounts where owner_id=$1`,
-    [ownerId]
-  )
-  const r = rows[0]
-  if (!r) return null
-  return {
-    stripe_account_id: r.stripe_account_id ?? null,
-    charges_enabled:   !!r.charges_enabled,
-    payouts_enabled:   !!r.payouts_enabled,
-    requirements_due:  asStringArray(r.requirements_due),
-  }
-}
-
-// 🔁 Lazy-import Stripe ici
-async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
-  const { default: Stripe } = await import('stripe')
-  const key = process.env.STRIPE_SECRET_KEY
-  if (!key) return null
-  const stripe = new Stripe(key as string)
-  const { rows } = await pool.query(`select stripe_account_id from merchant_accounts where owner_id=$1`, [ownerId])
-  const acctId = rows[0]?.stripe_account_id
-  if (!acctId) return null
-  const acct = await stripe.accounts.retrieve(acctId)
-  await pool.query(
-    `update merchant_accounts
-        set charges_enabled=$2,
-            payouts_enabled=$3,
-            requirements_due=$4::jsonb
-      where owner_id=$1`,
-    [ownerId, !!acct.charges_enabled, !!acct.payouts_enabled, acct.requirements?.currently_due || []]
-  )
-  return {
-    stripe_account_id: acct.id,
-    charges_enabled: !!acct.charges_enabled,
-    payouts_enabled: !!acct.payouts_enabled,
-    requirements_due: (acct.requirements?.currently_due || []) as any,
   }
 }
 
@@ -121,29 +109,78 @@ async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
       currency: r.currency || 'EUR',
       status: r.status
     }))
-  } catch { return [] }
+  } catch (e) {
+    console.error('[account] readMyActiveListings failed:', (e as any)?.message)
+    return []
+  }
 }
 
 export default async function Page({
   params,
   searchParams,
-}: { params: Promise<Params>, searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { locale } = await params
-  const sp = await searchParams
-  const sess = await readSession()
-  if (!sess) redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
+}: {
+  // ✅ types runtime-corrects (pas besoin de Promise<> ici)
+  params: Params,
+  searchParams: Record<string, string | string[] | undefined>
+}) {
+  const locale = params?.locale === 'fr' ? 'fr' : 'en'
 
-  let merchant = await readMerchant(sess.ownerId)
+  // ✅ sécuriser readSession: si ça jette, on redirige
+  let sess: Awaited<ReturnType<typeof readSession>> | null = null
+  try {
+    sess = await readSession()
+  } catch (e) {
+    console.error('[account] readSession threw:', (e as any)?.message)
+    // Optionnel: on pourrait aussi invalider le cookie ici via un endpoint logout
+  }
+  if (!sess) {
+    redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
+  }
 
-  // ✅ Ne resynchroniser Stripe QUE sur retour d’onboarding
-  const needsSync = sp?.connect === 'done'
-  if (needsSync) { try { merchant = await syncMerchantNow(sess.ownerId) || merchant } catch {} }
+  // ✅ faire les chargements en parallèle et tolérer les échecs partiels
+  const [claimsRes, listingsRes, merchantRes] = await Promise.allSettled([
+    listClaims(sess.ownerId),
+    readMyActiveListings(sess.ownerId),
+    readMerchant(sess.ownerId),
+  ])
+  const claims   = claimsRes.status === 'fulfilled'   ? claimsRes.value   : []
+  const listings = listingsRes.status === 'fulfilled' ? listingsRes.value : []
+  let merchant   = merchantRes.status === 'fulfilled' ? merchantRes.value : null
 
-  const claims = await listClaims(sess.ownerId)
-  const listings = await readMyActiveListings(sess.ownerId)
+  // ✅ Ne resynchroniser Stripe QUE sur retour d’onboarding (et on ignore toute erreur)
+  const needsSync = (searchParams?.connect === 'done')
+  if (needsSync) {
+    try {
+      const { default: Stripe } = await import('stripe')
+      const key = process.env.STRIPE_SECRET_KEY
+      if (key) {
+        const { rows } = await pool.query(`select stripe_account_id from merchant_accounts where owner_id=$1`, [sess.ownerId])
+        const acctId = rows[0]?.stripe_account_id
+        if (acctId) {
+          const stripe = new Stripe(key as string)
+          const acct = await stripe.accounts.retrieve(acctId)
+          await pool.query(
+            `update merchant_accounts
+                set charges_enabled=$2,
+                    payouts_enabled=$3,
+                    requirements_due=$4::jsonb
+              where owner_id=$1`,
+            [sess.ownerId, !!acct.charges_enabled, !!acct.payouts_enabled, acct.requirements?.currently_due || []]
+          )
+          merchant = {
+            stripe_account_id: acct.id,
+            charges_enabled: !!acct.charges_enabled,
+            payouts_enabled: !!acct.payouts_enabled,
+            requirements_due: (acct.requirements?.currently_due || []) as any,
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[account] syncMerchantNow failed:', (e as any)?.message)
+    }
+  }
+
   const year = new Date().getUTCFullYear()
-
-  // Vignettes : badge “En vente” pour les dates listées (safe)
   const activeYmd = new Set(listings.map(l => ymdSafe(l.ts)))
 
   return (

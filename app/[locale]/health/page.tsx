@@ -70,6 +70,17 @@ export default async function Health(props: {
   const host = (h.get('host') ?? '').split(',')[0].trim()
   const base = host ? `${proto}://${host}` : ''
 
+
+  let accountProbe: any = null
+  if (base) {
+    try {
+      const r = await fetch(`${base}/fr/account`, { redirect: 'manual', cache: 'no-store' })
+      accountProbe = { ok: r.status >= 200 && r.status < 400, status: r.status, location: r.headers.get('location') }
+    } catch (e: any) {
+      accountProbe = { ok: false, error: e?.message || 'fetch_err' }
+    }
+  }
+
   // --- Env ---
   const checks: Record<string, Row> = {}
   checks.env_DATABASE_URL = { ok: !!process.env.DATABASE_URL }
@@ -374,6 +385,9 @@ export default async function Health(props: {
         <li><strong>COOKIE_DOMAIN</strong>: {(COOKIE_DOMAIN || '(none)')}</li>
         <li><strong>Host</strong>: {host} — <strong>Proto</strong>: {proto}</li>
       </ul>
+
+      <h2>Account probe (unauthenticated)</h2>
+      <pre>{JSON.stringify(accountProbe, null, 2)}</pre>
 
       <h2>Database</h2>
       <ul>
