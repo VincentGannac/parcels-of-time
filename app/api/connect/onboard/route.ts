@@ -14,25 +14,20 @@ function sellerPublicUrl(base: string, ownerId: string) {
   // Si tu as une page vendeur: return `${base}/u/${ownerId}`
   return base
 }
-type SellerKind = 'individual' | 'company'
-function parseSellerKind(req: Request): SellerKind {
-  const ctype = (req.headers.get('content-type') || '').toLowerCase()
-  if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
-    // @ts-ignore - next runtime FormData
-    return (async () => {
-      const form = await req.formData()
-      const v = String(form.get('seller_kind') || '').toLowerCase()
-      return v === 'company' ? 'company' : 'individual'
-    })() as any
-  } else {
-    return (async () => {
-      try {
-        const body = await req.json()
-        const v = String(body?.seller_kind || '').toLowerCase()
-        return v === 'company' ? 'company' : 'individual'
-      } catch { return 'individual' }
-    })() as any
-  }
+function extractLocaleFromPath(pathname: string): 'fr' | 'en' | null {
+  const m = pathname.match(/^\/(fr|en)(\/|$)/i)
+  return (m?.[1]?.toLowerCase() as any) || null
+}
+function localeFromReq(req: Request): 'fr' | 'en' {
+  // 1) Referer → /fr/... ou /en/...
+  const ref = req.headers.get('referer') || ''
+  try {
+    const u = ref ? new URL(ref) : null
+    const fromPath = u ? extractLocaleFromPath(u.pathname) : null
+    if (fromPath) return fromPath
+  } catch {}
+  // 2) Par défaut
+  return 'en'
 }
 
 /** Création / récupération + PREFILL du compte Connect */
@@ -41,7 +36,7 @@ async function ensurePrefilledAccount(
   ownerId: string,
   email: string,
   base: string,
-  sellerKind: SellerKind
+  sellerKind: 'individual' | 'company'
 ) {
   const sellerUrl = sellerPublicUrl(base, ownerId)
 
@@ -104,11 +99,11 @@ async function ensurePrefilledAccount(
 }
 
 /** Lien d’onboarding : collecte minimale immédiate */
-function makeOnboardingLink(stripe: Stripe, accountId: string, base: string) {
+function makeOnboardingLink(stripe: Stripe, accountId: string, base: string, locale: 'fr' | 'en') {
   return stripe.accountLinks.create({
     account: accountId,
     refresh_url: `${base}/api/connect/refresh`,
-    return_url: `${base}/account?connect=done`,
+    return_url: `${base}/${locale}/account?connect=done`,
     type: 'account_onboarding',
     collect: 'eventually_due', // Stripe demandera le reste avant le 1er payout
   })
@@ -121,22 +116,41 @@ export async function POST(req: Request) {
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
   const base = getBaseFromReq(req)
-  const sellerKind = await parseSellerKind(req)
+
+  // Lire body UNE seule fois
+  const ctype = (req.headers.get('content-type') || '').toLowerCase()
+  let sellerKind: 'individual' | 'company' = 'individual'
+  let locale: 'fr' | 'en' = localeFromReq(req)
+
+  if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
+    // @ts-ignore - Next runtime FormData
+    const form = await req.formData()
+    const v = String(form.get('seller_kind') || '').toLowerCase()
+    sellerKind = v === 'company' ? 'company' : 'individual'
+    const loc = String(form.get('locale') || '').toLowerCase()
+    if (loc === 'fr' || loc === 'en') locale = loc
+  } else if (ctype.includes('application/json')) {
+    try {
+      const body = await req.json()
+      const v = String(body?.seller_kind || '').toLowerCase()
+      sellerKind = v === 'company' ? 'company' : 'individual'
+      const loc = String(body?.locale || '').toLowerCase()
+      if (loc === 'fr' || loc === 'en') locale = loc
+    } catch { /* no-op */ }
+  }
 
   try {
     const accountId = await ensurePrefilledAccount(stripe, sess.ownerId, sess.email, base, sellerKind)
-    const link = await makeOnboardingLink(stripe, accountId, base)
+    const link = await makeOnboardingLink(stripe, accountId, base, locale)
 
-    const ctype = (req.headers.get('content-type') || '').toLowerCase()
-    if (ctype.includes('application/x-www-form-urlencoded')) {
+    if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
       return NextResponse.redirect(link.url, { status: 303 })
     }
     return NextResponse.json({ url: link.url })
   } catch (e: any) {
     const msg = String(e?.message || e)
-    const ctype = (req.headers.get('content-type') || '').toLowerCase()
-    if (ctype.includes('application/x-www-form-urlencoded')) {
-      return NextResponse.redirect(`${base}/account?connect=err`, { status: 303 })
+    if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
+      return NextResponse.redirect(`${base}/${locale}/account?connect=err`, { status: 303 })
     }
     return NextResponse.json({ error: 'server_error', detail: msg }, { status: 500 })
   }
@@ -149,13 +163,14 @@ export async function GET(req: Request) {
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
   const base = getBaseFromReq(req)
-  const sellerKind: SellerKind = 'individual' // défaut si GET direct
+  const sellerKind: 'individual' = 'individual'
+  const locale = localeFromReq(req)
 
   try {
     const accountId = await ensurePrefilledAccount(stripe, sess.ownerId, sess.email, base, sellerKind)
-    const link = await makeOnboardingLink(stripe, accountId, base)
+    const link = await makeOnboardingLink(stripe, accountId, base, locale)
     return NextResponse.redirect(link.url, { status: 303 })
   } catch {
-    return NextResponse.redirect(`${base}/account?connect=err`, { status: 303 })
+    return NextResponse.redirect(`${base}/${locale}/account?connect=err`, { status: 303 })
   }
 }

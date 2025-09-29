@@ -6,7 +6,6 @@ export const revalidate = 0
 import { redirect } from 'next/navigation'
 import { readSession } from '@/lib/auth'
 import { pool } from '@/lib/db'
-import Stripe from 'stripe'
 
 type Params = { locale: 'fr' | 'en' }
 
@@ -51,6 +50,17 @@ function asStringArray(v: unknown): string[] {
   }
   return []
 }
+
+function ymdSafe(input: string) {
+  try {
+    const d = new Date(input)
+    if (isNaN(d.getTime())) return String(input).slice(0, 10)
+    return d.toISOString().slice(0, 10)
+  } catch {
+    return String(input).slice(0, 10)
+  }
+}
+
 async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
   const { rows } = await pool.query(
     `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
@@ -66,11 +76,16 @@ async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
     requirements_due:  asStringArray(r.requirements_due),
   }
 }
+
+// 🔁 Lazy-import Stripe ici
 async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
+  const { default: Stripe } = await import('stripe')
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) return null
+  const stripe = new Stripe(key as string)
   const { rows } = await pool.query(`select stripe_account_id from merchant_accounts where owner_id=$1`, [ownerId])
   const acctId = rows[0]?.stripe_account_id
   if (!acctId) return null
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
   const acct = await stripe.accounts.retrieve(acctId)
   await pool.query(
     `update merchant_accounts
@@ -119,25 +134,17 @@ export default async function Page({
   if (!sess) redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
 
   let merchant = await readMerchant(sess.ownerId)
-  const needsSync =
-    sp?.connect === 'done' ||
-    (merchant && (
-      !merchant.charges_enabled ||
-      !merchant.payouts_enabled ||
-      (Array.isArray(merchant.requirements_due) && merchant.requirements_due.length > 0)
-    ))
+
+  // ✅ Ne resynchroniser Stripe QUE sur retour d’onboarding
+  const needsSync = sp?.connect === 'done'
   if (needsSync) { try { merchant = await syncMerchantNow(sess.ownerId) || merchant } catch {} }
 
   const claims = await listClaims(sess.ownerId)
   const listings = await readMyActiveListings(sess.ownerId)
   const year = new Date().getUTCFullYear()
 
-  // Vignettes : badge “En vente” pour les dates listées
-  const activeYmd = new Set(
-    listings.map(l => {
-      try { return new Date(l.ts).toISOString().slice(0,10) } catch { return String(l.ts).slice(0,10) }
-    })
-  )
+  // Vignettes : badge “En vente” pour les dates listées (safe)
+  const activeYmd = new Set(listings.map(l => ymdSafe(l.ts)))
 
   return (
     <main
@@ -210,6 +217,8 @@ export default async function Page({
 
             {/* Onboarding selector */}
             <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}}>
+              {/* On passe la locale au backend */}
+              <input type="hidden" name="locale" value={locale} />
               <fieldset style={{border:'1px solid var(--color-border)', borderRadius:10, padding:12}}>
                 <legend style={{padding:'0 6px'}}>
                   {locale==='fr' ? 'Je vends en tant que :' : 'I sell as:'}
@@ -261,7 +270,7 @@ export default async function Page({
             ) : (
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10}}>
                 {listings.map(item=>{
-                  const ymd = new Date(item.ts).toISOString().slice(0,10)
+                  const ymd = ymdSafe(item.ts)
                   return (
                     <div key={item.id} style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)'}}>
                       <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
@@ -337,9 +346,6 @@ export default async function Page({
                           <div style={{fontFamily:'Fraunces, serif', fontWeight:900, fontSize:32}}>
                             {c.ts}
                           </div>
-                          {/* Mini sous-titre optionnel (style) si tu veux l’afficher un jour
-                          <div style={{opacity:.7, fontSize:12, marginTop:4}}>{(c.cert_style || 'neutral')}</div>
-                          */}
                         </div>
                       </div>
 

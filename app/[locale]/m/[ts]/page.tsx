@@ -25,6 +25,17 @@ function normalizeTs(input: string): { tsISO: string | null; tsYMD: string | nul
   return { tsISO, tsYMD }
 }
 
+function ymdSafe(input: string) {
+  try {
+    const d = new Date(input)
+    if (isNaN(d.getTime())) return String(input).slice(0, 10)
+    return d.toISOString().slice(0, 10)
+  } catch {
+    return String(input).slice(0, 10)
+  }
+}
+
+
 /** Public registry (per day, ISO midnight) */
 async function getPublicStateDb(tsISO: string): Promise<boolean> {
   try {
@@ -215,6 +226,7 @@ export default async function Page({
   const listing = isOwner ? null : await readActiveListing(tsISO!)
   if (!isOwner && !listing) redirect(`/${locale}/account?err=not_owner`)
 
+    
   // Owner’s active listings + merchant status
   let myListings: MyListing[] = []
   let merchant: MerchantRow | null = null
@@ -222,9 +234,11 @@ export default async function Page({
     myListings = await readMyActiveListings(session.ownerId)
     merchant = await readMerchant(session.ownerId)
   }
+
   const myListingForThisDay = isOwner
-    ? myListings.find(l => (new Date(l.ts).toISOString().slice(0,10) === tsYMD))
-    : null
+  ? myListings.find(l => (ymdSafe(l.ts) === tsYMD))
+  : null
+
 
   // public registry state & optional autopub
   const isPublicDb = await getPublicStateDb(tsISO!)
