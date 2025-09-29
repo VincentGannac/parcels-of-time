@@ -10,8 +10,18 @@ import Stripe from 'stripe'
 
 type Params = { locale: 'fr' | 'en' }
 
-type ClaimRow = { ts: string; title: string | null; message: string | null; cert_style: string | null }
+const TOKENS = {
+  '--color-bg': '#0B0E14',
+  '--color-surface': '#111726',
+  '--color-text': '#E6EAF2',
+  '--color-muted': '#A7B0C0',
+  '--color-primary': '#E4B73D',
+  '--color-on-primary': '#0B0E14',
+  '--color-border': '#1E2A3C',
+  '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
+} as const
 
+type ClaimRow = { ts: string; title: string | null; message: string | null; cert_style: string | null }
 async function listClaims(ownerId: string): Promise<ClaimRow[]> {
   try {
     const { rows } = await pool.query(
@@ -23,7 +33,7 @@ async function listClaims(ownerId: string): Promise<ClaimRow[]> {
        limit 200`,
       [ownerId]
     )
-    return rows.map(r => ({ ts: String(r.ts), title: r.title ?? null, message: r.message ?? null, cert_style: r.cert_style ?? null }))
+    return rows.map(r => ({ ts: String(r.ts), title: r.title ?? null, message: r.message ?? null, cert_style: r.cert_style ?? 'neutral' }))
   } catch { return [] }
 }
 
@@ -33,19 +43,14 @@ type MerchantRow = {
   payouts_enabled: boolean | null
   requirements_due: string[] | null
 }
-
 function asStringArray(v: unknown): string[] {
   if (!v) return []
   if (Array.isArray(v)) return v.map(x => String(x))
   if (typeof v === 'string') {
-    try {
-      const parsed = JSON.parse(v)
-      return Array.isArray(parsed) ? parsed.map(x => String(x)) : []
-    } catch { return [] }
+    try { const parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed.map(x => String(x)) : [] } catch { return [] }
   }
   return []
 }
-
 async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
   const { rows } = await pool.query(
     `select stripe_account_id, charges_enabled, payouts_enabled, requirements_due
@@ -61,7 +66,6 @@ async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
     requirements_due:  asStringArray(r.requirements_due),
   }
 }
-
 async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
   const { rows } = await pool.query(`select stripe_account_id from merchant_accounts where owner_id=$1`, [ownerId])
   const acctId = rows[0]?.stripe_account_id
@@ -85,7 +89,6 @@ async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
 }
 
 type MyListing = { id: string; ts: string; price_cents: number; currency: string; status: 'active'|'sold'|'canceled' }
-
 async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
   try {
     const { rows } = await pool.query(
@@ -116,7 +119,6 @@ export default async function Page({
   if (!sess) redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
 
   let merchant = await readMerchant(sess.ownerId)
-
   const needsSync =
     sp?.connect === 'done' ||
     (merchant && (
@@ -124,171 +126,212 @@ export default async function Page({
       !merchant.payouts_enabled ||
       (Array.isArray(merchant.requirements_due) && merchant.requirements_due.length > 0)
     ))
-
-  if (needsSync) {
-    try { merchant = await syncMerchantNow(sess.ownerId) || merchant } catch {}
-  }
+  if (needsSync) { try { merchant = await syncMerchantNow(sess.ownerId) || merchant } catch {} }
 
   const claims = await listClaims(sess.ownerId)
   const listings = await readMyActiveListings(sess.ownerId)
-
   const year = new Date().getUTCFullYear()
 
   return (
-    <main style={{maxWidth: 900, margin: '0 auto', padding: '32px 20px', fontFamily: 'Inter, system-ui'}}>
-      <header style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 18}}>
-        <a href={`/${locale}`} style={{textDecoration:'none', opacity:.85}}>&larr; Parcels of Time</a>
-        <form method="post" action="/api/auth/logout">
-          <button style={{padding:'10px 14px', borderRadius:10, border:'1px solid #ddd', cursor:'pointer'}}>Log out</button>
-        </form>
-      </header>
-
-      <h1 style={{fontFamily:'Fraunces, serif', fontSize:36, margin:'0 0 6px'}}>
-        {locale === 'fr' ? 'Mon compte' : 'My account'}
-      </h1>
-      <p style={{opacity:.8, marginTop:0}}>
-        {sess.displayName ? `${sess.displayName} — ` : ''}{sess.email}
-      </p>
-
-      <section style={{marginTop:18}}>
-        <h2 style={{fontSize:18, margin:'0 0 10px'}}>
-          {locale==='fr' ? 'Compte marchand' : 'Merchant account'}
-        </h2>
-
-        <div style={{border:'1px solid #eee', borderRadius:12, padding:14, display:'grid', gap:10}}>
-          {/* Bandeau d'info “Particulier vs Professionnel” */}
-          <div style={{background:'#fffbea', border:'1px solid #f5e3a1', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.35}}>
-            {locale==='fr'
-              ? <>Vous vendez en tant que <strong>particulier</strong> ? C’est autorisé pour des ventes occasionnelles. Si vous vendez régulièrement ou pour en tirer un revenu, vous devez vous <strong>déclarer (micro-entrepreneur, BIC)</strong>.</>
-              : <>Selling as an <strong>individual</strong>? Occasional sales are fine. If sales are regular or for profit, you must <strong>register as a business</strong> (e.g., sole trader).</>}
-          </div>
-
-          {/* Bloc statut compte existant */}
-          {merchant ? (
-            <>
-              <div>Stripe: <code>{merchant.stripe_account_id}</code></div>
-              <div>Charges: <strong>{merchant.charges_enabled ? '✅' : '❌'}</strong> — Payouts: <strong>{merchant.payouts_enabled ? '✅' : '❌'}</strong></div>
-              {Array.isArray(merchant.requirements_due) && merchant.requirements_due.length > 0 && (
-                <div style={{fontSize:13, color:'#b36'}}>
-                  {locale==='fr' ? 'Éléments requis' : 'Required info'}: {merchant.requirements_due.join(', ')}
-                </div>
-              )}
-              <form method="post" action="/api/connect/sync">
-                <button style={{padding:'8px 12px', borderRadius:10, border:'1px solid #ddd'}}>Rafraîchir statut</button>
-              </form>
-            </>
-          ) : (
-            <p style={{margin:0, opacity:.85}}>
-              {locale==='fr' ? 'Pour revendre vos certificats, créez un compte vendeur.' : 'Create a seller account to resell your certificates.'}
-            </p>
-          )}
-
-          {/* Formulaire d’onboarding avec sélecteur Particulier / Professionnel */}
-          <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}}>
-            <fieldset style={{border:'1px solid #eee', borderRadius:10, padding:12}}>
-              <legend style={{padding:'0 6px'}}>
-                {locale==='fr' ? 'Je vends en tant que :' : 'I sell as:'}
-              </legend>
-              <label style={{display:'inline-flex', alignItems:'center', gap:8, marginRight:16}}>
-                <input type="radio" name="seller_kind" value="individual" defaultChecked />
-                {locale==='fr' ? 'Particulier' : 'Individual'}
-              </label>
-              <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                <input type="radio" name="seller_kind" value="company" />
-                {locale==='fr' ? 'Professionnel' : 'Business'}
-              </label>
-              <div style={{fontSize:12, opacity:.75, marginTop:8}}>
-                {locale==='fr'
-                  ? 'En “Particulier”, nous pré-remplissons votre secteur d’activité et site pour accélérer l’inscription. Stripe demandera au minimum votre identité et votre IBAN.'
-                  : 'With “Individual”, we prefill industry and website to speed up onboarding. Stripe will ask at minimum for your identity and your IBAN.'}
-              </div>
-            </fieldset>
-
-            <button style={{padding:'10px 14px', borderRadius:10, border:'1px solid #ddd', cursor:'pointer'}}>
-              {merchant ? (locale==='fr' ? 'Mettre à jour / compléter' : 'Update / complete') : (locale==='fr' ? 'Devenir vendeur' : 'Become a seller')}
-            </button>
+    <main
+      style={{
+        ['--color-bg' as any]: TOKENS['--color-bg'],
+        ['--color-surface' as any]: TOKENS['--color-surface'],
+        ['--color-text' as any]: TOKENS['--color-text'],
+        ['--color-muted' as any]: TOKENS['--color-muted'],
+        ['--color-primary' as any]: TOKENS['--color-primary'],
+        ['--color-on-primary' as any]: TOKENS['--color-on-primary'],
+        ['--color-border' as any]: TOKENS['--color-border'],
+        ['--shadow-elev1' as any]: TOKENS['--shadow-elev1'],
+        background: 'var(--color-bg)',
+        color: 'var(--color-text)',
+        minHeight: '100vh',
+        fontFamily: 'Inter, system-ui',
+      }}
+    >
+      <section style={{maxWidth: 1100, margin: '0 auto', padding: '32px 20px'}}>
+        {/* Header */}
+        <header style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 18}}>
+          <a href={`/${locale}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
+          <form method="post" action="/api/auth/logout">
+            <button style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', cursor:'pointer'}}>Log out</button>
           </form>
+        </header>
 
-          {/* Récap annuel (CSV) */}
-          <div style={{display:'flex', alignItems:'center', gap:10, marginTop:6}}>
-            <a
-              href={`/api/reports/sales?year=${year}&format=csv`}
-              style={{textDecoration:'none', padding:'8px 12px', border:'1px solid #ddd', borderRadius:10}}
-            >
-              {locale==='fr' ? `Télécharger mon récapitulatif ${year} (CSV)` : `Download my ${year} sales recap (CSV)`}
-            </a>
-            <a
-              href={`/api/reports/sales?year=${year}&format=json`}
-              style={{textDecoration:'none', padding:'8px 12px', border:'1px solid #eee', borderRadius:10, opacity:.75}}
-            >
-              JSON
-            </a>
-          </div>
-        </div>
-      </section>
+        {/* Identity */}
+        <h1 style={{fontFamily:'Fraunces, serif', fontSize:36, margin:'0 0 6px'}}>
+          {locale === 'fr' ? 'Mon compte' : 'My account'}
+        </h1>
+        <p style={{opacity:.8, marginTop:0}}>
+          {sess.displayName ? `${sess.displayName} — ` : ''}{sess.email}
+        </p>
 
-      <section style={{marginTop:18}}>
-        <h2 style={{fontSize:18, margin:'0 0 10px'}}>
-          {locale==='fr' ? 'Mes annonces actives' : 'My active listings'}
-        </h2>
-        <div style={{border:'1px solid #eee', borderRadius:12, padding:14}}>
-          {listings.length === 0 ? (
-            <p style={{margin:0, opacity:.8}}>
-              {locale==='fr' ? 'Aucune date en vente pour l’instant.' : 'No active listings yet.'}
-            </p>
-          ) : (
-            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10}}>
-              {listings.map(item=>{
-                const ymd = new Date(item.ts).toISOString().slice(0,10)
-                return (
-                  <div key={item.id} style={{border:'1px solid #eee', borderRadius:12, padding:12}}>
-                    <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
-                    <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
-                    <div style={{display:'flex', gap:8, marginTop:10}}>
-                      <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', borderRadius:10, border:'1px solid #ddd', color:'inherit'}}>
-                        {locale==='fr' ? 'Ouvrir' : 'Open'}
-                      </a>
-                      <form method="post" action={`/api/marketplace/listing/${item.id}/status`}>
-                        <input type="hidden" name="action" value="cancel" />
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="next" value={`/${locale}/account`} />
-                        <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid #ddd', background:'transparent', color:'#b33'}}>
-                          {locale==='fr' ? 'Retirer' : 'Cancel'}
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-                )
-              })}
+        {/* Grid: merchant + listings */}
+        <div style={{display:'grid', gridTemplateColumns:'1fr', gap:18, marginTop:18}}>
+          {/* Merchant card */}
+          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14, display:'grid', gap:12}}>
+            <h2 style={{fontSize:18, margin:'0 0 2px'}}>
+              {locale==='fr' ? 'Compte marchand' : 'Merchant account'}
+            </h2>
+
+            <div style={{background:'rgba(255,235,186,.08)', border:'1px solid rgba(245,227,161,.26)', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.35}}>
+              {locale==='fr'
+                ? <>Vous vendez en tant que <strong>particulier</strong> ? C’est autorisé pour des ventes occasionnelles. Si vous vendez régulièrement ou pour en tirer un revenu, vous devez vous <strong>déclarer (micro-entrepreneur, BIC)</strong>.</>
+                : <>Selling as an <strong>individual</strong>? Occasional sales are fine. If sales are regular or for profit, you must <strong>register as a business</strong>.</>}
             </div>
-          )}
-          <p style={{marginTop:10, fontSize:12, opacity:.7}}>
-            {locale==='fr' ? 'Commission 10% (min 1 €) appliquée lors de la vente.' : '10% commission (min €1) on sale.'}
-          </p>
-        </div>
-      </section>
 
-      <section style={{marginTop:18}}>
-        <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
-        {claims.length === 0 ? (
-          <div style={{border:'1px dashed #ddd', padding:16, borderRadius:12, opacity:.8}}>
-            {locale === 'fr' ? 'Aucun certificat pour le moment.' : 'No certificates yet.'}
-          </div>
-        ) : (
-          <div style={{display:'grid', gap:10}}>
-            {claims.map(c => {
-              const href = `/${locale}/m/${encodeURIComponent(c.ts)}`
-              return (
-                <a key={c.ts} href={href}
-                   style={{display:'block', padding:14, border:'1px solid #eee', borderRadius:12, textDecoration:'none', color:'inherit'}}>
-                  <div style={{fontWeight:700}}>{c.ts}</div>
-                  {c.title && <div style={{opacity:.85, marginTop:4}}>{c.title}</div>}
-                  {c.message && <div style={{opacity:.65, marginTop:2, whiteSpace:'pre-wrap'}}>{c.message}</div>}
+            {merchant ? (
+              <div style={{display:'grid', gap:6}}>
+                <div>Stripe: <code>{merchant.stripe_account_id}</code></div>
+                <div>Charges: <strong>{merchant.charges_enabled ? '✅' : '❌'}</strong> — Payouts: <strong>{merchant.payouts_enabled ? '✅' : '❌'}</strong></div>
+                {Array.isArray(merchant.requirements_due) && merchant.requirements_due.length > 0 && (
+                  <div style={{fontSize:13, color:'#ffb2b2'}}>
+                    {locale==='fr' ? 'Éléments requis' : 'Required info'}: {merchant.requirements_due.join(', ')}
+                  </div>
+                )}
+                <form method="post" action="/api/connect/sync">
+                  <button style={{padding:'8px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>
+                    {locale==='fr' ? 'Rafraîchir statut' : 'Refresh status'}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <p style={{margin:0, opacity:.85}}>
+                {locale==='fr' ? 'Pour revendre vos certificats, créez un compte vendeur.' : 'Create a seller account to resell your certificates.'}
+              </p>
+            )}
+
+            {/* Onboarding selector */}
+            <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}}>
+              <fieldset style={{border:'1px solid var(--color-border)', borderRadius:10, padding:12}}>
+                <legend style={{padding:'0 6px'}}>
+                  {locale==='fr' ? 'Je vends en tant que :' : 'I sell as:'}
+                </legend>
+                <label style={{display:'inline-flex', alignItems:'center', gap:8, marginRight:16}}>
+                  <input type="radio" name="seller_kind" value="individual" defaultChecked />
+                  {locale==='fr' ? 'Particulier' : 'Individual'}
+                </label>
+                <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                  <input type="radio" name="seller_kind" value="company" />
+                  {locale==='fr' ? 'Professionnel' : 'Business'}
+                </label>
+                <div style={{fontSize:12, opacity:.75, marginTop:8}}>
+                  {locale==='fr'
+                    ? 'En “Particulier”, nous pré-remplissons secteur & site pour accélérer l’inscription. Stripe demandera identité + IBAN.'
+                    : 'With “Individual”, we prefill industry & website. Stripe will ask for identity + IBAN.'}
+                </div>
+              </fieldset>
+
+              <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+                <button style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800}}>
+                  {merchant ? (locale==='fr' ? 'Mettre à jour / compléter' : 'Update / complete') : (locale==='fr' ? 'Devenir vendeur' : 'Become a seller')}
+                </button>
+                <a
+                  href={`/api/reports/sales?year=${year}&format=csv`}
+                  style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}
+                >
+                  {locale==='fr' ? `Récapitulatif ${year} (CSV)` : `${year} recap (CSV)`}
                 </a>
-              )
-            })}
+                <a
+                  href={`/api/reports/sales?year=${year}&format=json`}
+                  style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)', opacity:.85}}
+                >
+                  JSON
+                </a>
+              </div>
+            </form>
+          </section>
+
+          {/* Active listings */}
+          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
+            <h2 style={{fontSize:18, margin:'0 0 10px'}}>
+              {locale==='fr' ? 'Mes annonces actives' : 'My active listings'}
+            </h2>
+            {listings.length === 0 ? (
+              <p style={{margin:0, opacity:.8}}>
+                {locale==='fr' ? 'Aucune date en vente pour l’instant.' : 'No active listings yet.'}
+              </p>
+            ) : (
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10}}>
+                {listings.map(item=>{
+                  const ymd = new Date(item.ts).toISOString().slice(0,10)
+                  return (
+                    <div key={item.id} style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)'}}>
+                      <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
+                      <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
+                      <div style={{display:'flex', gap:8, marginTop:10}}>
+                        <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', color:'var(--color-text)'}}>
+                          {locale==='fr' ? 'Ouvrir' : 'Open'}
+                        </a>
+                        <form method="post" action={`/api/marketplace/listing/${item.id}/status`}>
+                          <input type="hidden" name="action" value="cancel" />
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="next" value={`/${locale}/account`} />
+                          <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'#ffb2b2'}}>
+                            {locale==='fr' ? 'Retirer' : 'Cancel'}
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <p style={{marginTop:10, fontSize:12, opacity:.7}}>
+              {locale==='fr' ? 'Commission 10% (min 1 €) appliquée lors de la vente.' : '10% commission (min €1) on sale.'}
+            </p>
+          </section>
+        </div>
+
+        {/* Certificates gallery with images */}
+        <section style={{marginTop:18}}>
+          <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
+            <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
+            {claims.length === 0 ? (
+              <div style={{border:'1px dashed var(--color-border)', padding:16, borderRadius:12, opacity:.8}}>
+                {locale === 'fr' ? 'Aucun certificat pour le moment.' : 'No certificates yet.'}
+              </div>
+            ) : (
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:12}}>
+                {claims.map(c => {
+                  const href = `/${locale}/m/${encodeURIComponent(c.ts)}`
+                  const styleName = (c.cert_style || 'neutral').replace(/[^a-z0-9_-]/gi, '').toLowerCase()
+                  const bg = `/cert_bg/${styleName}_thumb.jpg`
+                  return (
+                    <a key={c.ts} href={href}
+                      style={{
+                        display:'grid',
+                        gridTemplateRows:'140px auto',
+                        border:'1px solid var(--color-border)',
+                        borderRadius:12,
+                        overflow:'hidden',
+                        textDecoration:'none',
+                        color:'var(--color-text)',
+                        background:'rgba(255,255,255,.02)',
+                        boxShadow:'var(--shadow-elev1)'
+                      }}
+                    >
+                      <div
+                        style={{
+                          backgroundImage:`url(${bg})`,
+                          backgroundSize:'cover',
+                          backgroundPosition:'center',
+                          borderBottom:'1px solid var(--color-border)'
+                        }}
+                        aria-hidden
+                      />
+                      <div style={{padding:12}}>
+                        <div style={{fontWeight:800}}>{c.ts}</div>
+                        {c.title && <div style={{opacity:.85, marginTop:4}}>{c.title}</div>}
+                        {c.message && <div style={{opacity:.65, marginTop:2, whiteSpace:'pre-wrap', maxHeight:48, overflow:'hidden', textOverflow:'ellipsis'}}>{c.message}</div>}
+                      </div>
+                    </a>
+                  )
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </section>
       </section>
     </main>
   )

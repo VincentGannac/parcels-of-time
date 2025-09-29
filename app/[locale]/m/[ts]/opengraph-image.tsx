@@ -25,7 +25,7 @@
               <div style={{ fontSize:36, fontWeight:700 }}>Parcels of Time</div>
             </div>
             <div>
-              <div style={{ fontSize:80, fontWeight:700, fontFamily:'serif' }}>Own a minute, forever.</div>
+              <div style={{ fontSize:80, fontWeight:700, fontFamily:'serif' }}>Own a day, forever.</div>
               <div style={{ fontSize:36, marginTop:12 }}>{pretty}</div>
             </div>
             <div style={{ opacity:.8 }}>parcelsoftime.com</div>
