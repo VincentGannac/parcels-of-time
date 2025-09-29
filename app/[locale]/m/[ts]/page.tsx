@@ -305,11 +305,11 @@ export default async function Page({
           <p style={{ fontSize: 16, opacity: 0.9, margin: 0 }}>{niceTs}</p>
         </header>
 
-        {/* Main grid: left = actions/forms, right = certificate preview */}
+        {/* Main grid (actions left / PDF preview right) */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 18 }}>
-          {/* Left column: download, marketplace, registry, edit */}
+          {/* Left column */}
           <div style={{ display:'grid', gap:18 }}>
-            {/* Certificate primary actions */}
+            {/* Certificate actions */}
             <div
               style={{
                 background: 'var(--color-surface)',
@@ -363,7 +363,7 @@ export default async function Page({
               </p>
             </div>
 
-            {/* Marketplace: SELL (owner) — only if has merchant & not already listed */}
+            {/* Marketplace — SELL (owner) */}
             {isOwner && canSell && (
               <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
@@ -391,7 +391,7 @@ export default async function Page({
               </section>
             )}
 
-            {/* If owner but no merchant → gentle nudge */}
+            {/* Nudge if no merchant */}
             {isOwner && !merchant?.stripe_account_id && (
               <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
@@ -408,7 +408,7 @@ export default async function Page({
               </section>
             )}
 
-            {/* Success banner when just published */}
+            {/* Success banner when just published OR already active */}
             {isOwner && (listingJustPublished || myListingForThisDay) && (
               <div style={{
                 padding:'10px 12px',
@@ -421,7 +421,7 @@ export default async function Page({
               </div>
             )}
 
-            {/* Owner: active listing block */}
+            {/* Owner: active listing */}
             {isOwner && myListingForThisDay && (
               <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
@@ -445,7 +445,7 @@ export default async function Page({
               </section>
             )}
 
-            {/* Buyer: public listing purchase block */}
+            {/* Buyer: active public listing */}
             {!isOwner && listing && (
               <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
@@ -514,73 +514,34 @@ export default async function Page({
                 </form>
               )}
             </aside>
-
-            {/* Edit block */}
-            <section style={{ marginTop: 4 }}>
-              <details style={{ border: '1px solid var(--color-border)', borderRadius: 12, background: 'var(--color-surface)' }}>
-                <summary
-                  style={{
-                    listStyle: 'none',
-                    cursor: 'pointer',
-                    padding: '14px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    userSelect: 'none',
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                    <span style={{ fontFamily: 'Fraunces, serif', fontSize: 20 }}>{locale==='fr'?'Modifier votre certificat':'Edit your certificate'}</span>
-                    <small style={{ fontSize: 13, opacity: 0.75 }}>(9,99 €)</small>
-                  </span>
-                  <span aria-hidden style={{ opacity: 0.7 }}>▼</span>
-                </summary>
-                <div style={{ padding: 16, borderTop: '1px solid var(--color-border)' }}>
-                  {claim ? (
-                    <EditClient
-                      tsISO={tsISO!}
-                      locale={locale}
-                      initial={{
-                        email: claim.email || '',
-                        display_name: claim.display_name || '',
-                        title: claim.title || '',
-                        message: claim.message || '',
-                        link_url: claim.link_url || '',
-                        cert_style: (claim.cert_style as any) || 'neutral',
-                        time_display: (claim.time_display as any) || 'local+utc',
-                        local_date_only: !!claim.local_date_only,
-                        text_color: claim.text_color || '#1a1f2a',
-                        title_public: !!claim.title_public,
-                        message_public: !!claim.message_public,
-                      }}
-                    />
-                  ) : (
-                    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16 }}>
-                      <p style={{ margin: 0 }}>
-                        {locale==='fr' ? 'Aucune donnée trouvée pour cette journée.' : 'No data for this day.'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </details>
-            </section>
           </div>
 
-          {/* Right column: live certificate preview (sticky) */}
-          <aside aria-label="Aperçu du certificat"
-            style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}
+          {/* Right column — TRUE PDF preview (fixed) */}
+          <aside
+            aria-label="Aperçu du certificat (PDF)"
+            style={{
+              position:'sticky',
+              top:24,
+              background:'var(--color-surface)',
+              border:'1px solid var(--color-border)',
+              borderRadius:16,
+              padding:12,
+              boxShadow:'var(--shadow-elev1)'
+            }}
           >
-            {/* The EditClient already renders a full live preview inside.
-               To keep the page light and avoid duplication, we show a static preview using the selected style */}
-            <div style={{position:'relative', width:'100%', aspectRatio:'595.28/841.89', borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
-              <img
-                src={`/cert_bg/${(claim?.cert_style || 'neutral')}.png`}
-                alt="Aperçu"
-                style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', background:'#0E1017'}}
-              />
-              <div style={{position:'absolute', inset:0, display:'grid', placeItems:'center', color:'rgba(26,31,42,.8)', fontWeight:900, letterSpacing:2, transform:'rotate(-18deg)', opacity:.14}}>
-                {locale==='fr' ? 'APERÇU' : 'PREVIEW'}
-              </div>
+            <div style={{width:'100%', aspectRatio:'595.28/841.89', border:'1px solid var(--color-border)', borderRadius:12, overflow:'hidden'}}>
+              <object
+                data={pdfHref}
+                type="application/pdf"
+                aria-label="Prévisualisation PDF du certificat"
+                style={{ width:'100%', height:'100%', border:'none' }}
+              >
+                <div style={{padding:12, fontSize:14}}>
+                  {locale==='fr'
+                    ? <>Votre navigateur ne peut pas afficher le PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Ouvrir le PDF dans un nouvel onglet</a>.</>
+                    : <>Your browser cannot display the PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Open the PDF in a new tab</a>.</>}
+                </div>
+              </object>
             </div>
             <div style={{marginTop:10, display:'flex', gap:10}}>
               <a href={pdfHref} target="_blank" rel="noreferrer"
@@ -620,6 +581,64 @@ export default async function Page({
             <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>{locale==='fr' ? 'Métadonnées indisponibles.' : 'Metadata unavailable.'}</div>
           )}
         </aside>
+
+        {/* ======= ÉDITION (plein écran, comme avant) ======= */}
+        <section style={{ marginTop: 24 }}>
+          <details style={{ border: '1px solid var(--color-border)', borderRadius: 12, background: 'var(--color-surface)' }}>
+            <summary
+              style={{
+                listStyle: 'none',
+                cursor: 'pointer',
+                padding: '14px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                userSelect: 'none',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <span style={{ fontFamily: 'Fraunces, serif', fontSize: 20 }}>{locale==='fr'?'Modifier votre certificat':'Edit your certificate'}</span>
+                <small style={{ fontSize: 13, opacity: 0.75 }}>(9,99 €)</small>
+              </span>
+              <span aria-hidden style={{ opacity: 0.7 }}>▼</span>
+            </summary>
+
+            <div style={{ padding: 16, borderTop: '1px solid var(--color-border)' }}>
+              {claim ? (
+                <EditClient
+                  tsISO={tsISO!}
+                  locale={locale}
+                  initial={{
+                    email: claim.email || '',
+                    display_name: claim.display_name || '',
+                    title: claim.title || '',
+                    message: claim.message || '',
+                    link_url: claim.link_url || '',
+                    cert_style: (claim.cert_style as any) || 'neutral',
+                    time_display: (claim.time_display as any) || 'local+utc',
+                    local_date_only: !!claim.local_date_only,
+                    text_color: claim.text_color || '#1a1f2a',
+                    title_public: !!claim.title_public,
+                    message_public: !!claim.message_public,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 12,
+                    padding: 16,
+                  }}
+                >
+                  <p style={{ margin: 0 }}>
+                    {locale==='fr' ? 'Aucune donnée trouvée pour cette journée.' : 'No data for this day.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </details>
+        </section>
       </section>
     </main>
   )
