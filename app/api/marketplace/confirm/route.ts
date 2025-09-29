@@ -8,12 +8,24 @@ import { pool } from '@/lib/db'
 import { setSessionCookieOnResponse } from '@/lib/auth'
 import { normalizeClaimUpdates, applyClaimUpdatesLikeEdit } from '@/lib/claim-input'
 
-function isoDay(s: string) {
-  const d = new Date(s)
+function normIsoDay(s: string): string | null {
+  if (!s) return null
+  let d: Date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    d = new Date(`${s}T00:00:00.000Z`) // date-only → UTC minuit
+  } else if (
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(s) &&
+    !/[Z+-]\d{2}:?\d{2}$/.test(s)
+  ) {
+    d = new Date(`${s}Z`)              // ISO sans fuseau → force UTC
+  } else {
+    d = new Date(s)
+  }
   if (isNaN(d.getTime())) return null
-  d.setUTCHours(0, 0, 0, 0)
+  d.setUTCHours(0,0,0,0)
   return d.toISOString()
 }
+
 
 async function tableExists(client: any, table: string) {
   const { rows } = await client.query(`select to_regclass($1) as ok`, [`public.${table}`])
@@ -56,7 +68,8 @@ export async function GET(req: Request) {
     const paid = s.payment_status === 'paid'
 
     // Normalise jour ISO depuis metadata/URL
-    const tsISO = isoDay(String(s.metadata?.ts || tsYParam || ''))
+    const tsISO = normIsoDay(String(s.metadata?.ts || tsYParam || ''))
+
     if (tsISO) fallbackYMD = tsISO.slice(0, 10)
 
     if (!paid) {
@@ -262,8 +275,8 @@ export async function GET(req: Request) {
       // 7) Email best-effort
       try {
         const ymd = tsISO.slice(0, 10)
-        const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}`
-        const publicUrl = `${base}/${finalLocale}/m/${encodeURIComponent(ymd)}`
+        const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}.pdf`
+        const publicUrl = `${base}/${finalLocale}/m/${encodeURIComponent(ymd)}`        
         import('@/lib/email').then(async ({ sendSecondarySaleEmails }) => {
           await sendSecondarySaleEmails({
             ts: ymd, buyerEmail, pdfUrl, publicUrl, sessionId: sid

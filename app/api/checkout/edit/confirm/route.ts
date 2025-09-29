@@ -156,7 +156,9 @@ export async function GET(req: Request) {
         const salt = process.env.SECRET_SALT || 'dev_salt'
         const data = `${tsISO}|${owner_id}|${price_cents}|${createdISO}|${salt}`
         const hash = crypto.createHash('sha256').update(data).digest('hex')
-        const cert_url = `/api/cert/${encodeURIComponent(tsISO.slice(0,10))}`
+        
+        const ymd = tsISO.slice(0,10)
+        const cert_url = `/api/cert/${encodeURIComponent(ymd)}.pdf`
         await client.query(
           `update claims set cert_hash=$1, cert_url=$2 where ts=$3::timestamptz`,
           [hash, cert_url, tsISO]

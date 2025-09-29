@@ -218,7 +218,8 @@ export async function GET(req: Request) {
       const data = `${ts}|${ownerId}|${price_cents}|${createdAtISO}|${salt}`;
 
       const hash = crypto.createHash('sha256').update(data).digest('hex');
-      const cert_url = `/api/cert/${encodeURIComponent(ts)}`;
+      const ymd = ts.slice(0,10)
+      const cert_url = `/api/cert/${encodeURIComponent(ymd)}.pdf`
 
       const cols2 = await getColumns(client, 'claims');
       if (cols2.has('cert_hash') || cols2.has('cert_url')) {

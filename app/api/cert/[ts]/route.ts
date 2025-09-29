@@ -6,14 +6,24 @@ import { pool } from '@/lib/db'
 import { generateCertificatePDF } from '@/lib/cert'
 import { Buffer } from 'node:buffer'
 
-/** Normalise en ISO jour UTC : 'YYYY-MM-DDT00:00:00.000Z' */
 function normIsoDay(s: string): string | null {
   if (!s) return null
-  const d = new Date(s)
+  let d: Date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    d = new Date(`${s}T00:00:00.000Z`)
+  } else if (
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(s) &&
+    !/[Z+-]\d{2}:?\d{2}$/.test(s)
+  ) {
+    d = new Date(`${s}Z`) // ← force UTC si pas de fuseau
+  } else {
+    d = new Date(s)
+  }
   if (isNaN(d.getTime())) return null
-  d.setUTCHours(0, 0, 0, 0)
+  d.setUTCHours(0,0,0,0)
   return d.toISOString()
 }
+
 
 /** Map legacy time_display -> timeLabelMode (conservé pour compat) */
 function toTimeLabelMode(td?: string) {
@@ -24,9 +34,9 @@ function toTimeLabelMode(td?: string) {
 }
 
 export async function GET(req: Request, ctx: any) {
-  // Param dynamique : "YYYY-MM-DD" (ignore le suffixe après un point)
+  // Param dynamique : "YYYY-MM-DD" (+optionnellement suffixe ".pdf" que l’on retire)
   const rawParam = String(ctx?.params?.ts || '')
-  const decoded = decodeURIComponent(rawParam).split('.')[0]
+  const decoded = decodeURIComponent(rawParam).replace(/\.pdf$/i, '')
   const tsISO = normIsoDay(decoded)
   if (!tsISO) {
     return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
@@ -69,14 +79,23 @@ export async function GET(req: Request, ctx: any) {
     // Fond custom STRICTEMENT lié à ce ts (pas de fallback par jour)
     let customBgDataUrl: string | undefined
     if (String(claim.cert_style || '').toLowerCase() === 'custom') {
-      const { rows: bgRows } = await pool.query(
+      const dayISO = tsISO
+      const ex1 = await pool.query(
         `select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`,
-        [tsISO]
+        [dayISO]
       )
-      if (bgRows[0]?.data_url) {
-        customBgDataUrl = String(bgRows[0].data_url)
+      customBgDataUrl = ex1.rows[0]?.data_url ?? undefined
+      if (!customBgDataUrl) {
+        const ex2 = await pool.query(
+          `select data_url from claim_custom_bg
+            where date_trunc('day', ts) = $1::timestamptz
+            limit 1`,
+          [dayISO]
+        )
+        customBgDataUrl = ex2.rows[0]?.data_url || null || undefined
       }
     }
+
 
     // Options d’affichage (ex: /api/cert/2024-01-01?public=1&hide_meta=1)
     const url = new URL(req.url)
@@ -89,7 +108,7 @@ export async function GET(req: Request, ctx: any) {
       url.searchParams.has('hide_meta')
 
     // URL publique
-    const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO)}`
+    const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0,10))}`
 
     // Génération PDF (interface legacy)
     const pdfBytes = await generateCertificatePDF({
