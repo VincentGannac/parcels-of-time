@@ -290,7 +290,7 @@ export default async function Page({
           </section>
         </div>
 
-        {/* Certificates gallery with fixed A4 previews */}
+        {/* Certificates gallery — REAL PDF previews + big date */}
         <section style={{marginTop:18}}>
           <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
             <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
@@ -300,87 +300,75 @@ export default async function Page({
                 {locale === 'fr' ? 'Aucun certificat pour le moment.' : 'No certificates yet.'}
               </div>
             ) : (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:12}}>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:12}}>
                 {claims.map(c => {
                   const href = `/${locale}/m/${encodeURIComponent(c.ts)}`
-                  const styleName = (c.cert_style || 'neutral').replace(/[^a-z0-9_-]/gi, '').toLowerCase()
-
-                  // Images de fond par style
-                  const thumb = `/cert_bg/${styleName}_thumb.jpg`
-                  const full  = `/cert_bg/${styleName}.png`
-
-                  // Si style "custom", on tente d’afficher le fond perso enregistré pour ce jour
-                  const customBg = `/api/claim-bg/${encodeURIComponent(c.ts)}?v=1`
-
                   const isOnSale = activeYmd.has(c.ts)
+                  const styleName = (c.cert_style || 'neutral').replace(/[^a-z0-9_-]/gi, '').toLowerCase()
+                  const fallbackBg = `/cert_bg/${styleName}.png`
+                  const pdfSrc = `/api/cert/${encodeURIComponent(c.ts)}?public=1&hide_meta=1`
 
                   return (
-                    <a key={c.ts} href={href}
-                       style={{
-                         display:'grid',
-                         gridTemplateRows:'auto auto',
-                         border:'1px solid var(--color-border)',
-                         borderRadius:12,
-                         overflow:'hidden',
-                         textDecoration:'none',
-                         color:'var(--color-text)',
-                         background:'rgba(255,255,255,.02)',
-                         boxShadow:'var(--shadow-elev1)',
-                         transition:'transform .2s ease'
-                       }}
+                    <div
+                      key={c.ts}
+                      style={{
+                        border:'1px solid var(--color-border)',
+                        borderRadius:12,
+                        overflow:'hidden',
+                        background:'rgba(255,255,255,.02)',
+                        boxShadow:'var(--shadow-elev1)',
+                        display:'grid',
+                        gridTemplateRows:'auto auto'
+                      }}
                     >
-                      {/* Aperçu A4 fidèle (pas d’étirement) */}
-                      <div
-                        style={{
-                          position:'relative',
-                          width:'100%',
-                          aspectRatio:'595.28/841.89',
-                          borderBottom:'1px solid var(--color-border)',
-                          // 1) custom → fallback neutre
-                          // 2) styles → thumb puis full
-                          backgroundImage: styleName === 'custom'
-                            ? `url(${customBg}), url(/cert_bg/neutral.png)`
-                            : `url(${thumb}), url(${full})`,
-                          backgroundSize:'cover',
-                          backgroundPosition:'center',
-                          backgroundColor:'#0E1017'
-                        }}
-                        aria-hidden
-                      >
-                        {/* Badge en vente */}
+                      {/* Preview wrapper */}
+                      <div style={{position:'relative', width:'100%', aspectRatio:'595.28/841.89', borderBottom:'1px solid var(--color-border)'}}>
+                        {/* REAL certificate preview (PDF) */}
+                        <object
+                          data={pdfSrc}
+                          type="application/pdf"
+                          aria-label={`Aperçu du certificat ${c.ts}`}
+                          style={{position:'absolute', inset:0, width:'100%', height:'100%', border:'none'}}
+                        >
+                          {/* Fallback image if PDF preview unsupported (iOS/Safari) */}
+                          <img
+                            src={fallbackBg}
+                            alt=""
+                            style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', background:'#0E1017'}}
+                          />
+                        </object>
+
+                        {/* Click overlay to ensure the whole card navigates */}
+                        <a
+                          href={href}
+                          aria-label={locale==='fr' ? `Ouvrir le certificat du ${c.ts}` : `Open certificate ${c.ts}`}
+                          style={{position:'absolute', inset:0, zIndex:2}}
+                        />
+
+                        {/* On-sale badge */}
                         {isOnSale && (
-                          <span style={{
-                            position:'absolute', top:8, left:8,
-                            padding:'6px 10px',
-                            borderRadius:999,
-                            background:'rgba(14,170,80,.18)',
-                            border:'1px solid rgba(14,170,80,.4)',
-                            fontSize:12
-                          }}>
+                          <span
+                            style={{
+                              position:'absolute', top:8, left:8, zIndex:3,
+                              padding:'6px 10px',
+                              borderRadius:999,
+                              background:'rgba(14,170,80,.18)',
+                              border:'1px solid rgba(14,170,80,.4)',
+                              fontSize:12
+                            }}
+                          >
                             {locale==='fr' ? 'En vente' : 'On sale'}
                           </span>
                         )}
-                        {/* Date en overlay pour repère visuel */}
-                        <span style={{
-                          position:'absolute', bottom:8, right:8,
-                          padding:'6px 10px',
-                          borderRadius:8,
-                          background:'rgba(0,0,0,.28)',
-                          border:'1px solid rgba(255,255,255,.12)',
-                          fontSize:12
-                        }}>
-                          {c.ts}
-                        </span>
                       </div>
 
-                      {/* Infos */}
-                      <div style={{padding:12}}>
-                        {c.title && <div style={{fontWeight:800, lineHeight:1.2}}>{c.title}</div>}
-                        <div style={{opacity:.75, marginTop: c.title ? 6 : 0, whiteSpace:'pre-wrap', maxHeight:48, overflow:'hidden', textOverflow:'ellipsis'}}>
-                          {c.message || (locale==='fr' ? 'Ouvrir le certificat' : 'Open certificate')}
+                      {/* Big date only */}
+                      <a href={href} style={{textDecoration:'none', color:'var(--color-text)'}}>
+                        <div style={{padding:'12px 12px 14px', textAlign:'center'}}>
+                          <div style={{fontWeight:900, fontSize:20, letterSpacing:.3}}>{c.ts}</div>
                         </div>
-                      </div>
-                    </a>
+                      </a>
+                    </div>
                   )
                 })}
               </div>
