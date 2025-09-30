@@ -84,10 +84,10 @@ export async function GET(req: Request) {
           const td = String(d.time_display ?? time_display)
           return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc'
         })()
-        local_date_only = !!(d.local_date_only ?? local_date_only)
         text_color      = safeHex(d.text_color ?? text_color)
-        title_public    = !!(d.title_public ?? title_public)
-        message_public  = !!(d.message_public ?? message_public)
+        local_date_only = (d.local_date_only !== undefined) ? safeBool1(d.local_date_only) : local_date_only
+        title_public    = (d.title_public    !== undefined) ? safeBool1(d.title_public)    : title_public
+        message_public  = (d.message_public  !== undefined) ? safeBool1(d.message_public)  : message_public
 
         await pool.query(`delete from checkout_payload_temp where key = $1`, [payloadKey])
       }

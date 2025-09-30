@@ -113,11 +113,12 @@ export async function GET(req: Request) {
           const td = String(d.time_display ?? time_display);
           return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc';
         })();
-        local_date_only = !!(d.local_date_only ?? local_date_only);
+        local_date_only = (d.local_date_only !== undefined) ? safeBool(d.local_date_only) : local_date_only;
         text_color      = safeHex(d.text_color ?? text_color);
-        title_public    = !!(d.title_public ?? title_public);
-        message_public  = !!(d.message_public ?? message_public);
-        public_registry = !!(d.public_registry ?? public_registry);
+        // ⚠️ IMPORTANT : caster proprement les booléens ('0' | '1' | true | false)
+        title_public    = (d.title_public    !== undefined) ? safeBool(d.title_public)    : title_public;
+        message_public  = (d.message_public  !== undefined) ? safeBool(d.message_public)  : message_public;
+        public_registry = (d.public_registry !== undefined) ? safeBool(d.public_registry) : public_registry;
         wantsAutopub    = wantsAutopub || public_registry;
 
         // hygiène : on supprime l’entrée tampon
