@@ -246,7 +246,7 @@ export default async function Page({
   ? myListings.find(l => (ymdSafe(l.ts) === tsYMD))
   : null
 
-
+/*
   // public registry state & optional autopub
   const isPublicDb = await getPublicStateDb(tsISO!)
   const wantsAutopub = sp.autopub === '1'
@@ -255,6 +255,9 @@ export default async function Page({
     redirect(`/${locale}/m/${encodeURIComponent(tsYMD!)}?reg=pub`)
   }  
   const isPublic = isPublicDb
+
+*/
+  const isPublic = await getPublicStateDb(tsISO!)
 
   // claim data
   const meta = await getClaimMeta(tsISO!)

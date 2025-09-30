@@ -170,10 +170,9 @@ export async function POST(req: Request) {
         custom_bg_key,
         locale,
       },
-      success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}${
-        public_registry === '1' ? '&autopub=1' : ''
-      }`,
-      cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(ymd)}&style=${cert_style}&cancelled=1`,
+        //public_registry === '1' ? '&autopub=1' : ''
+        success_url: `${origin}/api/checkout/confirm?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${origin}/${locale}/claim?ts=${encodeURIComponent(ymd)}&style=${cert_style}&cancelled=1`,
     })
 
     if (!session.url) return NextResponse.json({ error: 'no_checkout_url' }, { status: 500 })
