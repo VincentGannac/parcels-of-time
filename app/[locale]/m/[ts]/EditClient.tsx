@@ -4,7 +4,6 @@
 import type React from 'react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-
 type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';
@@ -286,7 +285,7 @@ export default function EditClient({
     text_color: initial.text_color || '#1A1F2A',
     title_public: !!initial.title_public,
     message_public: !!initial.message_public,
-    public_registry: false, // pas géré ici
+    public_registry: false,
   })
 
   // Extraire “Offert par: xxx” si présent
@@ -296,11 +295,7 @@ export default function EditClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-
-  /** ===== Custom background (édition) =====
-   * customBgUrl : l'image actuelle stockée (chargée depuis /api/claim-bg/<ts>)
-   * customBgLocal : nouvelle image choisie par l'utilisateur (prioritaire dans la preview & submit)
-   */
+  /** ===== Custom background (édition) ===== */
   const [customBgUrl, setCustomBgUrl] = useState<string | null>(null)
   const [customBgLocal, setCustomBgLocal] = useState<{ dataUrl:string; w:number; h:number } | null>(null)
   const [imgLoading, setImgLoading] = useState(false)
@@ -328,7 +323,6 @@ export default function EditClient({
         if (objectUrl) URL.revokeObjectURL(objectUrl)
       }
     } else {
-      // autre style ou bien on a une image locale → pas besoin du fond serveur
       setCustomBgUrl(null)
     }
   }, [tsISO, form.cert_style, customBgLocal])
@@ -355,10 +349,7 @@ export default function EditClient({
     }
   }
 
-  
-
-
-  // Visibilité (on présente les mêmes toggles que ClientClaim)
+  // Visibilité (mêmes toggles que ClientClaim)
   const [show, setShow] = useState({
     ownedBy: !hideOwnedInitially,
     title: !!(initial.title || '').trim(),
@@ -367,8 +358,40 @@ export default function EditClient({
     giftedBy: isGift,
   })
 
+  // 🔒 Auto-vidage de sécurité si décoché (y compris si ça change “indirectement”)
+  useEffect(() => {
+    if (!show.ownedBy && form.display_name) {
+      setForm(f => ({ ...f, display_name: '' }))
+    }
+  }, [show.ownedBy]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!show.title && form.title) {
+      setForm(f => ({ ...f, title: '' }))
+    }
+  }, [show.title]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!show.message && form.message) {
+      setForm(f => ({ ...f, message: '' }))
+    }
+  }, [show.message]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!show.giftedBy && form.gifted_by) {
+      setForm(f => ({ ...f, gifted_by: '' }))
+    }
+  }, [show.giftedBy]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!isGift && (show.giftedBy || form.gifted_by)) {
+      setShow(s => ({ ...s, giftedBy: false }))
+      setForm(f => ({ ...f, gifted_by: '' }))
+    }
+  }, [isGift]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const ownerForText = (form.display_name || '').trim() || L.anon
-  const chosenDateStr = ymdUTC(parsedDate)   // déjà présent plus bas ; garde une seule définition
+  const chosenDateStr = ymdUTC(parsedDate)
   const attestationText = `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${chosenDateStr}. Le présent document confirme la validité et l'authenticité de cette acquisition.`
 
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
@@ -423,10 +446,8 @@ export default function EditClient({
   const nameForPreview = showOwned ? (form.display_name.trim() || L.anon) : ''
   const giftedByStr = showGifted ? (form.gifted_by.trim() || L.placeholders.giftedName) : ''
   
-  // --- Mesure titre déjà en place ---
   const titleLines = titleForPreview ? meas.wrap(titleForPreview, nameSize, COLW, true).slice(0, 2) : []
 
-  // Hauteurs des blocs optionnels — mêmes formules que le PDF
   const ownedBlockH  = showOwned  ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
   const giftedBlockH = showGifted ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
 
@@ -434,25 +455,20 @@ export default function EditClient({
   const spaceForText = availH
   const spaceAfterOwned = spaceForText - fixedTop
 
-  // ⚠️ Bloc titre sans gap supplémentaire (comme cert.ts)
   const titleBlockNoGap = titleForPreview ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
   const gapBeforeTitle = showGifted ? 8 : gapSection
   const beforeMsgConsumed = giftedBlockH + (titleBlockNoGap ? (gapBeforeTitle + titleBlockNoGap) : 0)
 
   const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
 
-  // (Lien non pris en compte ici; si tu veux le réactiver, soustrais son bloc comme avant)
   const TOTAL_TEXT_LINES = Math.max(0, Math.floor(afterTitleSpace / lineHMsg))
 
-  // Mesure "attestation" seule
   const attestLinesAll = (attestationPreview)
     ? meas.wrap(attestationPreview, msgSize, COLW, false)
     : []
 
-  // Lignes allouées au MESSAGE utilisateur (le reste ira à l’attestation)
   const LINES_FOR_USER = Math.max(0, TOTAL_TEXT_LINES - attestLinesAll.length)
 
-  // Wrap effectif
   const msgLinesAll = messageOnlyPreview
     ? messageOnlyPreview.split(/\n+/).flatMap((p, i, arr) => {
         const lines = meas.wrap(p, msgSize, COLW, false)
@@ -462,7 +478,6 @@ export default function EditClient({
 
   const msgLines = msgLinesAll.slice(0, LINES_FOR_USER)
 
-  // Lignes restantes pour l’attestation
   const remainingForAttest = Math.max(0, TOTAL_TEXT_LINES - msgLines.length)
   const attestLines = attestLinesAll.slice(0, remainingForAttest)
 
@@ -482,12 +497,6 @@ export default function EditClient({
   + (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
   + (attestLines.length ? (gapSection + attestLines.length * lineHMsg) : 0)
 
-  /*
-  const biasUp = 22
-  const by = contentBottomMin + (availH - blockH) / 2 + biasUp
-  let y = by + blockH
-  */
-  
   let y = contentTopMax
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
   const centerStyle: React.CSSProperties = {
@@ -495,29 +504,21 @@ export default function EditClient({
       left:'50%',
       transform:'translateX(-50%)',
       textAlign:'center',
-      whiteSpace:'pre',      // idem : pas de re-wrap
+      whiteSpace:'pre',
       wordBreak:'normal',
       color: form.text_color
     }
 
-  // lignes dispo totales pour Message (tel que déjà calculé)
   const TOTAL_MSG_LINES = maxMsgLines
-
-  // + une ligne vide entre message perso et attestation si les deux existent
   const attestExtraBlank = (show.attestation ? 1 : 0)
-
 
   function capacityCharsForLines(linesBudget: number): number {
     if (linesBudget <= 0) return 0
-    // On cherche combien de "mots courts" ("x") séparés par des espaces tiennent
-    // sur `linesBudget` lignes avec la même mesure que le PDF.
     const fitsLines = (n: number) => {
       const fake = 'x '.repeat(Math.max(0, n)).trim()
       const lines = meas.wrap(fake, msgSize, COLW, false)
       return lines.length
     }
-  
-    // borne haute raisonnable (A4, 12.5pt, colonne unique) — on prend large
     let lo = 0, hi = 5000
     while (lo < hi) {
       const mid = Math.ceil((lo + hi + 1) / 2)
@@ -529,11 +530,9 @@ export default function EditClient({
 
   const userMsgMaxChars = useMemo(() => {
     return capacityCharsForLines(LINES_FOR_USER)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [LINES_FOR_USER, scale, form.cert_style, show, isGift, chosenDateStr])
   
-  
-  // Séquence identique au PDF (baselines)
   y -= (tsSize + 6); const topMainTime = toTopPx(y, tsSize)
 
   let ownedLabelTop:number|null = null, ownedNameTop:number|null = null
@@ -557,9 +556,7 @@ export default function EditClient({
   let titleLabelTop:number|null = null; const titleLineTops:number[] = []
   if (titleForPreview) {
     y -= (nameSize + 4)
-    // même règle que pour la capacité : 8pt si Gifted juste au-dessus, sinon 14pt
     y -= (showGifted ? 8 : gapSection)
-    // ⚠️ on NE rajoute plus un gapSection supplémentaire ici
     titleLabelTop = toTopPx(y - (labelSize + 2), labelSize)
     y -= (labelSize + 6)
     for (const _ of titleLines) {
@@ -576,7 +573,6 @@ export default function EditClient({
     for (const _ of msgLines) { msgLineTops.push(toTopPx(y - lineHMsg, msgSize)); y -= lineHMsg }
   }
 
-    //  Attestation (indépendante)
   let attestLabelTop:number|null = null
   const attestLineTops:number[] = []
   if (attestLines.length) {
@@ -602,20 +598,17 @@ export default function EditClient({
 
   const isMsgOverflow = show.message && userMsgMaxChars>0 && (form.message?.length||0) > userMsgMaxChars
 
-
   // ====== Submit (Checkout édition) ======
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('loading'); setError('')
 
-    // Compose message final (avec Gifted by si activé)
-    
     const safeUserMsg = show.message ? (form.message || '') : ''
     const cappedUserMsg = userMsgMaxChars > 0 ? safeUserMsg.slice(0, userMsgMaxChars) : ''
 
     const msgParts: string[] = []
     if (show.message && cappedUserMsg.trim()) msgParts.push(cappedUserMsg.trim())
-    if (show.attestation) msgParts.push(attestationText) // 👈 indépendant du message
+    if (show.attestation) msgParts.push(attestationText)
     if (isGift && show.giftedBy && form.gifted_by.trim()) {
       msgParts.push(`${giftLabel}: ${form.gifted_by.trim().slice(0, GIFT_MAX)}`) 
     }
@@ -639,7 +632,6 @@ export default function EditClient({
       message_public: form.message_public ? '1' : '0',
     }
 
-    // ⬇️ Nouvelle image locale ? on l’envoie au serveur
     if (form.cert_style === 'custom' && customBgLocal?.dataUrl) {
       payload.custom_bg_data_url = customBgLocal.dataUrl
     }
@@ -678,13 +670,10 @@ export default function EditClient({
     '#FFFFFF','#E6EAF2',
   ]
 
-  // --- Anti-overlap header/date (édition) ---
   const minTimeTopPx = topCert + (MIN_GAP_HEADER_PT * scale)
   const contentOffsetPx = Math.max(0, minTimeTopPx - topMainTime)
-
   const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
-  // 🔧 Champs visibles (bornés côté serveur aussi par sécurité)
   const finalDisplayName = show.ownedBy
   ? ((form.display_name || '').slice(0, NAME_MAX) || undefined)
   : undefined
@@ -692,7 +681,6 @@ export default function EditClient({
   const finalTitle = show.title
   ? ((form.title || '').slice(0, TITLE_MAX) || undefined)
   : undefined
-
 
   const topMainTime2      = topMainTime + contentOffsetPx
   ownedLabelTop           = push(ownedLabelTop)
@@ -702,7 +690,7 @@ export default function EditClient({
   titleLabelTop           = push(titleLabelTop)
   for (let i=0;i<titleLineTops.length;i++) titleLineTops[i] = titleLineTops[i] + contentOffsetPx
   msgLabelTop             = push(msgLabelTop)
-  attestLabelTop = push(attestLabelTop)
+  attestLabelTop          = push(attestLabelTop)
   for (let i=0;i<attestLineTops.length;i++) attestLineTops[i] = attestLineTops[i] + contentOffsetPx
   for (let i=0;i<msgLineTops.length;i++) msgLineTops[i] = msgLineTops[i] + contentOffsetPx
   linkLabelTop            = push(linkLabelTop)
@@ -768,29 +756,49 @@ export default function EditClient({
             />
           </label>
 
-          <label style={{display:'grid', gap:6}}>
-            <span>{isFR ? 'Nom affiché' : 'Displayed name'}</span>
-            <input type="text" value={form.display_name}
-              onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
-              maxLength={NAME_MAX}     
-              placeholder={isFR ? 'Ex. “Marie”' : 'e.g. “Marie”'}
-              style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-            />
-          </label>
+          {/* Nom affiché — masqué si décoché */}
+          {show.ownedBy && (
+            <label style={{display:'grid', gap:6}}>
+              <span>{isFR ? 'Nom affiché' : 'Displayed name'}</span>
+              <input type="text" value={form.display_name}
+                onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
+                maxLength={40}
+                placeholder={isFR ? 'Ex. “Marie”' : 'e.g. “Marie”'}
+                style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+              />
+            </label>
+          )}
 
           {/* 🎁 Offert par */}
           <div style={{marginTop:10}}>
             <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-              <input type="checkbox" checked={isGift} onChange={e=>{ setIsGift(e.target.checked); setShow(s=>({...s, giftedBy:e.target.checked})) }} />
+              <input
+                type="checkbox"
+                checked={isGift}
+                onChange={e=>{
+                  const checked = e.target.checked
+                  setIsGift(checked)
+                  // si on désactive le mode "cadeau" → masquer aussi l'affichage + vider la valeur
+                  if (!checked) {
+                    setShow(s=>({...s, giftedBy:false}))
+                    setForm(f=>({...f, gifted_by:''}))
+                  } else {
+                    // si on réactive, on ne force pas giftedBy à true ; l'utilisateur choisit via la section Affichage
+                    setShow(s=>({...s}))
+                  }
+                }}
+              />
               <span>🎁 {giftLabel}</span>
             </label>
-            {isGift && (
+
+            {/* Champ d'édition masqué si décoché dans Affichage */}
+            {isGift && show.giftedBy && (
               <div style={{marginTop:8}}>
                 <input
                   type="text"
                   value={form.gifted_by}
                   onChange={e=>setForm(f=>({...f, gifted_by:e.target.value}))}
-                  maxLength={GIFT_MAX} 
+                  maxLength={40}
                   placeholder={isFR ? 'Ex. “Offert par Vincent”' : 'e.g. “Gifted by Vincent”'}
                   style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
                 />
@@ -798,47 +806,51 @@ export default function EditClient({
             )}
           </div>
 
-          <div style={{display:'grid', gap:6, marginTop:10}}>
-            <label>
-              <span>{titleLabel}</span>
-              <input type="text" value={form.title}
-                onChange={e=>setForm(f=>({...f, title:e.target.value}))}
-                maxLength={TITLE_MAX}   
-                placeholder="Ex. “Joyeux anniversaire !”"
-                style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-              />
-            </label>
-          </div>
+          {/* Titre — masqué si décoché */}
+          {show.title && (
+            <div style={{display:'grid', gap:6, marginTop:10}}>
+              <label>
+                <span>{titleLabel}</span>
+                <input type="text" value={form.title}
+                  onChange={e=>setForm(f=>({...f, title:e.target.value}))}
+                  maxLength={80}
+                  placeholder="Ex. “Joyeux anniversaire !”"
+                  style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                />
+              </label>
+            </div>
+          )}
 
-          <div style={{display:'grid', gap:6, marginTop:10}}>
-          <label>
-            <span>{messageLabel}</span>
-            <textarea
-              value={form.message}
-              onChange={e=>setForm(f=>({...f, message:e.target.value}))}
-              maxLength={userMsgMaxChars || undefined}
-              placeholder={isGift ? '“Le jour de notre rencontre…”' : '“Le jour où tout a commencé.”'}
-              style={{
-                width:'100%',
-                padding:'12px 14px',
-                border:'1px solid ' + (isMsgOverflow ? '#ff6b6b' : 'var(--color-border)'),
-                borderRadius:10,
-                background:'transparent',
-                color:'var(--color-text)'
-              }}
-            />
-            {show.message && (
-              <div style={{textAlign:'right', fontSize:12, marginTop:4, color: isMsgOverflow ? '#ff6b6b' : 'inherit', opacity: isMsgOverflow ? 1 : .65}}>
-                {(form.message?.length || 0)} / {userMsgMaxChars || '∞'}
-              </div>
-            )}
-            {isMsgOverflow && (
-              <div role="alert" aria-live="polite" style={{marginTop:6, fontSize:12, color:'#ff6b6b'}}>
-                Votre message dépasse la limite autorisée
-              </div>
-            )}
-          </label>
-          </div>
+          {/* Message — masqué si décoché */}
+          {show.message && (
+            <div style={{display:'grid', gap:6, marginTop:10}}>
+              <label>
+                <span>{messageLabel}</span>
+                <textarea
+                  value={form.message}
+                  onChange={e=>setForm(f=>({...f, message:e.target.value}))}
+                  maxLength={userMsgMaxChars || undefined}
+                  placeholder={isGift ? '“Le jour de notre rencontre…”' : '“Le jour où tout a commencé.”'}
+                  style={{
+                    width:'100%',
+                    padding:'12px 14px',
+                    border:'1px solid ' + (isMsgOverflow ? '#ff6b6b' : 'var(--color-border)'),
+                    borderRadius:10,
+                    background:'transparent',
+                    color:'var(--color-text)'
+                  }}
+                />
+                <div style={{textAlign:'right', fontSize:12, marginTop:4, opacity:.65}}>
+                  {(form.message?.length || 0)} / {userMsgMaxChars || '∞'}
+                </div>
+                {isMsgOverflow && (
+                  <div role="alert" aria-live="polite" style={{marginTop:6, fontSize:12, color:'#ff6b6b'}}>
+                    Votre message dépasse la limite autorisée
+                  </div>
+                )}
+              </label>
+            </div>
+          )}
 
           {/* Affichage / Masquage */}
           <div style={{marginTop:12, paddingTop:10, borderTop:'1px dashed var(--color-border)'}}>
@@ -847,52 +859,56 @@ export default function EditClient({
             </div>
             <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-              <input
-              type="checkbox"
-              checked={show.ownedBy}
-              onChange={e=>{
-                const checked = e.target.checked
-                setShow(s=>({...s, ownedBy: checked}))
-                if(!checked) setForm(f=>({...f, display_name: ''}))
-              }}
-              />
+                <input
+                  type="checkbox"
+                  checked={show.ownedBy}
+                  onChange={e=>{
+                    const checked = e.target.checked
+                    setShow(s=>({...s, ownedBy: checked}))
+                    if(!checked) setForm(f=>({...f, display_name: ''}))
+                  }}
+                />
                 <span>{ownedByLabel}</span>
               </label>
 
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-              <input
-              type="checkbox"
-              checked={show.title}
-              onChange={e=>{
-                const checked = e.target.checked
-                setShow(s=>({...s, title: checked}))
-                if(!checked) setForm(f=>({...f, title: ''}))
-              }}
-            />
+                <input
+                  type="checkbox"
+                  checked={show.title}
+                  onChange={e=>{
+                    const checked = e.target.checked
+                    setShow(s=>({...s, title: checked}))
+                    if(!checked) setForm(f=>({...f, title: ''}))
+                  }}
+                />
                 <span>{titleLabel}</span>
               </label>
 
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-              <input
-              type="checkbox"
-              checked={show.message}
-              onChange={e=>{
-                const checked = e.target.checked
-                setShow(s=>({...s, message: checked}))
-                if(!checked) setForm(f=>({...f, message: ''}))
-              }}
-            />
+                <input
+                  type="checkbox"
+                  checked={show.message}
+                  onChange={e=>{
+                    const checked = e.target.checked
+                    setShow(s=>({...s, message: checked}))
+                    if(!checked) setForm(f=>({...f, message: ''}))
+                  }}
+                />
                 <span>{messageLabel}</span>
               </label>
 
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                <input type="checkbox" checked={show.attestation} onChange={e=>setShow(s=>({...s, attestation:e.target.checked}))}/>
+                <input
+                  type="checkbox"
+                  checked={show.attestation}
+                  onChange={e=>setShow(s=>({...s, attestation:e.target.checked}))}
+                />
                 <span>Texte d’attestation</span>
               </label>
 
               {isGift && (
                 <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                   <input
+                  <input
                     type="checkbox"
                     checked={show.giftedBy}
                     onChange={e=>{
@@ -952,13 +968,10 @@ export default function EditClient({
           </div>
         </div>
 
-        
-
         {/* Style */}
         <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
           <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, marginBottom:8}}>
             <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>STYLE</div>
-            {/* Bouton global pour (re)choisir un fond custom quand le style est custom */}
             {form.cert_style === 'custom' && (
               <button type="button" onClick={openFileDialog}
                 style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)', cursor:'pointer'}}>
@@ -1059,7 +1072,7 @@ export default function EditClient({
       <aside aria-label="Aperçu du certificat"
         style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
         <div ref={previewWrapRef} style={{position:'relative', width:'100%', aspectRatio: `${A4_W_PT}/${A4_H_PT}`, borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
-          {/* Fond : priorise l'image locale choisie, sinon l'image serveur, sinon style statique */}
+          {/* Fond */}
           <img
             key={
               form.cert_style === 'custom'
@@ -1131,7 +1144,7 @@ export default function EditClient({
             </>
           )}
 
-          {/* Attestation (section indépendante) */}
+          {/* Attestation */}
           {attestLines.length>0 && (
             <>
               <div style={{ ...centerStyle, top: attestLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
@@ -1144,7 +1157,6 @@ export default function EditClient({
               ))}
             </>
           )}
-
 
           {/* Lien */}
           {linkLines.length>0 && (
