@@ -116,7 +116,8 @@ function drawNormalized(img: HTMLImageElement, orientation: number) {
   return { dataUrl: canvas.toDataURL('image/png', 0.92), w: canvas.width, h: canvas.height }
 }
 async function decodeTiffToPngDataUrl(file: File): Promise<{dataUrl:string; w:number; h:number}> {
-  const UTIF = (await import('utif')).default
+  const mod: any = await import('utif')
+  const UTIF = mod.default ?? mod
   const buf = new Uint8Array(await file.arrayBuffer())
   const ifds = UTIF.decode(buf)
   if (!ifds || !ifds.length) throw new Error('TIFF decode failed')

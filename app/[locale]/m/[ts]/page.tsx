@@ -10,7 +10,13 @@ import { readSession, ownerIdForDay } from '@/lib/auth'
 import EditClient from './EditClient'
 
 type Params = { locale: string; ts: string }
-type SearchParams = { autopub?: string; ok?: string; debug?: string; listing?: string }
+type SearchParams = {
+  autopub?: string
+  ok?: string
+  debug?: string
+  listing?: string
+  reg?: 'pub' | 'priv' // <- ajouté
+}
 
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
 function formatISOAsNiceSafe(iso: string) {
@@ -246,8 +252,8 @@ export default async function Page({
   const wantsAutopub = sp.autopub === '1'
   if (isOwner && wantsAutopub && !isPublicDb) {
     await setPublicDb(tsISO!, true)
-    redirect(`/${locale}/m/${encodeURIComponent(tsYMD!)}?ok=1`)
-  }
+    redirect(`/${locale}/m/${encodeURIComponent(tsYMD!)}?reg=pub`)
+  }  
   const isPublic = isPublicDb
 
   // claim data
@@ -262,7 +268,9 @@ export default async function Page({
   const niceTs = formatISOAsNiceSafe(tsISO!)
 
   // UI logic
-  const listingJustPublished = (sp.listing === 'ok') || (sp.ok === '1')
+  const listingJustPublished = (sp.listing === 'ok') // ✅ uniquement marketplace
+  const regAction = sp.reg === 'pub' ? 'pub' : (sp.reg === 'priv' ? 'priv' : null) // ✅ registre
+
   const canSell =
     isOwner &&
     !!merchant?.stripe_account_id &&
@@ -280,8 +288,9 @@ export default async function Page({
     if (!s) redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}`)}`)
     const oid = await ownerIdForDaySafe(norm.tsISO, norm.tsYMD)
     if (!oid || oid !== s!.ownerId) redirect(`/${locale}/account?err=not_owner`)
-    const ok = await setPublicDb(norm.tsISO, next)
-    redirect(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}?ok=${ok ? '1' : '0'}`)
+    await setPublicDb(norm.tsISO, next)
+    redirect(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}?reg=${next ? 'pub' : 'priv'}`)
+    
   }
 
   return (
@@ -435,6 +444,22 @@ export default async function Page({
                 ✅ {locale==='fr' ? 'Votre annonce a été publiée sur la marketplace.' : 'Your listing is live on the marketplace.'}
               </div>
             )}
+
+            {isOwner && regAction && (
+              <div style={{
+                padding:'10px 12px',
+                border:'1px solid rgba(14,170,80,.4)',
+                background: regAction === 'pub' ? 'rgba(14,170,80,.12)' : 'rgba(120,130,150,.12)',
+                borderRadius:10,
+                fontSize:14
+              }}>
+                {regAction === 'pub'
+                  ? (locale==='fr' ? '✅ Votre certificat a été publié dans le registre public.' : '✅ Your certificate is now public in the registry.')
+                  : (locale==='fr' ? '🔒 Votre certificat est maintenant privé.' : '🔒 Your certificate is now private.')
+                }
+              </div>
+            )}
+
 
             {/* Owner: active listing */}
             {isOwner && myListingForThisDay && (

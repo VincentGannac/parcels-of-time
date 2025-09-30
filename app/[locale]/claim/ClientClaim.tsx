@@ -611,7 +611,10 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       const { dataUrl: normalizedUrl, w, h } = await normalizeToPng(file)
       const { dataUrl: a4Url, w: tw, h: th } = await coverToA4JPEG(normalizedUrl, w, h)
       if (bytesFromDataURL(a4Url) > 4 * 1024 * 1024) {
-        setCustomErr('Image trop lourde après préparation. Réessayez avec une photo plus légère.')
+         setCustomErr(
+             'Image trop lourde après préparation (< 4 Mo requis). ' +
+             'Recadrez/compressez l’image puis réessayez.\n\n' + CUSTOM_LIMITS_HINT
+           )
         return
       }
       setCustomBg({ url: a4Url, dataUrl: a4Url, w: tw, h: th })
@@ -619,7 +622,11 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       log('CustomBG prêt (A4 JPEG)', { w: tw, h: th, approxKB: Math.round(bytesFromDataURL(a4Url) / 1024) })
     } catch (e) {
       console.error('[Claim/CustomBG] onPickCustomBg', e)
-      setCustomErr('Erreur de lecture ou de conversion de l’image.')
+      setCustomErr(
+           'Erreur de lecture ou de conversion de l’image. ' +
+           'Possible : format non supporté par votre navigateur (AVIF/WebP/TIFF), ' +
+           'fichier corrompu, ou image trop volumineuse.\n\n' + CUSTOM_LIMITS_HINT
+         )
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
       setImgLoading(false)
@@ -704,9 +711,21 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
           body: JSON.stringify(body),
         })
         if (!res2.ok) {
-          const j = await res2.json().catch(()=>null)
-          throw new Error(j?.error || 'checkout_error')
-        }
+          const rid = res2.headers.get('x-request-id') || res2.headers.get('x-vercel-id') || ''
+          if (res2.status === 413) {
+            setStatus('error')
+            setError('Image personnalisée trop lourde (413 Payload Too Large). Réduisez la taille de votre image et réessayez.')
+            console.error('[Marketplace checkout] 413 payload too large', { rid })
+            return
+          }
+          const j = await parseErrorResponse(res2)
+          const errCode = j?.error || j?.code || 'unknown_error'
+          const detail  = j?.message || j?.error_text || ''
+          setStatus('error')
+          setError(`Erreur de création de session de paiement (${res2.status}${rid ? ` • req ${rid}` : ''}) — ${errCode}${detail ? ` : ${String(detail).slice(0, 300)}` : ''}`)
+          console.error('[Marketplace checkout] failed', { status: res2.status, rid, body: j })
+          return
+        }        
         const j = await res2.json()
         window.location.href = j.url
         return
@@ -741,7 +760,9 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     if (!show.ownedBy) msgParts.push('[[HIDE_OWNED_BY]]')
 
     const finalMessage = msgParts.length ? msgParts.join('\n') : undefined
-    
+
+
+
     const payload:any = {
       ts: d.toISOString(),
       email: form.email,
@@ -763,27 +784,33 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
     const res = await fetch('/api/checkout', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
     if (!res.ok) {
-      setStatus('error')
-      try {
-        const j = await res.json()
-        const map: Record<string,string> = {
-          rate_limited: 'Trop de tentatives. Réessaye dans ~1 minute.',
-          invalid_ts: 'Horodatage invalide. Utilise un ISO comme 2100-01-01.',
-          missing_fields: 'Merci de renseigner au minimum l’e-mail et la date.',
-          custom_bg_invalid: 'Image personnalisée invalide (doit être PNG/JPG en data URL).',
-          stripe_key_missing: 'Configuration Stripe absente côté serveur.',
-          bad_price: 'Prix invalide pour cette journée.',
-          stripe_error: 'Erreur Stripe côté serveur.',
-          date_unavailable: 'Ce jour vient d’être vendu. Merci d’en choisir un autre.',
-        }
-        setError(map[j.error] || j.error || 'Unknown error')
-        console.error('[Checkout] Erreur côté serveur', j)
-      } catch (err) {
-        console.error('[Checkout] Échec parsing erreur', err)
-        setError('Unknown error')
+      const rid = res.headers.get('x-request-id') || res.headers.get('x-vercel-id') || ''
+      if (res.status === 413) {
+        setStatus('error')
+        setError('Image personnalisée trop lourde (413 Payload Too Large). Réduisez la taille de votre image et réessayez.')
+        console.error('[Checkout] 413 payload too large', { rid })
+        return
       }
+      const j = await parseErrorResponse(res)
+      const friendly: Record<string, string> = {
+        rate_limited: 'Trop de tentatives. Réessayez dans ~1 minute.',
+        invalid_ts: 'Horodatage invalide. Utilisez un ISO comme 2100-01-01.',
+        missing_fields: 'Merci de renseigner au minimum l’e-mail et la date.',
+        custom_bg_invalid: 'Image personnalisée invalide (PNG/JPG en data URL requis).',
+        stripe_key_missing: 'Configuration Stripe absente côté serveur.',
+        bad_price: 'Prix invalide pour cette journée.',
+        stripe_error: 'Erreur Stripe côté serveur.',
+        date_unavailable: 'Ce jour vient d’être vendu. Merci d’en choisir un autre.',
+      }
+      const errCode = j?.error || j?.code || 'unknown_error'
+      const baseMsg = friendly[errCode] || 'Erreur inconnue'
+      const detail  = j?.message || j?.error_text || ''
+      setStatus('error')
+      setError(`${baseMsg} (${res.status}${rid ? ` • req ${rid}` : ''}) — ${errCode}${detail ? ` : ${String(detail).slice(0, 300)}` : ''}`)
+      console.error('[Checkout] failed', { status: res.status, rid, body: j })
       return
     }
+    
     const data = await res.json()
     window.location.href = data.url
   }
@@ -963,6 +990,16 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   // + une ligne vide entre message perso et attestation si les deux existent
   const attestExtraBlank = (show.attestation ? 1 : 0)
 
+  async function parseErrorResponse(res: Response) {
+    const ct = res.headers.get('content-type') || ''
+    try {
+      if (ct.includes('application/json')) return await res.json()
+      const txt = await res.text()
+      return { error_text: txt }
+    } catch {
+      return null
+    }
+  }
   
   function capacityCharsForLines(linesBudget: number): number {
     if (linesBudget <= 0) return 0
@@ -1123,6 +1160,15 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
   linkLabelTop            = push(linkLabelTop)
   for (let i=0;i<linkLineTops.length;i++) linkLineTops[i] = linkLineTops[i] + contentOffsetPx
  
+    const CUSTOM_LIMITS_HINT =
+      'Rappels — images custom :\n' +
+      '• Formats en entrée : JPEG, PNG, WebP, AVIF, GIF (1er frame), BMP, SVG, HEIC/HEIF (convertis), TIFF (baseline).\n' +
+      '• Sortie envoyée : JPEG A4 2480×3508 (~300 dpi), taille finale < 4 Mo.\n' +
+      '• Le serveur n’accepte que PNG/JPEG en data URL.\n' +
+      '• AVIF/WebP/TIFF peuvent ne pas être décodés par certains navigateurs.\n' +
+      '• Les GIF/HEIC “séquence” sont aplatis au 1er frame.\n' +
+      '• Les images énormes peuvent échouer (limite mémoire/canvas) : réduisez la résolution si besoin.';
+  
   return (
     <main style={containerStyle}>
       {/* input fichier global */}
