@@ -429,7 +429,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     if (isYellow) return
     // on permet un nouveau pré-remplissage si on revient plus tard sur une jaune
     lastPrefilledYmdRef.current = null
-    // vide tous les champs (sauf e-mail et style choisi)
+    // vide tous les champs (sauf e-mail)
     setForm(f => ({
       ...f,
       display_name: '',
@@ -437,8 +437,12 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       message: '',
       gifted_by: '',
       link_url: '',
-      // on conserve email, cert_style, couleurs, etc.
+      cert_style: 'neutral', 
+      text_color: '#1A1F2A',       
+      // on conserve email, 
     }))
+
+    setCustomBg(null) // vide le fond custom
     // re-cocher toutes les cases d'affichage disponibles
     setShow(s => ({
       ...s,
@@ -1198,8 +1202,21 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
         <div style={{display:'grid', gridTemplateColumns:'1.1fr 0.9fr', gap:18, alignItems:'start'}}>
           {/* ---------- FORM COLUMN ---------- */}
-          <form onSubmit={onSubmit} style={{display:'grid', gap:14}}>
-            
+          <form
+              onSubmit={onSubmit}
+              onKeyDown={(e)=>{
+                if (e.defaultPrevented) return
+                if (e.key === 'Enter') {
+                  const t = e.target as HTMLElement
+                  const tag = (t?.tagName || '').toLowerCase()
+                  const type = (t as HTMLInputElement)?.type?.toLowerCase?.()
+                  const isTextarea = tag === 'textarea'
+                  const isSubmit = tag === 'button' || (tag === 'input' && type === 'submit')
+                  if (!isTextarea && !isSubmit) e.preventDefault() // ← bloque le paiement accidentel
+                }
+              }}
+              style={{display:'grid', gap:14}}
+            >
             {/* Step 1 — Journée */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
               <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>ÉTAPE 1 — VOTRE JOUR</div>
@@ -1291,7 +1308,7 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </div>
               <div style={{marginTop:8, fontSize:12, color:'#e0a800'}}>
                 Les jours en jaune sont <strong>revendus</strong> par un autre utilisateur (marketplace).
-                Parcels of Time prélève une <strong>commission de 10%</strong> côté vendeur.
+                Parcels of Time prélève une <strong>commission de 15%</strong> côté vendeur.
               </div>
             </div>
 
@@ -1308,122 +1325,156 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                 />
               </label>
 
-              <label style={{display:'grid', gap:6}}>
-                <span>{isGift ? 'Nom du·de la destinataire' : 'Nom sur le certificat'}</span>
-                <input type="text" value={form.display_name}
-                  onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
-                  maxLength={NAME_MAX}
-                  placeholder={isGift ? 'Ex. “Marie”' : 'Ex. “Marie”'}
-                   style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                 />
-               </label>
+              {/* Nom sur le certificat */}
+                {show.ownedBy && (
+                  <label style={{display:'grid', gap:6}}>
+                    <span>{isGift ? 'Nom du·de la destinataire' : 'Nom sur le certificat'}</span>
+                    <input
+                      type="text"
+                      value={form.display_name}
+                      onChange={e=>setForm(f=>({...f, display_name:e.target.value}))}
+                      maxLength={NAME_MAX}
+                      placeholder="Ex. “Marie”"
+                      style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                    />
+                  </label>
+                )}
 
 
               {/* 🎁 Offert par / Gifted by */}
-              {isGift && (
-                <label style={{display:'grid', gap:6, marginTop:10}}>
-                  <span>{giftLabel}</span>
-                  <input
-                    type="text"
-                    value={form.gifted_by}
-                    onChange={e=>setForm(f=>({...f, gifted_by:e.target.value}))}
-                    maxLength={GIFT_MAX} 
-                    placeholder={isFR ? 'Ex. “Offert par Vincent”' : 'e.g. “Gifted by Vincent”'}
-                    style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                  />
-                </label>
-              )}
+                {isGift && show.giftedBy && (
+                  <label style={{display:'grid', gap:6, marginTop:10}}>
+                    <span>{giftLabel}</span>
+                    <input
+                      type="text"
+                      value={form.gifted_by}
+                      onChange={e=>setForm(f=>({...f, gifted_by:e.target.value}))}
+                      maxLength={GIFT_MAX}
+                      placeholder={isFR ? 'Ex. “Offert par Vincent”' : 'e.g. “Gifted by Vincent”'}
+                      style={{padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                    />
+                  </label>
+                )}
 
+              {/* Titre */}
+                {show.title && (
+                  <div style={{display:'grid', gap:6, marginTop:10}}>
+                    <label>
+                      <span>{titleLabel}</span>
+                      <input
+                        type="text"
+                        value={form.title}
+                        onChange={e=>setForm(f=>({...f, title:e.target.value}))}
+                        maxLength={TITLE_MAX}
+                        placeholder="Ex. “Joyeux anniversaire !”"
+                        style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                      />
+                    </label>
+                  </div>
+                )}
+
+
+              {/* Message */}
+            {show.message && (
               <div style={{display:'grid', gap:6, marginTop:10}}>
                 <label>
-                  <span>{titleLabel}</span>
-                  <input type="text" value={form.title}
-                    onChange={e=>setForm(f=>({...f, title:e.target.value}))}
-                    maxLength={TITLE_MAX}     
-                    placeholder="Ex. “Joyeux anniversaire !”"
-                    style={{width:'100%', padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
+                  <span>{messageLabel}</span>
+                  <textarea
+                    value={form.message}
+                    onChange={e=>setForm(f=>({...f, message:e.target.value}))}
+                    maxLength={userMsgMaxChars || undefined}
+                    placeholder={isGift ? '“Le jour de notre rencontre…”' : '“Le jour où tout a commencé.”'}
+                    style={{
+                      width:'100%',
+                      padding:'12px 14px',
+                      border:'1px solid ' + (isMsgOverflow ? '#ff6b6b' : 'var(--color-border)'),
+                      borderRadius:10,
+                      background:'transparent',
+                      color:'var(--color-text)'
+                    }}
                   />
+                  {show.message && (
+                    <div style={{textAlign:'right', fontSize:12, marginTop:4, color: isMsgOverflow ? '#ff6b6b' : 'inherit', opacity: isMsgOverflow ? 1 : .65}}>
+                      {(form.message?.length || 0)} / {userMsgMaxChars || '∞'}
+                    </div>
+                  )}
+                  {isMsgOverflow && (
+                    <div role="alert" aria-live="polite" style={{marginTop:6, fontSize:12, color:'#ff6b6b'}}>
+                      Votre message dépasse la limite autorisée
+                    </div>
+                  )}
                 </label>
-              </div>
+                  </div>
+                )}
 
-              <div style={{display:'grid', gap:6, marginTop:10}}>
-              <label>
-              <span>{messageLabel}</span>
-              <textarea
-                value={form.message}
-                onChange={e=>setForm(f=>({...f, message:e.target.value}))}
-                maxLength={userMsgMaxChars || undefined}
-                placeholder={isGift ? '“Le jour de notre rencontre…”' : '“Le jour où tout a commencé.”'}
-                style={{
-                  width:'100%',
-                  padding:'12px 14px',
-                  border:'1px solid ' + (isMsgOverflow ? '#ff6b6b' : 'var(--color-border)'),
-                  borderRadius:10,
-                  background:'transparent',
-                  color:'var(--color-text)'
-                }}
-              />
-              {show.message && (
-                <div style={{textAlign:'right', fontSize:12, marginTop:4, color: isMsgOverflow ? '#ff6b6b' : 'inherit', opacity: isMsgOverflow ? 1 : .65}}>
-                  {(form.message?.length || 0)} / {userMsgMaxChars || '∞'}
-                </div>
-              )}
-              {isMsgOverflow && (
-                <div role="alert" aria-live="polite" style={{marginTop:6, fontSize:12, color:'#ff6b6b'}}>
-                  Votre message dépasse la limite autorisée
-                </div>
-              )}
-            </label>
-              </div>
-
-              {/* Affichage / Masquage des sections */}
+            {/* Affichage / Masquage des sections */}
               <div style={{marginTop:12, paddingTop:10, borderTop:'1px dashed var(--color-border)'}}>
                 <div style={{fontSize:13, color:'var(--color-muted)', marginBottom:8}}>
                   Affichage sur le certificat (vous pouvez retirer les éléments non essentiels)
                 </div>
                 <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
-                  <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                    <input
-                      type="checkbox"
-                      checked={show.ownedBy}
-                      onChange={e=>setShow(s=>({...s, ownedBy:e.target.checked}))}
-                    />
-                    <span>{ownedByLabel}</span>
-                  </label>
-                  <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                    <input
-                      type="checkbox"
-                      checked={show.title}
-                      onChange={e=>setShow(s=>({...s, title:e.target.checked}))}
-                    />
-                    <span>{titleLabel}</span>
-                  </label>
-                  <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                    <input
-                      type="checkbox"
-                      checked={show.message}
-                      onChange={e=>setShow(s=>({...s, message:e.target.checked}))}
-                    />
-                    <span>{messageLabel}</span>
-                  </label>
-                    <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                    <input
-                      type="checkbox"
-                      checked={show.attestation}
-                      onChange={e=>setShow(s=>({...s, attestation:e.target.checked}))}
-                    />
-                    <span>Texte d’attestation</span>
-                  </label>
-                  {isGift && (
-                    <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                      <input
-                        type="checkbox"
-                        checked={show.giftedBy}
-                        onChange={e=>setShow(s=>({...s, giftedBy:e.target.checked}))}
-                      />
-                      <span>{giftLabel}</span>
-                    </label>
-                  )}
+                <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                <input
+                  type="checkbox"
+                  checked={show.ownedBy}
+                  onChange={e=>{
+                    const checked = e.target.checked
+                    setShow(s=>({...s, ownedBy: checked}))
+                    if (!checked) setForm(f=>({...f, display_name: ''})) // ← vidage auto
+                  }}
+                />
+                <span>{ownedByLabel}</span>
+              </label>
+
+              <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                <input
+                  type="checkbox"
+                  checked={show.title}
+                  onChange={e=>{
+                    const checked = e.target.checked
+                    setShow(s=>({...s, title: checked}))
+                    if (!checked) setForm(f=>({...f, title: ''}))         // ← vidage auto
+                  }}
+                />
+                <span>{titleLabel}</span>
+              </label>
+
+              <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                <input
+                  type="checkbox"
+                  checked={show.message}
+                  onChange={e=>{
+                    const checked = e.target.checked
+                    setShow(s=>({...s, message: checked}))
+                    if (!checked) setForm(f=>({...f, message: ''}))       // ← vidage auto
+                  }}
+                />
+                <span>{messageLabel}</span>
+              </label>
+
+              <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                <input
+                  type="checkbox"
+                  checked={show.attestation}
+                  onChange={e=>setShow(s=>({...s, attestation: e.target.checked}))}
+                />
+                <span>Texte d’attestation</span>
+              </label>
+
+              {isGift && (
+                <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                  <input
+                    type="checkbox"
+                    checked={show.giftedBy}
+                    onChange={e=>{
+                      const checked = e.target.checked
+                      setShow(s=>({...s, giftedBy: checked}))
+                      if (!checked) setForm(f=>({...f, gifted_by: ''}))   // ← vidage auto
+                    }}
+                  />
+                  <span>{giftLabel}</span>
+                </label>
+              )}
                 </div>
                 <small style={{display:'block', marginTop:8, opacity:.7}}>
                   <strong>Imposés :</strong> Parcels of Time, Certificate of Claim, la date.

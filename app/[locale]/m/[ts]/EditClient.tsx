@@ -847,24 +847,60 @@ export default function EditClient({
             </div>
             <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                <input type="checkbox" checked={show.ownedBy} onChange={e=>setShow(s=>({...s, ownedBy:e.target.checked}))}/>
+              <input
+              type="checkbox"
+              checked={show.ownedBy}
+              onChange={e=>{
+                const checked = e.target.checked
+                setShow(s=>({...s, ownedBy: checked}))
+                if(!checked) setForm(f=>({...f, display_name: ''}))
+              }}
+              />
                 <span>{ownedByLabel}</span>
               </label>
+
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                <input type="checkbox" checked={show.title} onChange={e=>setShow(s=>({...s, title:e.target.checked}))}/>
+              <input
+              type="checkbox"
+              checked={show.title}
+              onChange={e=>{
+                const checked = e.target.checked
+                setShow(s=>({...s, title: checked}))
+                if(!checked) setForm(f=>({...f, title: ''}))
+              }}
+            />
                 <span>{titleLabel}</span>
               </label>
+
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                <input type="checkbox" checked={show.message} onChange={e=>setShow(s=>({...s, message:e.target.checked}))}/>
+              <input
+              type="checkbox"
+              checked={show.message}
+              onChange={e=>{
+                const checked = e.target.checked
+                setShow(s=>({...s, message: checked}))
+                if(!checked) setForm(f=>({...f, message: ''}))
+              }}
+            />
                 <span>{messageLabel}</span>
               </label>
+
               <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
                 <input type="checkbox" checked={show.attestation} onChange={e=>setShow(s=>({...s, attestation:e.target.checked}))}/>
                 <span>Texte d’attestation</span>
               </label>
+
               {isGift && (
                 <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                  <input type="checkbox" checked={show.giftedBy} onChange={e=>setShow(s=>({...s, giftedBy:e.target.checked}))}/>
+                   <input
+                    type="checkbox"
+                    checked={show.giftedBy}
+                    onChange={e=>{
+                      const checked = e.target.checked
+                      setShow(s=>({...s, giftedBy: checked}))
+                      if(!checked) setForm(f=>({...f, gifted_by: ''}))
+                    }}
+                  />
                   <span>{giftLabel}</span>
                 </label>
               )}
