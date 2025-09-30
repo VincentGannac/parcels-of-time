@@ -153,7 +153,7 @@ export async function applySecondarySaleFromSession(s: Stripe.Checkout.Session) 
       const pi = typeof s.payment_intent === 'string' ? s.payment_intent : (s.payment_intent?.id || null)
       if (names.includes('gross_cents')) {
         const gross = Number(listing.price_cents) | 0
-        const fee = Math.max(100, Math.round(gross * 0.10))
+        const fee = Math.max(100, Math.round(gross * 0.15))
         const net = Math.max(0, gross - fee)
         await client.query(
           `insert into secondary_sales(listing_id, ts, seller_owner_id, buyer_owner_id,

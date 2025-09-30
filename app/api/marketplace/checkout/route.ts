@@ -199,8 +199,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // Commission 10% min 1€, mais jamais >= price
-    let applicationFee = Math.max(100, Math.floor(price * 0.10))
+    // Commission 15% min 1€, mais jamais >= price
+    let applicationFee = Math.max(100, Math.floor(price * 0.15))
     if (applicationFee >= price) applicationFee = Math.max(0, price - 1)
 
     // ✅ On repasse par la route confirm côté serveur pour appliquer tout de suite

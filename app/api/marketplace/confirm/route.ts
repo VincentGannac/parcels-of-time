@@ -252,7 +252,7 @@ export async function GET(req: Request) {
         const currency = String(L.currency || 'EUR')
         if (hasGross) {
           const gross = Number(L.price_cents) | 0
-          const fee = Math.max(100, Math.round(gross * 0.10))
+          const fee = Math.max(100, Math.round(gross * 0.15))
           const net = Math.max(0, gross - fee)
           await client.query(
             `insert into secondary_sales(listing_id, ts, seller_owner_id, buyer_owner_id,

@@ -91,7 +91,7 @@ export async function GET(req: Request) {
       )
       for (const x of r) {
         const gross = Number(x.price_cents) | 0
-        const fee = Math.max(100, Math.round(gross * 0.10))
+        const fee = Math.max(100, Math.round(gross * 0.15))
         const net = Math.max(0, gross - fee)
         rows.push({
           date: new Date(x.ts).toISOString().slice(0,10),
@@ -117,7 +117,7 @@ export async function GET(req: Request) {
     )
     for (const x of r) {
       const gross = Number(x.price_cents) | 0
-      const fee = Math.max(100, Math.round(gross * 0.10))
+      const fee = Math.max(100, Math.round(gross * 0.15))
       const net = Math.max(0, gross - fee)
       rows.push({
         date: new Date(x.ts).toISOString().slice(0,10),
