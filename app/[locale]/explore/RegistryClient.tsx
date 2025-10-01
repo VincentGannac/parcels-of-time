@@ -1,4 +1,3 @@
-//app/locale/registry/RegistryClient.tsx
 'use client'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
@@ -14,6 +13,9 @@ type RegistryRow = {
   message: string | null
   style: StyleId | string
 }
+
+/** ---- Marketplace (vente) ---- */
+type SaleInfo = { id: string; price_cents: number; currency: string }
 
 const TOKENS = {
   '--color-bg': '#0B0E14',
@@ -36,6 +38,11 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+const pad2 = (n:number) => String(n).padStart(2,'0')
+const ymOf = (ymd:string) => ymd.slice(0,7)
+const ymd = (y:number,m:number,d:number) => `${y}-${pad2(m)}-${pad2(d)}`
+const localeToBCP47 = (loc:string) => (loc?.toLowerCase().startsWith('fr') ? 'fr-FR' : 'en-US')
+
 /* ----- Gate de lancement des iframes pour éviter la saturation serveur ----- */
 let __bootInflight = 0
 const MAX_BOOT_CONCURRENCY = 3
@@ -48,6 +55,11 @@ export default function RegistryClient({
   const [items, setItems] = useState<RegistryRow[]>(initialItems)
   const [loading, setLoading] = useState(initialItems.length === 0)
   const [error, setError] = useState<string>('')
+
+  /** ====== Vente : lookup prix par date ====== */
+  const [saleMap, setSaleMap] = useState<Record<string, SaleInfo>>({})
+  // Cache par mois -> lookup { d -> SaleInfo }
+  const monthCacheRef = useRef<Map<string, Record<number, SaleInfo>>>(new Map())
 
   // Petit refresh client pour résorber les cas "0 œuvre" en SSR
   useEffect(() => {
@@ -93,6 +105,73 @@ export default function RegistryClient({
     load()
     return () => { cancelled = true }
   }, [initialItems.length])
+
+  /** ====== Récupère les annonces (vente) pour tous les mois présents ====== */
+  useEffect(() => {
+    if (!items.length) return
+    let cancelled = false
+
+    const months = Array.from(new Set(items.map(it => ymOf(it.ts))))
+    const toFetch = months.filter(m => !monthCacheRef.current.has(m))
+    if (toFetch.length === 0) {
+      // tout est en cache → hydrate saleMap et sort
+      const merged: Record<string, SaleInfo> = {}
+      for (const [ym, lookup] of monthCacheRef.current.entries()) {
+        for (const dStr of Object.keys(lookup)) {
+          const d = Number(dStr)
+          merged[ym + '-' + pad2(d)] = lookup[d]
+        }
+      }
+      setSaleMap(merged)
+      return
+    }
+
+    const CONCURRENCY = 3
+    const queue = toFetch.slice()
+    const mergedFromFetch: Record<string, SaleInfo> = {}
+
+    const worker = async () => {
+      while (queue.length && !cancelled) {
+        const ym = queue.shift()!
+        try {
+          const res = await fetch(`/api/unavailable?ym=${ym}`, { cache: 'no-store' })
+          if (!res.ok) { monthCacheRef.current.set(ym, {}); continue }
+          const data = await res.json()
+          const lookup: Record<number, SaleInfo> = {}
+          const listings = Array.isArray(data?.listings) ? data.listings : []
+          for (const it of listings) {
+            if (typeof it?.d === 'number') {
+              const info: SaleInfo = {
+                id: String(it.id),
+                price_cents: Number(it.price_cents || 0),
+                currency: String(it.currency || 'EUR')
+              }
+              lookup[it.d] = info
+              mergedFromFetch[ym + '-' + pad2(it.d)] = info
+            }
+          }
+          monthCacheRef.current.set(ym, lookup)
+        } catch {
+          monthCacheRef.current.set(ym, {})
+        }
+      }
+    }
+
+    Promise.all(Array.from({ length: CONCURRENCY }, worker)).then(() => {
+      if (cancelled) return
+      // fusionne cache + nouveaux fetchs
+      const merged: Record<string, SaleInfo> = {}
+      for (const [m, lookup] of monthCacheRef.current.entries()) {
+        for (const dStr of Object.keys(lookup)) {
+          const d = Number(dStr)
+          merged[m + '-' + pad2(d)] = lookup[d]
+        }
+      }
+      setSaleMap(merged)
+    })
+
+    return () => { cancelled = true }
+  }, [items])
 
   return (
     <main
@@ -143,7 +222,7 @@ export default function RegistryClient({
         ) : items.length === 0 ? (
           <div style={{marginTop:24, opacity:.8}}>Aucune œuvre publique pour le moment.</div>
         ) : (
-          <CurationBar items={items} />
+          <CurationBar items={items} saleMap={saleMap} locale={loc} />
         )}
       </section>
     </main>
@@ -152,10 +231,11 @@ export default function RegistryClient({
 
 /* ---------------- Client subcomponents ---------------- */
 
-function CurationBar({ items }: { items: RegistryRow[] }) {
+function CurationBar({ items, saleMap, locale }: { items: RegistryRow[]; saleMap: Record<string, SaleInfo>; locale: string }) {
   const [q, setQ] = useState('')
   const [view, setView] = useState<'wall'|'salon'>('wall')
   const [list, setList] = useState<RegistryRow[]>(items)
+  const [saleFilter, setSaleFilter] = useState<'both'|'on'|'off'>('both')
   const total = list.length
 
   return (
@@ -182,14 +262,26 @@ function CurationBar({ items }: { items: RegistryRow[] }) {
           {view==='wall' ? 'Mur — mosaïque' : 'Salon — œuvres larges'}
         </button>
       </div>
-      <RegistryGalleryControls q={q} setQ={setQ} view={view} />
-      <RegistryWall key={view} view={view} q={q} items={list} total={total} />
+
+      <RegistryGalleryControls q={q} setQ={setQ} view={view} saleFilter={saleFilter} setSaleFilter={setSaleFilter} />
+
+      <RegistryWall
+        key={view}
+        view={view}
+        q={q}
+        items={list}
+        total={total}
+        saleMap={saleMap}
+        saleFilter={saleFilter}
+        locale={locale}
+      />
     </>
   )
 }
 
-function RegistryGalleryControls({ q, setQ, view }:{
-  q:string; setQ:(s:string)=>void; view:'wall'|'salon'
+function RegistryGalleryControls({ q, setQ, view, saleFilter, setSaleFilter }:{
+  q:string; setQ:(s:string)=>void; view:'wall'|'salon';
+  saleFilter:'both'|'on'|'off'; setSaleFilter:(v:'both'|'on'|'off')=>void
 }) {
   const chips = ['Amour','Réussite','Naissance','Mariage','Fête','Courage','Hasard heureux']
   return (
@@ -210,26 +302,66 @@ function RegistryGalleryControls({ q, setQ, view }:{
           {t}
         </button>
       ))}
-      <span style={{marginLeft:'auto', fontSize:12, color:'var(--color-muted)'}}>
-        {view==='wall' ? 'Mur — mosaïque' : 'Salon — œuvres larges'}
-      </span>
+
+      {/* -------- Filtre vente -------- */}
+      <div style={{marginLeft:'auto', display:'inline-flex', gap:6, alignItems:'center'}}>
+        <span style={{fontSize:12, color:'var(--color-muted)'}}>Filtre :</span>
+        <SegmentedTri
+          value={saleFilter}
+          onChange={setSaleFilter}
+          labels={{ both:'Les deux', on:'En vente', off:'Pas en vente' }}
+        />
+        <span style={{fontSize:12, color:'var(--color-muted)'}}>
+          {view==='wall' ? 'Mur — mosaïque' : 'Salon — œuvres larges'}
+        </span>
+      </div>
     </div>
   )
 }
 
-function RegistryWall({ items, q, view, total }:{
+function SegmentedTri({ value, onChange, labels }:{
+  value:'both'|'on'|'off'
+  onChange:(v:'both'|'on'|'off')=>void
+  labels:{ both:string; on:string; off:string }
+}) {
+  const baseBtn: React.CSSProperties = {
+    padding:'6px 10px', border:'1px solid var(--color-border)', cursor:'pointer',
+    background:'var(--color-surface)', color:'var(--color-text)'
+  }
+  return (
+    <div role="group" aria-label="Filtrer par statut de vente" style={{display:'inline-grid', gridTemplateColumns:'auto auto auto', borderRadius:999, overflow:'hidden', border:'1px solid var(--color-border)'}}>
+      <button onClick={()=>onChange('both')} style={{...baseBtn, fontSize:12, fontWeight:700, background: value==='both' ? 'rgba(228,183,61,.18)' : 'var(--color-surface)'}}>{labels.both}</button>
+      <button onClick={()=>onChange('on')}   style={{...baseBtn, fontSize:12, fontWeight:700, background: value==='on'   ? 'rgba(228,183,61,.28)' : 'var(--color-surface)'}}>🟡 {labels.on}</button>
+      <button onClick={()=>onChange('off')}  style={{...baseBtn, fontSize:12, fontWeight:700, background: value==='off'  ? 'rgba(255,255,255,.06)' : 'var(--color-surface)'}}>{labels.off}</button>
+    </div>
+  )
+}
+
+function RegistryWall({
+  items, q, view, total, saleMap, saleFilter, locale
+}:{
   items:RegistryRow[]; q:string; view:'wall'|'salon'; total:number
+  saleMap: Record<string, SaleInfo>
+  saleFilter: 'both'|'on'|'off'
+  locale: string
 }) {
   const filtered = useMemo(()=>{
     const s = q.trim().toLowerCase()
-    if(!s) return items
-    return items.filter(it =>
+    let base = items
+    if (saleFilter !== 'both') {
+      base = base.filter(it => {
+        const onSale = !!saleMap[it.ts]
+        return saleFilter === 'on' ? onSale : !onSale
+      })
+    }
+    if(!s) return base
+    return base.filter(it =>
       (it.owner || '').toLowerCase().includes(s) ||
       (it.title || '').toLowerCase().includes(s) ||
       (it.message || '').toLowerCase().includes(s) ||
       it.ts.toLowerCase().includes(s)
     )
-  }, [q, items])
+  }, [q, items, saleMap, saleFilter])
 
   const tall = view === 'salon'
 
@@ -251,6 +383,8 @@ function RegistryWall({ items, q, view, total }:{
           <RegistryCard
             key={row.ts}
             row={row}
+            sale={saleMap[row.ts] || null}
+            locale={locale}
             tall={tall}
             // on “démarre” les 12 premières très vite; le gate fait le reste
             priority={i < 12}
@@ -263,35 +397,48 @@ function RegistryWall({ items, q, view, total }:{
 }
 
 function RegistryCard(
-  { row, style, tall, priority }:
-  { row:RegistryRow; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
+  { row, sale, locale, style, tall, priority }:
+  { row:RegistryRow; sale: SaleInfo | null; locale:string; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
 ) {
-  // PDF réel avec fonds custom via /api/cert
-   // Sécurise la ts au format JOUR quoi qu'on reçoive
   const tsDay =
     /^\d{4}-\d{2}-\d{2}$/.test(row.ts)
       ? row.ts
       : (() => { try { return new Date(row.ts).toISOString().slice(0,10) } catch { return String(row.ts).slice(0,10) } })()
 
-  // PDF réel avec fonds custom via /api/cert
   const pdfHref =
     `/api/cert/${encodeURIComponent(tsDay)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+
+  const clickable = !!sale
+  const priceLabel = sale ? formatPrice(sale.price_cents, sale.currency, locale) : ''
+
+  const onCardClick = () => {
+    if (!sale) return
+    // redirige vers ClientClaim avec la date concernée
+    window.location.href = `/${locale}/claim?ts=${encodeURIComponent(tsDay)}`
+  }
 
   return (
     <article
       onContextMenu={(e)=>e.preventDefault()}
+      onClick={onCardClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : -1}
+      title={clickable ? `En vente — ${priceLabel}` : undefined}
       style={{
         ...style,
         position:'relative',
         borderRadius:18,
         padding:12,
         background:'linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.00))',
-        border:'1px solid var(--color-border)',
+        border: clickable ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
         boxShadow: tall ? 'var(--shadow-elev2)' : 'var(--shadow-elev1)',
         transform:'translateY(0)',
-        transition:'transform .35s cubic-bezier(.2,.9,.2,1), box-shadow .35s',
+        transition:'transform .35s cubic-bezier(.2,.9,.2,1), box-shadow .35s, border-color .2s ease',
         willChange:'transform',
+        cursor: clickable ? 'pointer' : 'default',
+        outline: clickable ? '0.5px solid rgba(228,183,61,.35)' : 'none'
       }}
+      onKeyDown={(e)=>{ if (clickable && (e.key==='Enter' || e.key===' ')) { e.preventDefault(); onCardClick() } }}
     >
       <div style={{
         position:'relative',
@@ -300,8 +447,8 @@ function RegistryCard(
         background:'#0E1017',
         borderRadius:12,
         overflow:'hidden',
-        border:'1px solid rgba(255,255,255,.06)',
-        boxShadow:'inset 0 0 0 1px rgba(0,0,0,.35)',
+        border: clickable ? '2px solid var(--color-primary)' : '1px solid rgba(255,255,255,.06)',
+        boxShadow: clickable ? 'inset 0 0 0 2px rgba(228,183,61,.22), inset 0 0 40px rgba(228,183,61,.15)' : 'inset 0 0 0 1px rgba(0,0,0,.35)',
       }}>
         <LazyIframe src={pdfHref} priority={!!priority} />
 
@@ -328,6 +475,27 @@ function RegistryCard(
           <span>Authentifié</span><span aria-hidden>✓</span>
         </div>
 
+        {/* 💛 Prix — surbrillance si en vente */}
+        {sale && (
+          <div
+            aria-label="En vente"
+            style={{
+              position:'absolute', right:8, top:8,
+              display:'inline-flex', alignItems:'center', gap:8,
+              padding:'8px 10px', borderRadius:999,
+              background:'linear-gradient(180deg, rgba(228,183,61,.95), rgba(228,183,61,.80))',
+              color:'var(--color-on-primary)', fontWeight:900, fontSize:12,
+              boxShadow:'0 6px 18px rgba(228,183,61,.35)',
+              border:'1px solid rgba(0,0,0,.25)',
+              pointerEvents:'none'
+            }}
+          >
+            <span style={{fontWeight:800}}>En vente</span>
+            <span style={{opacity:.9}}>•</span>
+            <span>{priceLabel}</span>
+          </div>
+        )}
+
         {/* légende discrète (affichée au survol) */}
         <figcaption
           style={{
@@ -347,7 +515,7 @@ function RegistryCard(
               {row.owner || 'Anonymous'}
             </div>
             <div style={{opacity:.85}}>
-            {tsDay}
+              {tsDay}
             </div>
           </div>
           {(row.title || row.message) && (
@@ -407,14 +575,12 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
       __bootInflight = Math.max(0, __bootInflight - 1)
     }
 
-    // fail-safe si le "load" ne se déclenche pas
     const to = window.setTimeout(release, 12000)
 
     const ifr = iframeRef.current
     if (ifr) {
       const onLoad = () => release()
       ifr.addEventListener('load', onLoad)
-      // certains viewers peuvent injecter un sous-document → double sécurité
       const onError = () => release()
       ifr.addEventListener('error', onError)
       return () => {
@@ -454,4 +620,15 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
       )}
     </div>
   )
+}
+
+/** Format prix localisé (EUR par défaut) */
+function formatPrice(cents:number, currency:string, locale:string) {
+  try {
+    return new Intl.NumberFormat(localeToBCP47(locale), { style:'currency', currency }).format((cents||0)/100)
+  } catch {
+    // fallback minimal
+    const val = Math.round((cents||0)/100)
+    return currency?.toUpperCase()==='EUR' ? `${val} €` : `${val} ${currency||''}`.trim()
+  }
 }
