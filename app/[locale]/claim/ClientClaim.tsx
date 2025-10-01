@@ -1601,6 +1601,51 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </label>
             </div>
 
+            {/* Conformité & consentements */}
+            <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
+                Conformité & consentements
+              </div>
+              <div style={{display:'grid', gap:8, fontSize:12}}>
+                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                  <input type="checkbox" required name="accept_terms" />
+                  <span>
+                    J’accepte les <a href={`/${(window.location.pathname.split('/')[1] || 'en').slice(0,2)}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et j’ai lu la 
+                    <a href={`/${(window.location.pathname.split('/')[1] || 'en').slice(0,2)}/legal/privacy`} style={{color:'var(--color-text)'}}> Politique de confidentialité</a>.
+                  </span>
+                </label>
+
+                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                  <input type="checkbox" required name="withdrawal_waiver" />
+                  <span>
+                    Je demande l’<strong>exécution immédiate</strong> de la prestation numérique et
+                    <strong> renonce expressément</strong> à mon droit de rétractation (Directive UE 2011/83/UE).
+                  </span>
+                </label>
+
+                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                  <input type="checkbox" required name="confirm_age" />
+                  <span>Je confirme avoir 18 ans révolus (ou une autorisation parentale).</span>
+                </label>
+
+                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                  <input type="checkbox" required name="stripe_notice" />
+                  <span>Je comprends que mes données (email, montant, pays) sont partagées avec <strong>Stripe</strong> pour le paiement sécurisé.</span>
+                </label>
+
+                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                  <input type="checkbox" name="marketing_optin" />
+                  <span>J’accepte de recevoir occasionnellement des emails (désinscription possible à tout moment).</span>
+                </label>
+
+                <small style={{opacity:.75}}>
+                  Le récapitulatif complet (prix, taxes le cas échéant) est affiché sur la page Stripe avant paiement.
+                </small>
+              </div>
+            </section>
+
+
+
             {/* Submit */}
             <div>
               <button disabled={status==='loading'} type="submit"

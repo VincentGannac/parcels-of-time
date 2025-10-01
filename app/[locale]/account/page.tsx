@@ -305,6 +305,11 @@ export default async function Page({
                 {locale==='fr' ? 'Pour revendre vos certificats, créez un compte vendeur.' : 'Create a seller account to resell your certificates.'}
               </p>
             )}
+            {/* Transparence plateforme */}
+            <div style={{background:'rgba(255,255,255,.03)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px', fontSize:12, lineHeight:1.35}}>
+              Parcels of Time agit en tant qu’<strong>opérateur de plateforme</strong> et mandataire d’encaissement via <strong>Stripe Connect</strong>.
+              Le vendeur demeure responsable de ses offres et obligations (garanties légales, fiscalité).
+            </div>
 
             {/* Onboarding selector */}
             <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}}>
@@ -328,6 +333,26 @@ export default async function Page({
                     : 'With “Individual”, we prefill industry & website. Stripe will ask for identity + IBAN.'}
                 </div>
               </fieldset>
+
+              {/* Consentements d’onboarding vendeur */}
+              <div style={{display:'grid', gap:8, fontSize:12, marginTop:4}}>
+                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                  <input type="checkbox" name="accept_seller_terms" required />
+                  <span>J’ai lu et j’accepte les <a href={`/${locale}/legal/seller`} style={{color:'var(--color-text)'}}>Conditions Vendeur</a> et les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a>.</span>
+                </label>
+                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                  <input type="checkbox" name="confirm_age" required />
+                  <span>Je confirme être majeur.</span>
+                </label>
+                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                  <input type="checkbox" name="confirm_rights" required />
+                  <span>Je certifie détenir les droits nécessaires sur tous les contenus publiés (pas de données personnelles sensibles ni de contenus illicites).</span>
+                </label>
+                <small style={{opacity:.75}}>
+                  Vos données sont transmises à Stripe pour la vérification KYC/KYB — voir <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Confidentialité</a>.
+                </small>
+              </div>
+
 
               <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
                 <button style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800}}>

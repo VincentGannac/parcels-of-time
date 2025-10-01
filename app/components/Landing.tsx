@@ -7,6 +7,36 @@ import HeroSlideshow from './HeroSlideshow'
 import { useLocaleHref } from './useLocaleHref'
 import { useT } from '../i18n/I18nProvider'
 
+
+
+function CookieBanner() {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('cookieConsent')
+      if (!v) setVisible(true)
+    } catch {}
+  }, [])
+  if (!visible) return null
+  const accept = (val:'accept'|'reject') => {
+    try { localStorage.setItem('cookieConsent', val) } catch {}
+    setVisible(false)
+  }
+  return (
+    <div role="dialog" aria-live="polite"
+      style={{position:'fixed', zIndex:50, left:16, right:16, bottom:16, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:12, boxShadow:'var(--shadow-elev2)'}}>
+      <div style={{fontSize:14, marginBottom:8}}>
+        Nous utilisons des cookies essentiels (sécurité, paiement) et de mesure d’audience. 
+        Consultez la <a href="/fr/legal/cookies" style={{color:'var(--color-text)'}}>Politique des cookies</a>.
+      </div>
+      <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+        <button onClick={()=>accept('reject')} style={{padding:'8px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>Refuser (hors essentiels)</button>
+        <button onClick={()=>accept('accept')} style={{padding:'8px 12px', borderRadius:10, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>Accepter</button>
+      </div>
+    </div>
+  )
+}
+
 /* -------------------- Design Tokens -------------------- */
 const TOKENS_DARK = {
   '--color-bg': '#0B0E14',
@@ -468,8 +498,9 @@ export default function Landing() {
 
   return (
     <main style={{background:'var(--color-bg)', color:'var(--color-text)'}}>
+      <CookieBanner />
       <Header onToggleTheme={()=>setTheme(t=>t==='dark'?'light':'dark')} href={href} />
-
+        
       <HeroPhotos href={href} />
 
       <section id="pourquoi" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
@@ -617,6 +648,15 @@ export default function Landing() {
             <Link href={href('/support')}      style={{textDecoration:'none', color:'inherit'}}>Support</Link>
             <a href="mailto:hello@parcelsoftime.com" style={{textDecoration:'none', color:'inherit'}}>B2B</a>
           </div>
+        </div>
+      </footer>
+      <footer style={{borderTop:'1px solid var(--color-border)', marginTop:24}}>
+        <div style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px', display:'flex', gap:12, flexWrap:'wrap', fontSize:12, opacity:.85}}>
+          <a href={href('/legal/legal-notice')} style={{color:'var(--color-text)'}}>Mentions légales</a>
+          <a href={href('/legal/terms')} style={{color:'var(--color-text)'}}>CGU/CGV</a>
+          <a href={href('/legal/seller')} style={{color:'var(--color-text)'}}>Conditions Vendeur</a>
+          <a href={href('/legal/privacy')} style={{color:'var(--color-text)'}}>Confidentialité</a>
+          <a href={href('/legal/cookies')} style={{color:'var(--color-text)'}}>Cookies</a>
         </div>
       </footer>
     </main>

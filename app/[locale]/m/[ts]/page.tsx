@@ -406,6 +406,18 @@ export default async function Page({
                       <input name="price" type="number" min={1} step={1} required
                              style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
                     </label>
+
+                    <div style={{display:'grid', gap:6, fontSize:12}}>
+                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                        <input type="checkbox" name="seller_terms" required />
+                        <span>J’accepte les <a href={`/${locale}/legal/seller`} style={{color:'var(--color-text)'}}>Conditions Vendeur</a> (commission 10% min 1 €) et les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a>.</span>
+                      </label>
+                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                        <input type="checkbox" name="seller_rights" required />
+                        <span>Je certifie être l’unique titulaire des droits nécessaires et déclare les revenus conformément à la réglementation fiscale applicable.</span>
+                      </label>
+                    </div>
+
                     <button type="submit"
                       style={{padding:'12px 14px', borderRadius:12, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}
                     >{locale==='fr' ? 'Mettre en vente' : 'List for sale'}</button>
@@ -499,15 +511,32 @@ export default async function Page({
                       {listing.price_cents/100} € — {listing.seller_display_name || (locale==='fr'?'Vendeur':'Seller')}
                     </div>
                   </div>
-                  <form method="post" action="/api/marketplace/checkout" style={{display:'flex', gap:8}}>
-                    <input type="hidden" name="listing_id" value={String(listing.id)} />
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
-                      style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
-                    <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
-                      {locale==='fr' ? 'Acheter' : 'Buy'}
-                    </button>
-                  </form>
+                  <form method="post" action="/api/marketplace/checkout" style={{display:'grid', gap:10}}>
+                <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+                  <input type="hidden" name="listing_id" value={String(listing.id)} />
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
+                    style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
+                  <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
+                    {locale==='fr' ? 'Acheter' : 'Buy'}
+                  </button>
+                </div>
+
+                {/* Consentements acheteur */}
+                <div style={{display:'grid', gap:6, fontSize:12}}>
+                  <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                    <input type="checkbox" name="accept_terms" required />
+                    <span>J’accepte les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et j’ai lu la <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Politique de confidentialité</a>.</span>
+                  </label>
+                  <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                    <input type="checkbox" name="withdrawal_waiver" required />
+                    <span>Je demande l’<strong>exécution immédiate</strong> et <strong>renonce</strong> à mon droit de rétractation (contenu numérique).</span>
+                  </label>
+                  <small style={{opacity:.75}}>
+                    Le vendeur est l’auteur du certificat ; Parcels of Time opère la plateforme et l’encaissement via Stripe Connect.
+                  </small>
+                </div>
+              </form>
                 </div>
                 <p style={{fontSize:12, opacity:.7, marginTop:8}}>{locale==='fr'?'Paiement sécurisé Stripe. PDF transmis au nouvel acquéreur.':'Secure Stripe checkout. PDF transferred to the buyer.'}</p>
               </section>

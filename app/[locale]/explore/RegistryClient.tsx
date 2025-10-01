@@ -213,6 +213,14 @@ export default function RegistryClient({
           </p>
         </header>
 
+        {/* Avertissement registre public */}
+        <div style={{margin:'10px 0 0', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, fontSize:12, background:'rgba(255,255,255,.03)'}}>
+          Les certificats listés ici peuvent contenir des <strong>données personnelles</strong> rendues publiques par leurs auteur·rice·s. 
+          Pour signaler un contenu : <a href="mailto:support@parcelsoftime.example" style={{color:'var(--color-text)'}}>support@parcelsoftime.example</a>. 
+          Voir <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Confidentialité</a>.
+        </div>
+
+
         {loading ? (
           <div style={{marginTop:24, opacity:.8}}>Chargement du registre…</div>
         ) : error ? (
