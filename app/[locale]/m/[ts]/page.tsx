@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation'
 import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
 import EditClient from './EditClient'
+import DangerRelease from './DangerRelease'
 
 type Params = { locale: string; ts: string }
 type SearchParams = {
@@ -682,6 +683,8 @@ export default async function Page({
             </div>
           </details>
         </section>
+        {/* ======= Danger zone — release ======= */}
+        <DangerRelease locale={locale} tsYMD={tsYMD!} />
       </section>
     </main>
   )
