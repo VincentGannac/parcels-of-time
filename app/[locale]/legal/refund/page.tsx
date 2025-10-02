@@ -21,7 +21,7 @@ const TOKENS = {
 
 export default function Page() {
   const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || 'Parcels of Time'
-  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@example.com'
+  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@parcelsoftime.com'
   const UPDATED = '2025-01-01'
 
   return (
@@ -66,7 +66,7 @@ export default function Page() {
             <p style={{margin:0}}>
               En cas de <strong>paiement en double</strong>, d’erreur manifeste ou de problème technique empêchant la
               livraison du certificat, contactez-nous à <a href={`mailto:${SUPPORT_EMAIL}`} style={{color:'var(--color-text)'}}>{SUPPORT_EMAIL}</a>.
-              Nous investiguerons et procéderons, le cas échéant, à un remboursement partiel ou total.
+              Nous investiguerons et procéderons, le cas échéant, à un remboursement.
             </p>
           </section>
 

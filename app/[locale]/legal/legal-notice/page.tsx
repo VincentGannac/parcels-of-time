@@ -17,8 +17,8 @@ export default async function Page({
       <h1>{loc === 'fr' ? 'Mentions légales' : 'Legal Notice'}</h1>
       <p>
         {loc === 'fr'
-          ? 'Éditeur : Parcels of Time — contact : support@parcelsoftime.example'
-          : 'Publisher: Parcels of Time — contact: support@parcelsoftime.example'}
+          ? 'Éditeur : Parcels of Time — contact : support@parcelsoftime.com'
+          : 'Publisher: Parcels of Time — contact: support@parcelsoftime.com'}
       </p>
       <p>
         {loc === 'fr'

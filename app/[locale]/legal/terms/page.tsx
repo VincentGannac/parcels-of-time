@@ -1,7 +1,7 @@
 // app/[locale]/legal/terms/page.tsx
 /**
  * CGU/CGV (FR/EN) — version unifiée et bilingue
- * Conforme : exécution immédiate contenu numérique (UE 2011/83/UE), marketplace (commission 10% min 1 €),
+ * Conforme : exécution immédiate contenu numérique (UE 2011/83/UE), marketplace (commission 15% min 1 €),
  * Stripe Connect (mandat d’encaissement), informations précontractuelles essentielles.
  */
 
@@ -33,9 +33,19 @@ export default async function Page({
   const { locale } = await params
   const fr = locale === 'fr'
 
-  const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || 'Parcels of Time'
-  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@example.com'
-  const UPDATED = process.env.NEXT_PUBLIC_LEGAL_UPDATED_AT || '2025-01-01'
+  const COMPANY_NAME = 'Parcels of Time'
+  const SUPPORT_EMAIL = 'support@parcelsoftime.com'
+  const UPDATED = '2025-11-01'
+
+  // Médiateur (avec fallback ENV si tu veux varier plus tard)
+  const MEDIATOR = {
+    name: process.env.NEXT_PUBLIC_MEDIATOR_NAME || 'CM2C',
+    address: process.env.NEXT_PUBLIC_MEDIATOR_ADDR || '49 rue de Ponthieu, 75008 Paris, France',
+    phone: process.env.NEXT_PUBLIC_MEDIATOR_PHONE || '+33 1 89 47 00 14',
+    site: process.env.NEXT_PUBLIC_MEDIATOR_DECL_URL || 'https://www.cm2c.net/declarer-un-litige.php',
+    email: process.env.NEXT_PUBLIC_MEDIATOR_EMAIL || 'litiges@cm2c.net',
+  } as const
+  const ODR_URL = 'https://ec.europa.eu/consumers/odr'
 
   const href = (p: string) => `/${locale}${p}`
 
@@ -53,7 +63,9 @@ export default async function Page({
         ['10. Suspension', '#susp'],
         ['11. Résiliation', '#term'],
         ['12. Droit applicable', '#law'],
-        ['13. Contact', '#contact'],
+        ['13. Médiation de la consommation', '#med'],
+        ['14. Plateforme RLL (UE)', '#odr'],
+        ['15. Contact', '#contact'],
       ]
     : [
         ['1. Definitions', '#def'],
@@ -68,7 +80,9 @@ export default async function Page({
         ['10. Suspension', '#susp'],
         ['11. Termination', '#term'],
         ['12. Governing Law', '#law'],
-        ['13. Contact', '#contact'],
+        ['13. Consumer Mediation', '#med'],
+        ['14. EU ODR Platform', '#odr'],
+        ['15. Contact', '#contact'],
       ]
 
   return (
@@ -152,8 +166,8 @@ export default async function Page({
             <p style={{ margin: 0 }}>
               {fr ? '« Certificat » : ' : '"Certificate": '}
               {fr
-                ? 'document numérique (PDF/QR) matérialisant la revendication d’une journée. '
-                : 'a digital document (PDF/QR) representing the claim of a day. '}
+                ? 'document numérique (PDF/QR) matérialisant la revendication symbolique d’une journée. '
+                : 'a digital document (PDF/QR) representing the symbolic claim of a day. '}
               {fr ? '« Utilisateur·rice » : ' : '"User": '}
               {fr
                 ? 'toute personne disposant d’un compte ou effectuant un achat. '
@@ -205,7 +219,7 @@ export default async function Page({
             <h2 style={h2Style()}>{fr ? '4. Livraison numérique' : '4. Digital Delivery'}</h2>
             <p style={{ margin: 0 }}>
               {fr
-                ? 'La livraison est immédiate : génération du PDF, lien de téléchargement et e-mail. Un identifiant et une empreinte (SHA-256) peuvent être associés au certificat.'
+                ? 'La livraison est immédiate : génération du PDF, lien de téléchargement et e-mail. Un identifiant et une empreinte (SHA-256) sont associés au certificat.'
                 : 'Delivery is immediate: PDF generation, download link, and email. An identifier and integrity hash (SHA-256) may be associated with the certificate.'}
             </p>
           </section>
@@ -225,8 +239,8 @@ export default async function Page({
             <h2 style={h2Style()}>{fr ? '6. Contenus & modération' : '6. Content & Moderation'}</h2>
             <p style={{ margin: '0 0 8px' }}>
               {fr
-                ? 'Vous êtes responsable des textes et liens ajoutés à vos pages. Sont interdits : contenus illégaux, diffamatoires, haineux, ou portant atteinte aux droits de tiers, ainsi que les données personnelles sensibles.'
-                : 'You are responsible for any text and links you add to your pages. Prohibited: unlawful, defamatory, hateful, or rights-infringing content, as well as sensitive personal data.'}
+                ? 'Vous êtes responsable des textes et images ajoutés à vos pages. Sont interdits : contenus illégaux, diffamatoires, haineux, ou portant atteinte aux droits de tiers, ainsi que les données personnelles sensibles.'
+                : 'You are responsible for any text and pictures you add to your pages. Prohibited: unlawful, defamatory, hateful, or rights-infringing content, as well as sensitive personal data.'}
             </p>
             <p style={{ margin: 0 }}>
               {fr
@@ -245,8 +259,8 @@ export default async function Page({
             </p>
             <p style={{ margin: '0 0 8px' }}>
               {fr
-                ? 'Une commission de 10% (minimum 1 €) est prélevée côté vendeur sur chaque vente réussie. Le vendeur demeure responsable de l’offre, des informations fournies, des droits sur le contenu et de ses obligations fiscales.'
-                : 'A 10% fee (minimum €1) is charged to the seller on each successful sale. The seller remains responsible for the offer, provided information, rights in the content, and tax obligations.'}
+                ? 'Une commission de 15% (minimum 1 €) est prélevée côté vendeur sur chaque vente réussie. Le vendeur demeure responsable de l’offre, des informations fournies, des droits sur le contenu et de ses obligations fiscales.'
+                : 'A 15% fee (minimum €1) is charged to the seller on each successful sale. The seller remains responsible for the offer, provided information, rights in the content, and tax obligations.'}
             </p>
             <p style={{ margin: 0 }}>
               {fr
@@ -313,21 +327,110 @@ export default async function Page({
           {/* 12. Governing law */}
           <section id="law" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '12. Droit applicable' : '12. Governing Law'}</h2>
-            <p style={{ margin: '0 0 8px' }}>
+            <p style={{ margin: 0 }}>
               {fr
                 ? `Les présentes sont régies par le droit français. En cas de litige et faute d’accord amiable, compétence des tribunaux du ressort du siège de ${COMPANY_NAME}, sous réserve des règles impératives applicables.`
                 : `These terms are governed by French law. Failing amicable settlement, courts at the registered office of ${COMPANY_NAME} have jurisdiction, subject to applicable mandatory rules.`}
             </p>
-            <p style={{ margin: 0, fontSize: 12, opacity: 0.85 }}>
-              {fr
-                ? 'Médiation de la consommation : renseigner votre médiateur agréé (à compléter dans les Mentions légales).'
-                : 'Consumer mediation: insert your approved mediator details (to be completed in the Legal Notice).'}
+          </section>
+
+          {/* 13. Médiation / Consumer Mediation */}
+          <section id="med" style={cardStyle()}>
+            <h2 style={h2Style()}>{fr ? '13. Médiation de la consommation' : '13. Consumer Mediation'}</h2>
+            {fr ? (
+              <>
+                <p style={{ margin: '0 0 8px' }}>
+                  Après réclamation écrite auprès de notre support à{' '}
+                  <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'var(--color-text)' }}>
+                    {SUPPORT_EMAIL}
+                  </a>{' '}
+                  restée sans solution sous 30&nbsp;jours, vous pouvez saisir gratuitement le médiateur de la consommation
+                  désigné ci-dessous.
+                </p>
+                <ul style={{ margin: '0 0 0 18px', lineHeight: 1.7 }}>
+                  <li>
+                    <strong>Médiateur</strong> : {MEDIATOR.name}
+                  </li>
+                  <li>
+                    <strong>Adresse</strong> : {MEDIATOR.address}
+                  </li>
+                  <li>
+                    <strong>Tél.</strong> : {MEDIATOR.phone}
+                  </li>
+                  <li>
+                    <strong>Site</strong> :{' '}
+                    <a href={MEDIATOR.site} style={{ color: 'var(--color-text)' }}>
+                      {MEDIATOR.site}
+                    </a>
+                  </li>
+                  <li>
+                    <strong>E-mail</strong> :{' '}
+                    <a href={`mailto:${MEDIATOR.email}`} style={{ color: 'var(--color-text)' }}>
+                      {MEDIATOR.email}
+                    </a>
+                  </li>
+                </ul>
+                <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--color-muted)' }}>
+                  Conditions : litige B2C, saisine dans l’année suivant la réclamation, dossier recevable et non abusif. Le
+                  recours à un avocat n’est pas obligatoire. Vous restez libre d’accepter la solution proposée.
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: '0 0 8px' }}>
+                  After a written complaint to{' '}
+                  <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'var(--color-text)' }}>
+                    {SUPPORT_EMAIL}
+                  </a>{' '}
+                  with no solution within 30 days, consumers may refer the dispute free of charge to the appointed mediator
+                  below.
+                </p>
+                <ul style={{ margin: '0 0 0 18px', lineHeight: 1.7 }}>
+                  <li>
+                    <strong>Mediator</strong>: {MEDIATOR.name}
+                  </li>
+                  <li>
+                    <strong>Address</strong>: {MEDIATOR.address}
+                  </li>
+                  <li>
+                    <strong>Phone</strong>: {MEDIATOR.phone}
+                  </li>
+                  <li>
+                    <strong>Website</strong>:{' '}
+                    <a href={MEDIATOR.site} style={{ color: 'var(--color-text)' }}>
+                      {MEDIATOR.site}
+                    </a>
+                  </li>
+                  <li>
+                    <strong>Email</strong>:{' '}
+                    <a href={`mailto:${MEDIATOR.email}`} style={{ color: 'var(--color-text)' }}>
+                      {MEDIATOR.email}
+                    </a>
+                  </li>
+                </ul>
+                <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--color-muted)' }}>
+                  Eligibility: B2C disputes, filed within 1 year after your complaint, non-abusive and admissible case. You
+                  remain free to accept or refuse the proposed solution.
+                </p>
+              </>
+            )}
+          </section>
+
+          {/* 14. ODR / EU RLL */}
+          <section id="odr" style={cardStyle()}>
+            <h2 style={h2Style()}>{fr ? '14. Plateforme européenne de RLL/ODR' : '14. EU ODR Platform'}</h2>
+            <p style={{ margin: 0 }}>
+              {fr ? 'Pour les achats en ligne dans l’UE :' : 'For online purchases within the EU: '}{' '}
+              <a href={ODR_URL} style={{ color: 'var(--color-text)' }}>
+                {ODR_URL}
+              </a>
+              .
             </p>
           </section>
 
-          {/* 13. Contact */}
+          {/* 15. Contact */}
           <section id="contact" style={cardStyle()}>
-            <h2 style={h2Style()}>{fr ? '13. Contact' : '13. Contact'}</h2>
+            <h2 style={h2Style()}>{fr ? '15. Contact' : '15. Contact'}</h2>
             <p style={{ margin: 0 }}>
               {fr ? 'Support : ' : 'Support: '}
               <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'var(--color-text)' }}>
@@ -335,12 +438,6 @@ export default async function Page({
               </a>
             </p>
           </section>
-
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
-            {fr
-              ? 'Ce document est fourni à titre informatif et ne remplace pas un conseil juridique adapté à votre situation.'
-              : 'This document is provided for information purposes and does not replace legal advice tailored to your situation.'}
-          </p>
         </div>
       </section>
     </main>

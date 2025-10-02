@@ -25,7 +25,7 @@ export default function Page() {
   const COMPANY_ADDRESS = process.env.NEXT_PUBLIC_COMPANY_ADDRESS || '*** Adresse du siège à compléter ***'
   const COMPANY_SIREN = process.env.NEXT_PUBLIC_COMPANY_SIREN || '*** SIREN/SIRET ***'
   const COMPANY_PUBLICATION = process.env.NEXT_PUBLIC_PUBLICATION_DIRECTOR || '*** Directeur·rice de la publication ***'
-  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@example.com'
+  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@parcelsoftime.com'
   const LEGAL_EMAIL = process.env.NEXT_PUBLIC_LEGAL_EMAIL || SUPPORT_EMAIL
   const HOST_NAME = process.env.NEXT_PUBLIC_HOST_NAME || 'Vercel Inc.'
   const HOST_ADDR = process.env.NEXT_PUBLIC_HOST_ADDRESS || '340 S Lemon Ave #4133, Walnut, CA 91789, USA'

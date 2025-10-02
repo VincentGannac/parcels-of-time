@@ -1,19 +1,5 @@
 // app/[locale]/legal/privacy/page.tsx
 
-/**
- * Politique de confidentialité / Privacy Policy (FR/EN) — version unifiée et bilingue.
- * ⚙️ Variables d'environnement supportées (avec valeurs de secours) :
- * - NEXT_PUBLIC_COMPANY_NAME
- * - NEXT_PUBLIC_LEGAL_NAME           (raison sociale, si différente)
- * - NEXT_PUBLIC_LEGAL_ADDRESS        (adresse du responsable de traitement)  // TODO: Renseigner
- * - NEXT_PUBLIC_SUPPORT_EMAIL
- * - NEXT_PUBLIC_DPO_EMAIL            (ou NEXT_PUBLIC_LEGAL_EMAIL à défaut)
- * - NEXT_PUBLIC_PRIVACY_UPDATED_AT   (ex: 2025-01-01)
- * - NEXT_PUBLIC_EU_ESTABLISHED       ('true'|'false') pour l'article 27 RGPD
- * - NEXT_PUBLIC_EU_REP_NAME          (si EU_ESTABLISHED = false)             // TODO: Renseigner
- * - NEXT_PUBLIC_EU_REP_CONTACT       (si EU_ESTABLISHED = false)             // TODO: Renseigner
- */
-
 import type { CSSProperties } from 'react'
 
 export const runtime = 'nodejs'
@@ -44,23 +30,30 @@ export default async function Page({
 
   // ── Identité & coordonnées
   const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || 'Parcels of Time'
-  const LEGAL_NAME = process.env.NEXT_PUBLIC_LEGAL_NAME || COMPANY_NAME
+  const LEGAL_NAME = process.env.NEXT_PUBLIC_LEGAL_NAME || 'Vincent Gannac'
   const LEGAL_ADDRESS =
     process.env.NEXT_PUBLIC_LEGAL_ADDRESS ||
-    '— À compléter : adresse postale du responsable de traitement —' // TODO: Renseigner
-  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@example.com'
+    '2 Lotissement Beaupré, Le Puy Sainte Réparade, France' // TODO: Renseigner
+  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@parcelsoftime.com'
   const DPO_EMAIL =
     process.env.NEXT_PUBLIC_DPO_EMAIL ||
     process.env.NEXT_PUBLIC_LEGAL_EMAIL ||
-    'privacy@example.com'
+    'vincent.gannac@icloud.com'
 
-  const UPDATED = process.env.NEXT_PUBLIC_PRIVACY_UPDATED_AT || '2025-01-01'
+  const UPDATED = process.env.NEXT_PUBLIC_PRIVACY_UPDATED_AT || '2025-11-01'
 
-  // ── Représentant UE (art. 27) si non établi dans l’UE
-  const EU_ESTABLISHED = (process.env.NEXT_PUBLIC_EU_ESTABLISHED || 'true').toLowerCase() === 'true'
-  const EU_REP_NAME = process.env.NEXT_PUBLIC_EU_REP_NAME || '— À compléter : Nom du représentant UE —' // TODO: Renseigner si EU_ESTABLISHED=false
-  const EU_REP_CONTACT =
-    process.env.NEXT_PUBLIC_EU_REP_CONTACT || '— À compléter : contact du représentant UE —' // TODO: Renseigner si EU_ESTABLISHED=false
+  // Représentant UE (art. 27) — afficher seulement si non établi dans l’UE
+  const EU_ESTABLISHED = (process.env.NEXT_PUBLIC_EU_ESTABLISHED ?? 'true').toLowerCase() === 'true'
+  const EU_REP_NAME = process.env.NEXT_PUBLIC_EU_REP_NAME ?? ''
+  const EU_REP_CONTACT = process.env.NEXT_PUBLIC_EU_REP_CONTACT ?? ''
+
+  {!EU_ESTABLISHED && EU_REP_NAME && EU_REP_CONTACT && (
+    <section /* ... votre style de carte ... */>
+      <h2>Représentant UE (art. 27)</h2>
+      <p><strong>{EU_REP_NAME}</strong> — {EU_REP_CONTACT}</p>
+    </section>
+  )}
+
 
   const link = (p: string) => `/${locale}${p}`
 
@@ -179,7 +172,7 @@ export default async function Page({
             <h2 style={h2Style()}>{fr ? '1. Responsable du traitement & champ' : '1. Controller & scope'}</h2>
             <p style={{ margin: '0 0 8px' }}>
               {fr ? 'Responsable : ' : 'Controller: '}
-              <strong>{LEGAL_NAME}</strong> {fr ? ' (ci-après « nous », « notre ») ' : ' (hereinafter “we”, “us”) '}
+              <strong>{LEGAL_NAME}</strong> {fr ? ' (CEO Vincent Gannac) ' : ' (CEO Vincent Gannac) '}
               {fr
                 ? `— adresse : ${LEGAL_ADDRESS}.`
                 : `— address: ${LEGAL_ADDRESS}.`}
@@ -206,13 +199,13 @@ export default async function Page({
             <ul style={ulStyle()}>
               <li>
                 {fr
-                  ? 'Identifiants de compte : e-mail, nom affiché, éventuellement avatar.'
-                  : 'Account identifiers: email, display name, optionally avatar.'}
+                  ? 'Identifiants de compte : e-mail, nom affiché.'
+                  : 'Account identifiers: email, display name.'}
               </li>
               <li>
                 {fr
-                  ? 'Contenu fourni : titre & message du certificat, lien facultatif que vous ajoutez.'
-                  : 'User content: certificate title & message, optional link you add.'}
+                  ? 'Contenu fourni : titre & message du certificat.'
+                  : 'User content: certificate title & message.'}
               </li>
               <li>
                 {fr
@@ -255,11 +248,6 @@ export default async function Page({
                 {fr
                   ? 'Registre public (si activé par vous) : exécution du service sur paramétrage explicite.'
                   : 'Public registry (if you enable it): performance of the service based on your explicit setting.'}
-              </li>
-              <li>
-                {fr
-                  ? 'Marketing facultatif (ex. newsletter) : sur votre consentement, révocable à tout moment.'
-                  : 'Optional marketing (e.g. newsletter): based on your consent, revocable at any time.'}
               </li>
             </ul>
           </section>
@@ -400,7 +388,7 @@ export default async function Page({
             <h2 style={h2Style()}>{fr ? '12. Mineurs' : '12. Children'}</h2>
             <p style={{ margin: 0 }}>
               {fr
-                ? "Le service n'est pas destiné aux enfants. Si vous avez moins que l’âge légal de consentement applicable dans votre pays (ex. 15 ans en France), l’accord d’un représentant légal peut être nécessaire."
+                ? "Le service n'est pas destiné aux enfants. Si vous avez moins que l’âge légal de consentement applicable dans votre pays, l’accord d’un représentant légal peut être nécessaire."
                 : 'The service is not directed to children. If you are below the applicable age of digital consent in your country, consent from a legal guardian may be required.'}
             </p>
           </section>
