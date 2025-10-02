@@ -30,15 +30,12 @@ export default async function Page({
 
   // ── Identité & coordonnées
   const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || 'Parcels of Time'
-  const LEGAL_NAME = process.env.NEXT_PUBLIC_LEGAL_NAME || 'Vincent Gannac'
+  const LEGAL_NAME = process.env.NEXT_PUBLIC_LEGAL_NAME || 'Parcels of Time'
   const LEGAL_ADDRESS =
     process.env.NEXT_PUBLIC_LEGAL_ADDRESS ||
     '2 Lotissement Beaupré, Le Puy Sainte Réparade, France' // TODO: Renseigner
   const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@parcelsoftime.com'
-  const DPO_EMAIL =
-    process.env.NEXT_PUBLIC_DPO_EMAIL ||
-    process.env.NEXT_PUBLIC_LEGAL_EMAIL ||
-    'vincent.gannac@icloud.com'
+  
 
   const UPDATED = process.env.NEXT_PUBLIC_PRIVACY_UPDATED_AT || '2025-11-01'
 
@@ -354,8 +351,8 @@ export default async function Page({
             <h2 style={h2Style()}>{fr ? '10. Cookies & mesure d’audience' : '10. Cookies & analytics'}</h2>
             <p style={{ margin: '0 0 8px' }}>
               {fr
-                ? 'Nous limitons les traceurs au strict nécessaire au fonctionnement. Si des outils d’analyse sont ajoutés, ils seront configurés avec anonymisation et respect du consentement.'
-                : 'We limit trackers to those strictly necessary for operation. If analytics tools are added, they will be configured with anonymisation and consent where required.'}
+                ? 'Nous limitons les traceurs au strict nécessaire au fonctionnement.'
+                : 'We limit trackers to those strictly necessary for operation.'}
             </p>
             <p style={{ margin: 0 }}>
               {fr ? 'Gérez vos préférences sur ' : 'Manage your preferences at '}
@@ -373,13 +370,6 @@ export default async function Page({
               {fr
                 ? 'Vous disposez des droits d’accès, rectification, effacement, opposition, limitation, portabilité. Vous pouvez retirer votre consentement à tout moment pour les traitements fondés sur celui-ci.'
                 : 'You have the rights of access, rectification, erasure, objection, restriction and portability. You may withdraw consent at any time for processing based on consent.'}
-            </p>
-            <p style={{ margin: 0 }}>
-              {fr ? 'Exercez-les en nous écrivant à ' : 'Exercise them by writing to '}
-              <a href={`mailto:${DPO_EMAIL}`} style={{ color: 'var(--color-text)' }}>
-                {DPO_EMAIL}
-              </a>
-              {fr ? ' (preuve d’identité peut être demandée).' : ' (proof of identity may be requested).'}
             </p>
           </section>
 
@@ -412,10 +402,6 @@ export default async function Page({
                 {SUPPORT_EMAIL}
               </a>
               {' · '}
-              {fr ? 'DPO : ' : 'DPO: '}
-              <a href={`mailto:${DPO_EMAIL}`} style={{ color: 'var(--color-text)' }}>
-                {DPO_EMAIL}
-              </a>
             </p>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--color-muted)' }}>
               {fr
@@ -423,12 +409,6 @@ export default async function Page({
                 : 'You may lodge a complaint with your supervisory authority if you believe your rights are not respected.'}
             </p>
           </section>
-
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
-            {fr
-              ? 'Ce document est fourni à titre informatif et ne remplace pas un conseil juridique adapté à votre situation.'
-              : 'This document is provided for information purposes and does not replace legal advice tailored to your situation.'}
-          </p>
         </div>
       </section>
     </main>

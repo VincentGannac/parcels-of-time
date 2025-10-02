@@ -386,57 +386,6 @@ export default async function Page({
             </p>
           </section>
 
-          {/* FAQ */}
-          <section style={card()}>
-            <h2 style={h2()}>{fr ? 'FAQ express' : 'Quick FAQ'}</h2>
-            <details style={details()}>
-              <summary style={summary()}>
-                {fr ? 'Puis-je modifier le message après achat ?' : 'Can I edit the message after purchase?'}
-              </summary>
-              <div style={{ marginTop: 8, opacity: 0.92 }}>
-                {fr
-                  ? 'Oui, tant qu’aucune revente n’a été finalisée et sous réserve de modération. L’empreinte d’intégrité est mise à jour.'
-                  : 'Yes, as long as no resale has been finalized and subject to moderation. The integrity hash is updated.'}
-              </div>
-            </details>
-            <details style={details()}>
-              <summary style={summary()}>
-                {fr ? 'Le certificat a-t-il une valeur légale ?' : 'Does the certificate have legal value?'}
-              </summary>
-              <div style={{ marginTop: 8, opacity: 0.92 }}>
-                {fr
-                  ? 'C’est un objet numérique commémoratif avec mécanismes de vérification. Ce n’est pas un titre financier ni un acte authentique.'
-                  : 'It is a commemorative digital object with verification mechanisms. It is not a financial instrument nor a notarial act.'}
-              </div>
-            </details>
-            <details style={details()}>
-              <summary style={summary()}>
-                {fr ? 'Et si je me trompe lors du paiement ?' : 'What if I make a payment mistake?'}
-              </summary>
-              <div style={{ marginTop: 8, opacity: 0.92 }}>
-                {fr ? (
-                  <>
-                    Consultez <a href={href('/legal/refund')} style={link()}>Remboursements & rétractation</a>. En cas
-                    de doublon/erreur manifeste, écrivez-nous à{' '}
-                    <a href={`mailto:${SUPPORT_EMAIL}`} style={link()}>
-                      {SUPPORT_EMAIL}
-                    </a>
-                    .
-                  </>
-                ) : (
-                  <>
-                    See <a href={href('/legal/refund')} style={link()}>Refunds & withdrawal</a>. For duplicates/obvious
-                    errors, email us at{' '}
-                    <a href={`mailto:${SUPPORT_EMAIL}`} style={link()}>
-                      {SUPPORT_EMAIL}
-                    </a>
-                    .
-                  </>
-                )}
-              </div>
-            </details>
-          </section>
-
           {/* Contact blocks */}
           <section style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
             <div style={card()}>
@@ -457,7 +406,7 @@ export default async function Page({
                   fontWeight: 800,
                 }}
               >
-                {fr ? 'Contacter la presse' : 'Contact press'}
+                {fr ? 'Nous contacter' : 'Contact us'}
               </a>
             </div>
             <div style={card()}>
@@ -482,12 +431,6 @@ export default async function Page({
               </a>
             </div>
           </section>
-
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
-            {fr
-              ? 'Document informatif. Reportez-vous aux pages légales pour les versions opposables.'
-              : 'Informational document. Refer to the legal pages for binding versions.'}
-          </p>
         </div>
       </section>
     </main>
