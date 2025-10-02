@@ -1,4 +1,4 @@
-//app/api/checkout/confirm/route.ts
+// app/api/checkout/confirm/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -6,6 +6,8 @@ import Stripe from 'stripe';
 import crypto from 'node:crypto';
 import { pool } from '@/lib/db';
 import { setSessionCookieOnResponse } from '@/lib/auth';
+import { nextInvoiceNumber } from '@/lib/invoice-number';
+import { sendClaimInvoiceEmail } from '@/lib/email';
 
 type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
@@ -40,7 +42,7 @@ function safeStyle(v: unknown): CertStyle {
 export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
   const accLang = (req.headers.get('accept-language') || '').toLowerCase();
-  const locale = accLang.startsWith('fr') ? 'fr' : 'en';
+  const locale: 'fr'|'en' = accLang.startsWith('fr') ? 'fr' : 'en';
 
   const url = new URL(req.url);
   const session_id = url.searchParams.get('session_id');
@@ -48,9 +50,9 @@ export async function GET(req: Request) {
   if (!session_id) return NextResponse.redirect(`${base}/`, { status: 302 });
 
   let tsForRedirect = '';
-  let outOwnerId = ''
-  let outEmail = ''
-  let outDisplayName: string | null = null
+  let outOwnerId = '';
+  let outEmail = '';
+  let outDisplayName: string | null = null;
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
@@ -86,8 +88,8 @@ export async function GET(req: Request) {
 
     let cert_style = safeStyle(s.metadata?.cert_style);
     let time_display: 'utc'|'utc+local'|'local+utc' = ((): any => {
-      const td = String(s.metadata?.time_display || 'local+utc')
-      return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc'
+      const td = String(s.metadata?.time_display || 'local+utc');
+      return (td==='utc'||td==='utc+local'||td==='local+utc') ? td : 'local+utc';
     })();
     let local_date_only = safeBool(s.metadata?.local_date_only);
     let text_color = safeHex(s.metadata?.text_color);
@@ -96,7 +98,7 @@ export async function GET(req: Request) {
     let public_registry = safeBool(s.metadata?.public_registry);
     wantsAutopub = wantsAutopub || public_registry;
 
-    // ⛳️ NOUVEAU : si payload_key, on recharge le JSON complet depuis la table (préserve 100% du texte)
+    // ⛳️ NOUVEAU : payload complet via stash (préserve 100% du texte)
     if (payloadKey) {
       const { rows: p } = await pool.query(
         `select data from checkout_payload_temp where key = $1`,
@@ -115,13 +117,13 @@ export async function GET(req: Request) {
         })();
         local_date_only = (d.local_date_only !== undefined) ? safeBool(d.local_date_only) : local_date_only;
         text_color      = safeHex(d.text_color ?? text_color);
-        // ⚠️ IMPORTANT : caster proprement les booléens ('0' | '1' | true | false)
+        // ⚠️ caster proprement les booléens
         title_public    = (d.title_public    !== undefined) ? safeBool(d.title_public)    : title_public;
         message_public  = (d.message_public  !== undefined) ? safeBool(d.message_public)  : message_public;
         public_registry = (d.public_registry !== undefined) ? safeBool(d.public_registry) : public_registry;
         wantsAutopub    = wantsAutopub || public_registry;
 
-        // hygiène : on supprime l’entrée tampon
+        // hygiène : supprimer l’entrée tampon
         await pool.query(`delete from checkout_payload_temp where key = $1`, [payloadKey]);
       }
     }
@@ -132,7 +134,7 @@ export async function GET(req: Request) {
         ? (s.payment_intent.amount_received ?? s.payment_intent.amount ?? 0)
         : 0);
     const price_cents = Math.max(0, Number(amount_total_raw) | 0);
-    const currency = String(s.currency || 'EUR').toUpperCase()
+    const currency = String(s.currency || 'EUR').toUpperCase();
 
     // ====== Transaction DB ======
     const client = await pool.connect();
@@ -155,8 +157,8 @@ export async function GET(req: Request) {
 
       // claims upsert dynamique
       const cols = await getColumns(client, 'claims');
-      const insertCols: string[] = ['ts','owner_id','price_cents','currency']
-      const values: any[] = [ts, ownerId, price_cents, currency]
+      const insertCols: string[] = ['ts','owner_id','price_cents','currency'];
+      const values: any[] = [ts, ownerId, price_cents, currency];
       const placeholders: string[] = ['$1','$2','$3','$4'];
 
       const pushOpt = (name: string, value: any) => {
@@ -219,8 +221,8 @@ export async function GET(req: Request) {
       const data = `${ts}|${ownerId}|${price_cents}|${createdAtISO}|${salt}`;
 
       const hash = crypto.createHash('sha256').update(data).digest('hex');
-      const ymd = ts.slice(0,10)
-      const cert_url = `/api/cert/${encodeURIComponent(ymd)}.pdf`
+      const ymd = ts.slice(0,10);
+      const cert_url = `/api/cert/${encodeURIComponent(ymd)}.pdf`;
 
       const cols2 = await getColumns(client, 'claims');
       if (cols2.has('cert_hash') || cols2.has('cert_url')) {
@@ -245,19 +247,44 @@ export async function GET(req: Request) {
 
       await client.query('COMMIT');
 
-      // email après commit (non bloquant)
+      // ===== Emails après COMMIT (non bloquants) =====
       const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
-      const pdfUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
+      const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}.pdf`;
+
+      // (1) reçu existant
       import('@/lib/email')
         .then(({ sendClaimReceiptEmail }) =>
           sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl: pdfUrl })
         )
         .catch(e => console.warn('[confirm] email warn:', e?.message || e));
 
+      // (2) FACTURE — numéro séquentiel + PDF
+      (async () => {
+        try {
+          const invoiceNumber = await nextInvoiceNumber('classic', new Date());
+          const issueDate = new Date().toISOString().slice(0,10);
+          const amount = Math.max(0, price_cents) / 100;
+          const tsLabel = ts.slice(0,10); // "YYYY-MM-DD"
+          await sendClaimInvoiceEmail({
+            to: email,
+            ts: tsLabel,
+            invoiceNumber,
+            issueDate,
+            amount,
+            language: locale,
+            buyer: { name: display_name || 'Client', email }
+          });
+        } catch (e) {
+          console.warn('[confirm] invoice email warn:', (e as any)?.message || e);
+        }
+      })();
+
     } catch (e:any) {
       try { await pool.query('ROLLBACK') } catch {}
       console.error('[confirm] db_error:', e?.message || e);
       // On laisse le webhook Stripe compléter si besoin
+    } finally {
+      try { (await client).release?.() } catch {}
     }
 
     // Redirection finale

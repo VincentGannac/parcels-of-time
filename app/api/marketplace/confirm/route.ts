@@ -7,6 +7,9 @@ import Stripe from 'stripe'
 import { pool } from '@/lib/db'
 import { setSessionCookieOnResponse } from '@/lib/auth'
 import { normalizeClaimUpdates, applyClaimUpdatesLikeEdit } from '@/lib/claim-input'
+import { nextInvoiceNumber } from '@/lib/invoice-number'
+import { sendMarketplaceInvoiceEmails } from '@/lib/email'
+import crypto from 'node:crypto'
 
 function normIsoDay(s: string): string | null {
   if (!s) return null
@@ -26,6 +29,17 @@ function normIsoDay(s: string): string | null {
   return d.toISOString()
 }
 
+const PRIV_MODE = (process.env.INVOICE_PRIVATE_MODE || 'true').toLowerCase() === 'true'
+
+function maskEmail(e: string) {
+  const [u, d] = e.split('@')
+  if (!u || !d) return 'hidden'
+  return (u[0] || '*') + '***@' + d
+}
+function anonParty(kind: 'buyer'|'seller', email?: string) {
+  const fr = { buyer: 'Client particulier', seller: 'Vendeur particulier' }[kind]
+  return { name: fr, email: email ? maskEmail(email) : undefined }
+}
 
 async function tableExists(client: any, table: string) {
   const { rows } = await client.query(`select to_regclass($1) as ok`, [`public.${table}`])
@@ -130,6 +144,14 @@ export async function GET(req: Request) {
         const ymd = tsISO.slice(0,10)
         return NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(ymd)}?buy=already_sold`, { status: 303 })
       }
+
+      const { rows: srow } = await client.query(
+        `select email, display_name from owners where id=$1 limit 1`,
+        [L.seller_owner_id]
+      )
+      const sellerEmail = String(srow[0]?.email || '')
+      const sellerDisplay = String(srow[0]?.display_name || '') || undefined
+      
 
       // 2) Idempotence (si journal présent)
       const hasSecondary = await tableExists(client, 'secondary_sales')
@@ -272,17 +294,40 @@ export async function GET(req: Request) {
 
       await client.query('COMMIT')
 
-      // 7) Email best-effort
+      // 7) Emails best-effort (factures)
       try {
         const ymd = tsISO.slice(0, 10)
-        const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}.pdf`
-        const publicUrl = `${base}/${finalLocale}/m/${encodeURIComponent(ymd)}`        
-        import('@/lib/email').then(async ({ sendSecondarySaleEmails }) => {
-          await sendSecondarySaleEmails({
-            ts: ymd, buyerEmail, pdfUrl, publicUrl, sessionId: sid
-          })
-        }).catch(()=>{})
-      } catch {}
+        const salePrice = Number(L.price_cents) / 100
+        let fee = Math.max(1, Math.floor((Number(L.price_cents) * 0.15)) / 100) // min 1€
+        if (fee >= salePrice) fee = Math.max(0, salePrice - 0.01)               // sécurité
+
+        const invoiceNumberBuyer = await nextInvoiceNumber('mp-buyer')
+        const invoiceNumberFee   = await nextInvoiceNumber('mp-fee')
+        const issueDate = new Date().toISOString().slice(0,10)
+
+        // Parties (mode privé par défaut pour B2C)
+        const buyerParty = PRIV_MODE ? anonParty('buyer', buyerEmail) : { name:'Buyer', email: buyerEmail }
+        const sellerParty = PRIV_MODE
+          ? anonParty('seller', sellerEmail)
+          : { name: sellerDisplay || 'Seller', email: sellerEmail }
+
+        await sendMarketplaceInvoiceEmails({
+          language: finalLocale,
+          buyerEmail,
+          sellerEmail: sellerEmail || 'no-reply@parcelsoftime.com',
+          ts: ymd,
+          salePrice,
+          fee,
+          invoiceNumberBuyer,
+          invoiceNumberFee,
+          issueDate,
+          selfBilling: true,
+          buyerParty,
+          sellerParty,
+        })
+      } catch (e) {
+        console.warn('[marketplace/confirm] invoice emails warn:', (e as any)?.message || e)
+      }
 
       // 8) Redirection finale + cookie
       const to = `${base}/${finalLocale}/m/${encodeURIComponent(tsISO.slice(0,10))}?buy=success`

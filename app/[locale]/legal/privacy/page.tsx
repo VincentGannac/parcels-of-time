@@ -163,34 +163,9 @@ export default async function Page({
           </ul>
         </nav>
 
-        <div style={{ display: 'grid', gap: 14 }}>
-          {/* 1. Controller & scope */}
-          <section id="controller" style={cardStyle()}>
-            <h2 style={h2Style()}>{fr ? '1. Responsable du traitement & champ' : '1. Controller & scope'}</h2>
-            <p style={{ margin: '0 0 8px' }}>
-              {fr ? 'Responsable : ' : 'Controller: '}
-              <strong>{LEGAL_NAME}</strong> {fr ? ' (CEO Vincent Gannac) ' : ' (CEO Vincent Gannac) '}
-              {fr
-                ? `— adresse : ${LEGAL_ADDRESS}.`
-                : `— address: ${LEGAL_ADDRESS}.`}
-            </p>
-            {!EU_ESTABLISHED && (
-              <p style={{ margin: '0 0 8px' }}>
-                {fr ? 'Représentant UE (art. 27 RGPD) : ' : 'EU representative (Art. 27 GDPR): '}
-                <strong>{EU_REP_NAME}</strong> — {EU_REP_CONTACT}
-                {' '}<span style={{ fontSize: 12, opacity: 0.8 }}>
-                  {fr ? '(à compléter si vous n’êtes pas établi dans l’UE)' : '(complete if you are not established in the EU)'}
-                </span>
-              </p>
-            )}
-            <p style={{ margin: 0 }}>
-              {fr
-                ? 'Cette politique s’applique à l’application, au site et aux services associés (certificats numériques, marketplace P2P, paiement).'
-                : 'This policy applies to the app, the website and related services (digital certificates, P2P marketplace, payments).'}
-            </p>
-          </section>
+        <div style={{ display: 'grid', gap: 14 }}>  
 
-          {/* 2. Data collected */}
+          {/* 1. Data collected */}
           <section id="data" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '2. Données collectées' : '2. Data we collect'}</h2>
             <ul style={ulStyle()}>
@@ -222,7 +197,7 @@ export default async function Page({
             </ul>
           </section>
 
-          {/* 3. Purposes & legal bases */}
+          {/* 2. Purposes & legal bases */}
           <section id="purposes" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '3. Finalités & bases légales' : '3. Purposes & legal bases'}</h2>
             <ul style={ulStyle()}>
@@ -249,7 +224,7 @@ export default async function Page({
             </ul>
           </section>
 
-          {/* 4. Sources */}
+          {/* 3. Sources */}
           <section id="sources" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '4. Sources' : '4. Sources'}</h2>
             <p style={{ margin: 0 }}>
@@ -259,7 +234,7 @@ export default async function Page({
             </p>
           </section>
 
-          {/* 5. Recipients & processors */}
+          {/* 4. Recipients & processors */}
           <section id="recipients" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '5. Destinataires & sous-traitants' : '5. Recipients & processors'}</h2>
             <p style={{ margin: '0 0 8px' }}>
@@ -281,7 +256,7 @@ export default async function Page({
             </ul>
           </section>
 
-          {/* 6. Transfers */}
+          {/* 5. Transfers */}
           <section id="transfers" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '6. Transferts hors UE/EEE' : '6. International transfers'}</h2>
             <p style={{ margin: 0 }}>
@@ -291,7 +266,7 @@ export default async function Page({
             </p>
           </section>
 
-          {/* 7. Retention */}
+          {/* 6. Retention */}
           <section id="retention" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '7. Durées de conservation' : '7. Retention'}</h2>
             <ul style={ulStyle()}>
@@ -311,7 +286,7 @@ export default async function Page({
             </ul>
           </section>
 
-          {/* 8. Marketplace roles */}
+          {/* 7. Marketplace roles */}
           <section id="market" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '8. Marketplace & rôles' : '8. Marketplace & roles'}</h2>
             <p style={{ margin: '0 0 8px' }}>
@@ -326,7 +301,7 @@ export default async function Page({
             </p>
           </section>
 
-          {/* 9. Security */}
+          {/* 8. Security */}
           <section id="security" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '9. Sécurité' : '9. Security'}</h2>
             <ul style={ulStyle()}>
@@ -346,7 +321,7 @@ export default async function Page({
             </p>
           </section>
 
-          {/* 10. Cookies & analytics */}
+          {/* 9. Cookies & analytics */}
           <section id="cookies" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '10. Cookies & mesure d’audience' : '10. Cookies & analytics'}</h2>
             <p style={{ margin: '0 0 8px' }}>
@@ -363,7 +338,7 @@ export default async function Page({
             </p>
           </section>
 
-          {/* 11. Rights */}
+          {/* 10. Rights */}
           <section id="rights" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '11. Vos droits (RGPD)' : '11. Your GDPR rights'}</h2>
             <p style={{ margin: '0 0 8px' }}>
@@ -373,7 +348,7 @@ export default async function Page({
             </p>
           </section>
 
-          {/* 12. Children */}
+          {/* 11. Children */}
           <section id="children" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '12. Mineurs' : '12. Children'}</h2>
             <p style={{ margin: 0 }}>
@@ -383,7 +358,7 @@ export default async function Page({
             </p>
           </section>
 
-          {/* 13. Changes */}
+          {/* 12. Changes */}
           <section id="changes" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '13. Modifications' : '13. Changes'}</h2>
             <p style={{ margin: 0 }}>
@@ -393,7 +368,7 @@ export default async function Page({
             </p>
           </section>
 
-          {/* 14. Contact & complaints */}
+          {/* 13. Contact & complaints */}
           <section id="contact" style={cardStyle()}>
             <h2 style={h2Style()}>{fr ? '14. Contact & réclamations' : '14. Contact & complaints'}</h2>
             <p style={{ margin: '0 0 8px' }}>
