@@ -42,55 +42,74 @@ export default function Page() {
         ['--color-on-primary' as any]: TOKENS['--color-on-primary'],
         ['--color-border' as any]: TOKENS['--color-border'],
         ['--shadow-elev1' as any]: TOKENS['--shadow-elev1'],
-        background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh', fontFamily:'Inter, system-ui'
+        background: 'var(--color-bg)',
+        color: 'var(--color-text)',
+        minHeight: '100vh',
+        fontFamily: 'Inter, system-ui',
       }}
     >
-      <section style={{maxWidth:980, margin:'0 auto', padding:'48px 24px'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18}}>
-          <a href="/" style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; {COMPANY_NAME}</a>
-          <span style={{fontSize:12, color:'var(--color-muted)'}}>Mise à jour : {UPDATED}</span>
+      <section style={{ maxWidth: 980, margin: '0 auto', padding: '48px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <a href="/" style={{ textDecoration: 'none', color: 'var(--color-text)', opacity: 0.85 }}>
+            &larr; {COMPANY_NAME}
+          </a>
+          <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>Mise à jour : {UPDATED}</span>
         </div>
 
-        <header style={{marginBottom:12}}>
-          <h1 style={{fontFamily:'Fraunces, serif', fontSize:40, margin:'0 0 8px'}}>Mentions légales</h1>
-          <p style={{margin:0, opacity:.85}}>Informations obligatoires relatives à l’éditeur du site.</p>
+        <header style={{ marginBottom: 12 }}>
+          <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 40, margin: '0 0 8px' }}>Mentions légales</h1>
+          <p style={{ margin: 0, opacity: 0.85 }}>Informations obligatoires relatives à l’éditeur du site.</p>
         </header>
 
-        <div style={{display:'grid', gap:14}}>
-          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <h2 style={{margin:'0 0 6px', fontSize:20}}>Éditeur du site</h2>
-            <p style={{margin:'0 0 8px'}}>
-              <strong>{COMPANY_LEGAL_NAME}</strong><br/>
-              {COMPANY_ADDRESS}<br/>
+        <div style={{ display: 'grid', gap: 14 }}>
+          <section style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20 }}>Éditeur du site</h2>
+            <p style={{ margin: '0 0 8px' }}>
+              <strong>{COMPANY_LEGAL_NAME}</strong>
+              <br />
+              {COMPANY_ADDRESS}
+              <br />
               Identifiant : {COMPANY_SIREN}
             </p>
-            <p style={{margin:0, fontSize:14, color:'var(--color-muted)'}}>
-              Contact : <a href={`mailto:${LEGAL_EMAIL}`} style={{color:'var(--color-text)'}}>{LEGAL_EMAIL}</a>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--color-muted)' }}>
+              Contact :{' '}
+              <a href={`mailto:${LEGAL_EMAIL}`} style={{ color: 'var(--color-text)' }}>
+                {LEGAL_EMAIL}
+              </a>
             </p>
           </section>
 
-          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <h2 style={{margin:'0 0 6px', fontSize:20}}>Directeur·rice de la publication</h2>
-            <p style={{margin:0}}>{COMPANY_PUBLICATION}</p>
+          <section style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20 }}>Directeur·rice de la publication</h2>
+            <p style={{ margin: 0 }}>{COMPANY_PUBLICATION}</p>
           </section>
 
-          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <h2 style={{margin:'0 0 6px', fontSize:20}}>Hébergement</h2>
-            <p style={{margin:'0 0 6px'}}>
-              {HOST_NAME}<br/>{HOST_ADDR}
+          <section style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20 }}>Hébergement</h2>
+            <p style={{ margin: '0 0 6px' }}>
+              {HOST_NAME}
+              <br />
+              {HOST_ADDR}
             </p>
-            <p style={{margin:0, fontSize:14, color:'var(--color-muted)'}}>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--color-muted)' }}>
               Infrastructure majoritairement déployée en Europe (régions préférées&nbsp;: cdg1/fra1).
             </p>
           </section>
 
-          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <h2 style={{margin:'0 0 6px', fontSize:20}}>Contact</h2>
-            <p style={{margin:'0 0 8px'}}>
-              Support : <a href={`mailto:${SUPPORT_EMAIL}`} style={{color:'var(--color-text)'}}>{SUPPORT_EMAIL}</a><br/>
-              Juridique : <a href={`mailto:${LEGAL_EMAIL}`} style={{color:'var(--color-text)'}}>{LEGAL_EMAIL}</a>
+          <section style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20 }}>Contact</h2>
+            <p style={{ margin: '0 0 8px' }}>
+              Support :{' '}
+              <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'var(--color-text)' }}>
+                {SUPPORT_EMAIL}
+              </a>
+              <br />
+              Juridique :{' '}
+              <a href={`mailto:${LEGAL_EMAIL}`} style={{ color: 'var(--color-text)' }}>
+                {LEGAL_EMAIL}
+              </a>
             </p>
-            <p style={{margin:0, fontSize:13, color:'var(--color-muted)'}}>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--color-muted)' }}>
               Pour toute notification de contenu illicite, merci d’ajouter les URL précises et le motif.
             </p>
           </section>

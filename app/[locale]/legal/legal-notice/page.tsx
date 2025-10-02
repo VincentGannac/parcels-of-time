@@ -2,13 +2,15 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+type Locale = 'fr' | 'en'
+
 export default async function Page({
   params,
 }: {
-  params: Promise<{ locale: 'fr' | 'en' }>
+  params: Promise<{ locale: Locale }>
 }) {
   const { locale } = await params
-  const loc = locale === 'fr' ? 'fr' : 'en'
+  const loc: Locale = locale === 'fr' ? 'fr' : 'en'
 
   return (
     <main style={{ maxWidth: 860, margin: '0 auto', padding: '32px 20px' }}>
