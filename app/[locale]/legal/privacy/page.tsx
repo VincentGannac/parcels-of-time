@@ -1,4 +1,5 @@
 // app/[locale]/legal/privacy/page.tsx
+
 /**
  * Politique de confidentialité / Privacy Policy (FR/EN) — version unifiée et bilingue.
  * ⚙️ Variables d'environnement supportées (avec valeurs de secours) :
@@ -12,6 +13,8 @@
  * - NEXT_PUBLIC_EU_REP_NAME          (si EU_ESTABLISHED = false)             // TODO: Renseigner
  * - NEXT_PUBLIC_EU_REP_CONTACT       (si EU_ESTABLISHED = false)             // TODO: Renseigner
  */
+
+import type { CSSProperties } from 'react'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,8 +34,12 @@ const TOKENS = {
 
 type Locale = 'fr' | 'en'
 
-export default function Page({ params }: { params: { locale: Locale } }) {
-  const locale: Locale = params.locale === 'fr' ? 'fr' : 'en'
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ locale: Locale }>
+}) {
+  const { locale } = await params
   const fr = locale === 'fr'
 
   // ── Identité & coordonnées
@@ -55,7 +62,7 @@ export default function Page({ params }: { params: { locale: Locale } }) {
   const EU_REP_CONTACT =
     process.env.NEXT_PUBLIC_EU_REP_CONTACT || '— À compléter : contact du représentant UE —' // TODO: Renseigner si EU_ESTABLISHED=false
 
-  const href = (p: string) => `/${locale}${p}`
+  const link = (p: string) => `/${locale}${p}`
 
   const toc: Array<[string, string]> = fr
     ? [
@@ -129,16 +136,16 @@ export default function Page({ params }: { params: { locale: Locale } }) {
               : 'How we collect, use and protect your personal data in connection with the service.'}
           </p>
           <nav aria-label={fr ? 'Liens légaux' : 'Legal links'} style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>
-            <a href={href('/legal/legal-notice')} style={{ color: 'var(--color-text)', marginRight: 12 }}>
+            <a href={link('/legal/legal-notice')} style={{ color: 'var(--color-text)', marginRight: 12 }}>
               {fr ? 'Mentions légales' : 'Legal Notice'}
             </a>
-            <a href={href('/legal/terms')} style={{ color: 'var(--color-text)', marginRight: 12 }}>
+            <a href={link('/legal/terms')} style={{ color: 'var(--color-text)', marginRight: 12 }}>
               {fr ? 'Conditions générales' : 'Terms & Conditions'}
             </a>
-            <a href={href('/legal/cookies')} style={{ color: 'var(--color-text)', marginRight: 12 }}>
+            <a href={link('/legal/cookies')} style={{ color: 'var(--color-text)', marginRight: 12 }}>
               {fr ? 'Cookies' : 'Cookies'}
             </a>
-            <a href={href('/legal/seller')} style={{ color: 'var(--color-text)' }}>
+            <a href={link('/legal/seller')} style={{ color: 'var(--color-text)' }}>
               {fr ? 'Conditions Vendeur' : 'Seller Terms'}
             </a>
           </nav>
@@ -364,7 +371,7 @@ export default function Page({ params }: { params: { locale: Locale } }) {
             </p>
             <p style={{ margin: 0 }}>
               {fr ? 'Gérez vos préférences sur ' : 'Manage your preferences at '}
-              <a href={href('/legal/cookies')} style={{ color: 'var(--color-text)' }}>
+              <a href={link('/legal/cookies')} style={{ color: 'var(--color-text)' }}>
                 {fr ? 'la page Cookies' : 'the Cookies page'}
               </a>
               .
@@ -440,7 +447,7 @@ export default function Page({ params }: { params: { locale: Locale } }) {
   )
 }
 
-function cardStyle(): React.CSSProperties {
+function cardStyle(): CSSProperties {
   return {
     background: 'var(--color-surface)',
     border: '1px solid var(--color-border)',
@@ -449,10 +456,10 @@ function cardStyle(): React.CSSProperties {
   }
 }
 
-function h2Style(): React.CSSProperties {
+function h2Style(): CSSProperties {
   return { margin: '0 0 6px', fontSize: 20 }
 }
 
-function ulStyle(): React.CSSProperties {
+function ulStyle(): CSSProperties {
   return { margin: '0 0 0 18px', lineHeight: 1.7 }
 }
