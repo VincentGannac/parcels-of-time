@@ -5,6 +5,8 @@
  * Stripe Connect (mandat d’encaissement), informations précontractuelles essentielles.
  */
 
+import type { CSSProperties } from 'react'
+
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -23,8 +25,12 @@ const TOKENS = {
 
 type Locale = 'fr' | 'en'
 
-export default function Page({ params }: { params: { locale: Locale } }) {
-  const locale: Locale = params.locale === 'fr' ? 'fr' : 'en'
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ locale: Locale }>
+}) {
+  const { locale } = await params
   const fr = locale === 'fr'
 
   const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || 'Parcels of Time'
@@ -341,7 +347,7 @@ export default function Page({ params }: { params: { locale: Locale } }) {
   )
 }
 
-function cardStyle(): React.CSSProperties {
+function cardStyle(): CSSProperties {
   return {
     background: 'var(--color-surface)',
     border: '1px solid var(--color-border)',
@@ -350,6 +356,6 @@ function cardStyle(): React.CSSProperties {
   }
 }
 
-function h2Style(): React.CSSProperties {
+function h2Style(): CSSProperties {
   return { margin: '0 0 6px', fontSize: 20 }
 }
