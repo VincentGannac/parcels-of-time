@@ -7,9 +7,9 @@ export const resend = apiKey ? new Resend(apiKey) : null
 const FROM =
   process.env.FROM_EMAIL || 'Parcels of Time <no-reply@parcelsoftime.com>'
 const REPLY_TO =
-  process.env.REPLY_TO_EMAIL || 'vincent.gannac@icloud.com'
+  process.env.REPLY_TO_EMAIL || 'support@parcelsoftime.com'
 const BCC_TO =
-  process.env.BCC_EMAIL || 'vincent.gannac@icloud.com'
+  process.env.BCC_EMAIL || 'support@parcelsoftime.com'
 
 function resolveBcc(to: string | string[]): string | string[] | undefined {
   const list = Array.isArray(to) ? to.map(s => s.toLowerCase()) : [to.toLowerCase()]

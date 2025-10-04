@@ -85,13 +85,30 @@ export async function applySecondarySaleFromSession(s: Stripe.Checkout.Session) 
     )
     const buyerId = buyerRows[0].id
 
+    const hasBuyerCol = await hasColumn(client, 'listings', 'buyer_owner_id')
+    if (hasBuyerCol) {
+      await client.query(
+        `update listings
+            set status='sold', buyer_owner_id=$2, updated_at=now()
+          where id=$1`,
+        [listingId, buyerId]
+      )
+    } else {
+      await client.query(
+        `update listings
+            set status='sold', updated_at=now()
+          where id=$1`,
+        [listingId]
+      )
+    }
+
     // transfert de propriété + ✅ appliquer les MODIFS (titre, message, style, couleur, etc.)
     await client.query(
       `update claims
           set owner_id        = $1,
               price_cents     = $2,
               currency        = $3,
-              display_name    = $4,  
+              display_name    = $4,
               title           = $5,
               message         = $6,
               link_url        = $7,
@@ -105,12 +122,20 @@ export async function applySecondarySaleFromSession(s: Stripe.Checkout.Session) 
       [
         buyerId,
         listing.price_cents, listing.currency,
-        title, message, link_url,
-        cert_style, time_display, local_date_only, text_color,
-        title_public, message_public,
+        display_name,        // 👈 au bon endroit
+        title,
+        message,
+        link_url,
+        cert_style,
+        time_display,
+        local_date_only,
+        text_color,
+        title_public,
+        message_public,
         tsISO
       ]
     )
+    
 
     // ➕ background custom : temp → persist (si présent)
     if (cert_style === 'custom' && custom_bg_key) {
