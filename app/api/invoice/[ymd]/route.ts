@@ -116,7 +116,7 @@ function issuerBlock(loc: 'fr' | 'en') {
 }
 
 async function pdfBuffer(draw: (doc: any) => void): Promise<Buffer> {
-  // import dynamique => fonctionne en runtime Node (pas Edge)
+  // import dynamique => runtime Node (pas Edge)
   const mod = await import('pdfkit')
   const PDFDocument = (mod as any).default || (mod as any)
   const doc = new PDFDocument({ size: 'A4', margin: 36 })
@@ -252,13 +252,17 @@ export async function GET(
     }
   })
 
+  // ✅ BodyInit sans union SharedArrayBuffer : utiliser Uint8Array
+  const body = new Uint8Array(buf)
+
   const filename = `invoice_${ymd}.pdf`
-  return new NextResponse(buf, {
+  return new NextResponse(body, {
     status: 200,
     headers: {
       'content-type': 'application/pdf',
       'content-disposition': `attachment; filename="${filename}"`,
       'cache-control': 'no-store',
+      'content-length': String(body.byteLength),
     },
   })
 }
