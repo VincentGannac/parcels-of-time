@@ -29,8 +29,8 @@ export default async function Page({
   const href = (p: string) => `/${locale}${p}`
 
   const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || 'Parcels of Time'
-  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@example.com'
-  const PRESS_EMAIL = process.env.NEXT_PUBLIC_PRESS_EMAIL || SUPPORT_EMAIL
+  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@parcelsoftime.com'
+  const PRESS_EMAIL = process.env.NEXT_PUBLIC_PRESS_EMAIL || 'presse@parcelsoftime.com'
   const UPDATED = '2025-01-01'
 
   // Médiateur de la consommation (CM2C) — personnalisable via env

@@ -31,8 +31,8 @@ export default async function Page({
   // ——— Identité / contact
   const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || 'Parcels of Time'
   const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@parcelsoftime.com'
-  const LEGAL_EMAIL = process.env.NEXT_PUBLIC_LEGAL_EMAIL || SUPPORT_EMAIL
-  const PRESS_EMAIL = process.env.NEXT_PUBLIC_PRESS_EMAIL || SUPPORT_EMAIL
+  const LEGAL_EMAIL = process.env.NEXT_PUBLIC_LEGAL_EMAIL || 'support@parcelsoftime.com'
+  const PRESS_EMAIL = process.env.NEXT_PUBLIC_PRESS_EMAIL || 'presse@parcelsoftime.com'
   const UPDATED = process.env.NEXT_PUBLIC_LEGAL_UPDATED || '2025-11-01'
 
   // ——— Éditeur (personne physique — micro-entrepreneur)
@@ -40,9 +40,6 @@ export default async function Page({
   const PUBLISHER_SIRET = process.env.NEXT_PUBLIC_PUBLISHER_SIRET || '93368883000019'
   const PUBLISHER_ADDR = process.env.NEXT_PUBLIC_PUBLISHER_ADDR || '2 Lotissement Beaupré, St Canadet, 13610 Le Puy-Sainte-Réparade'
   const PUBLISHER_COUNTRY = process.env.NEXT_PUBLIC_PUBLISHER_COUNTRY || 'France'
-  const VAT_NOTE =
-    process.env.NEXT_PUBLIC_VAT_NOTE ||
-    (fr ? 'TVA non applicable, art. 293 B du CGI' : 'VAT not applicable under French Art. 293 B CGI')
 
   // ——— DPO / confidentialité
   const DPO_EMAIL = process.env.NEXT_PUBLIC_DPO_EMAIL || LEGAL_EMAIL
@@ -138,8 +135,6 @@ export default async function Page({
                   Adresse professionnelle&nbsp;: {PUBLISHER_ADDR}
                   <br />
                   Pays&nbsp;: {PUBLISHER_COUNTRY}
-                  <br />
-                  {VAT_NOTE}
                 </>
               ) : (
                 <>
@@ -150,8 +145,6 @@ export default async function Page({
                   Business address&nbsp;: {PUBLISHER_ADDR}
                   <br />
                   Country&nbsp;: {PUBLISHER_COUNTRY}
-                  <br />
-                  {VAT_NOTE}
                 </>
               )}
             </p>
@@ -159,14 +152,12 @@ export default async function Page({
               {fr ? (
                 <>
                   Contact : <a href={`mailto:${LEGAL_EMAIL}`} style={link()}>{LEGAL_EMAIL}</a> • Presse :{' '}
-                  <a href={`mailto:${PRESS_EMAIL}`} style={link()}>{PRESS_EMAIL}</a> • Support :{' '}
-                  <a href={`mailto:${SUPPORT_EMAIL}`} style={link()}>{SUPPORT_EMAIL}</a>
+                  <a href={`mailto:${PRESS_EMAIL}`} style={link()}>{PRESS_EMAIL}</a> 
                 </>
               ) : (
                 <>
                   Contact: <a href={`mailto:${LEGAL_EMAIL}`} style={link()}>{LEGAL_EMAIL}</a> • Press:{' '}
-                  <a href={`mailto:${PRESS_EMAIL}`} style={link()}>{PRESS_EMAIL}</a> • Support:{' '}
-                  <a href={`mailto:${SUPPORT_EMAIL}`} style={link()}>{SUPPORT_EMAIL}</a>
+                  <a href={`mailto:${PRESS_EMAIL}`} style={link()}>{PRESS_EMAIL}</a> 
                 </>
               )}
             </p>
@@ -174,7 +165,7 @@ export default async function Page({
 
           {/* Publication director */}
           <section style={card()}>
-            <h2 style={h2()}>{fr ? 'Directeur·rice de la publication' : 'Publication Director'}</h2>
+            <h2 style={h2()}>{fr ? 'Créateur du site' : 'Publication Director'}</h2>
             <p style={{ margin: 0 }}>
               {fr ? (
                 <>
@@ -282,7 +273,7 @@ export default async function Page({
             <h2 style={h2()}>{fr ? 'Propriété intellectuelle' : 'Intellectual property'}</h2>
             <p style={{ margin: 0 }}>
               {fr
-                ? 'Sauf mention contraire, les textes, éléments graphiques et interfaces du site sont protégés. Toute reproduction non autorisée est interdite.'
+                ? 'La marque, les textes, éléments graphiques et interfaces du site sont protégés. Toute reproduction non autorisée est interdite.'
                 : 'Unless stated otherwise, texts, graphics and UI are protected. Any unauthorized reproduction is prohibited.'}
             </p>
           </section>
@@ -292,29 +283,22 @@ export default async function Page({
             <h2 style={h2()}>{fr ? 'Responsabilité & signalements' : 'Liability & notices'}</h2>
             <p style={{ margin: '0 0 8px' }}>
               {fr
-                ? 'Les liens externes sont fournis à titre pratique ; nous n’en garantissons pas le contenu. Pour signaler un contenu illicite ou porter atteinte à vos droits :'
-                : 'External links are provided for convenience; we do not warrant their content. To report unlawful content or rights infringement:'}
+                ? 'Les certificats du registre public sont publiés volontairement par leurs propriétaires ; nous n’en garantissons pas le contenu. Pour signaler un contenu illicite ou portant atteinte à vos droits :'
+                : 'Certificates in the public register are voluntarily published by their owners; we do not guarantee their content. To report unlawful content or content that infringes your rights :'}
             </p>
             <p style={{ margin: 0 }}>
               {fr ? (
                 <>
                   écrivez à <a href={`mailto:${LEGAL_EMAIL}`} style={link()}>{LEGAL_EMAIL}</a> en joignant les
-                  informations utiles (URL, description, justificatifs).
+                  informations utiles ( description, justificatifs).
                 </>
               ) : (
                 <>
-                  email <a href={`mailto:${LEGAL_EMAIL}`} style={link()}>{LEGAL_EMAIL}</a> with helpful details (URL, description, proof).
+                  email <a href={`mailto:${LEGAL_EMAIL}`} style={link()}>{LEGAL_EMAIL}</a> with helpful details (description, proof).
                 </>
               )}
             </p>
           </section>
-
-          {/* Footer note */}
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
-            {fr
-              ? 'Ce document est fourni à titre informatif et ne remplace pas un conseil juridique.'
-              : 'This document is provided for information only and does not replace legal advice.'}
-          </p>
         </div>
       </section>
     </main>

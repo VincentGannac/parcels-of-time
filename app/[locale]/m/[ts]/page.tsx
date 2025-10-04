@@ -270,6 +270,7 @@ export default async function Page({
   const exploreHref = `/${locale}/explore`
   const verifyHref = `/api/verify?ts=${encodeURIComponent(tsISO!)}`
   const niceTs = formatISOAsNiceSafe(tsISO!)
+  const invoiceHref = `/api/invoice/${encodeURIComponent(tsYMD!)}`
 
   // UI logic
   const listingJustPublished = (sp.listing === 'ok') // ✅ uniquement marketplace
@@ -350,6 +351,8 @@ export default async function Page({
               <div style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--color-muted)', marginBottom: 10 }}>
                 {locale==='fr' ? 'Votre certificat' : 'Your certificate'}
               </div>
+              
+              
               <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
                 <a
                   href={pdfHref}
@@ -369,6 +372,28 @@ export default async function Page({
                 >
                   {locale==='fr' ? 'Télécharger le PDF' : 'Download PDF'}
                 </a>
+
+                {isOwner && (
+                  <a
+                    href={invoiceHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      gap: 10,
+                      background: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      padding: '12px 16px',
+                      borderRadius: 12,
+                      fontWeight: 800,
+                      textDecoration: 'none',
+                      border: '1px solid var(--color-border)',
+                    }}
+                  >
+                    {locale==='fr' ? 'Télécharger la facture / reçu' : 'Download invoice / receipt'}
+                  </a>
+                )}
+
                 <a
                   href={accountHref}
                   style={{
@@ -383,12 +408,19 @@ export default async function Page({
                 >
                   {locale==='fr' ? 'Retour au compte' : 'Back to account'}
                 </a>
-              </div>
+              </div>              
               <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--color-muted)' }}>
                 {locale==='fr'
                   ? 'Le PDF est aussi envoyé par e-mail (vérifiez vos indésirables).'
                   : 'The PDF is also sent by email (check your spam).'}
               </p>
+              {isOwner && (
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
+                  {locale==='fr'
+                    ? 'Votre facture reflète le montant réellement payé (29 € ou prix Marketplace).'
+                    : 'Your invoice reflects the amount actually paid (29€ or marketplace price).'}
+                </p>
+              )}
             </div>
 
             {/* Marketplace — SELL (owner) */}
@@ -616,11 +648,17 @@ export default async function Page({
                 </div>
               </object>
             </div>
-            <div style={{marginTop:10, display:'flex', gap:10}}>
+            <div style={{marginTop:10, display:'flex', gap:10, flexWrap:'wrap'}}>
               <a href={pdfHref} target="_blank" rel="noreferrer"
                  style={{textDecoration:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', borderRadius:10, padding:'10px 12px', fontWeight:800}}>
                 {locale==='fr' ? 'Ouvrir le PDF' : 'Open PDF'}
               </a>
+              {isOwner && (
+                <a href={invoiceHref} target="_blank" rel="noreferrer"
+                   style={{textDecoration:'none', background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px', fontWeight:800}}>
+                  {locale==='fr' ? 'Facture (PDF)' : 'Invoice (PDF)'}
+                </a>
+              )}
               <a href={accountHref}
                  style={{textDecoration:'none', background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px'}}>
                 {locale==='fr' ? 'Retour au compte' : 'Back to account'}
