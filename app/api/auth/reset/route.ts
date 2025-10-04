@@ -3,8 +3,7 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { consumePasswordReset } from '@/lib/password_reset'
-import { setOwnerPassword } from '@/lib/auth'
-import { setSessionCookieOnResponse, findOwnerByEmailWithPassword } from '@/lib/auth'
+import { setOwnerPassword, setSessionCookieOnResponse } from '@/lib/auth' // nettoie l'import inutile
 
 function localeFromUrl(u: URL): 'fr'|'en' { return u.pathname.startsWith('/fr/') ? 'fr':'en' }
 
@@ -46,21 +45,20 @@ export async function POST(req: Request) {
     // Met à jour le mot de passe
     await setOwnerPassword(ownerId, pw)
 
-    // Optionnel : auto-login (set cookie) → on retrouve l’email pour le payload
-    // (si jamais l’owner a été supprimé juste après, on fait simple et on ne set pas de cookie)
+    // Auto-login: relit email + username (+ display_name) et renseigne displayName = display_name || username
     try {
-      // On a seulement ownerId; récupérons un minimum d’infos :
       const { rows } = await (await import('@/lib/db')).pool.query(
-        `select email, display_name from owners where id = $1 limit 1`,
+        `select email, username, display_name from owners where id = $1 limit 1`,
         [ownerId]
       )
       if (rows?.[0]?.email) {
         const hostname = new URL(req.url).hostname
         const res = NextResponse.redirect(new URL(`/${locale}/account?pw=ok`, origin), { status: 303 })
+        const displayName = rows[0].display_name ?? rows[0].username ?? null
         setSessionCookieOnResponse(res, {
           ownerId,
           email: String(rows[0].email),
-          displayName: rows[0].display_name ?? null,
+          displayName,
           iat: Math.floor(Date.now()/1000),
         }, undefined, hostname)
         res.headers.set('Cache-Control', 'no-store')

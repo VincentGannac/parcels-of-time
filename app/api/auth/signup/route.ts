@@ -1,3 +1,4 @@
+// app/api/auth/signup/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -41,8 +42,8 @@ export async function POST(req: Request) {
 
     // Pseudo déjà pris ? (case-insensitive)
     const chk = await pool.query(
-      `select 1 from owners where lower(display_name) = lower($1) limit 1`,
-      [username],
+         `select 1 from owners where lower(username) = lower($1) limit 1`,
+         [username],
     )
     if (chk.rows.length) {
       return NextResponse.json({ error: 'username_taken' }, { status: 409 })
@@ -63,10 +64,10 @@ export async function POST(req: Request) {
     const hostname = new URL(req.url).hostname
     const res = NextResponse.json({ ok: 1, ownerId: rec.id })
     setSessionCookieOnResponse(res, {
-      ownerId: String(rec.id),
-      email: String(rec.email),
-      displayName: rec.display_name, // pseudo affiché dans /account
-      iat: Math.floor(Date.now() / 1000),
+    ownerId: String(rec.id),
+    email: String(rec.email),
+    displayName: rec.username,    // 👈 désormais le pseudo
+    iat: Math.floor(Date.now() / 1000),
     }, undefined, hostname)
     res.headers.set('Cache-Control', 'no-store')
     return res

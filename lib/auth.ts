@@ -154,7 +154,7 @@ export async function readSession(): Promise<SessionPayload | null> {
 
 
 // ===== DB & password =====
-type PWRecord = { id: string; email: string; display_name: string | null; password_hash: string | null; password_algo: string | null }
+type PWRecord = { id: string; email: string; username: string | null; display_name: string | null; password_hash: string | null; password_algo: string | null }
 
 export async function ownerIdForDay(tsISO: string): Promise<string | null> {
   try {
@@ -199,16 +199,16 @@ export async function verifyPassword(password: string, stored: string | null): P
   })
   return crypto.timingSafeEqual(dk, expected)
 }
-export async function createOwnerWithPassword(email: string, password: string, displayName?: string | null) {
+export async function createOwnerWithPassword(email: string, password: string, username?: string | null) {
   const emailNorm = email.trim().toLowerCase()
   const passHash = await hashPassword(password)
   const { rows } = await pool.query<PWRecord>(
-    `insert into owners(email, display_name, password_hash, password_algo)
-     values ($1,$2,$3,'scrypt')
+    `insert into owners(email, username, display_name, password_hash, password_algo)
+     values ($1,$2,$2,$3,'scrypt') 
      on conflict (email) do update
-       set display_name = coalesce(excluded.display_name, owners.display_name)
+       set username = coalesce(owners.username, excluded.username)
      returning id, email, display_name, password_hash, password_algo`,
-    [emailNorm, displayName ?? null, passHash]
+     [emailNorm, username ?? null, passHash]
   )
   return rows[0]
 }
@@ -229,7 +229,7 @@ export async function setOwnerPassword(ownerId: string, newPassword: string): Pr
 
 export async function findOwnerByEmailWithPassword(email: string) {
   const { rows } = await pool.query<PWRecord>(
-    `select id, email, display_name, password_hash, password_algo from owners where email = $1`,
+    `select id, email, username, display_name, password_hash, password_algo from owners where email = $1`,
     [email.trim().toLowerCase()]
   )
   return rows[0] || null

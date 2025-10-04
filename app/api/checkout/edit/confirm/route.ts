@@ -110,14 +110,15 @@ export async function GET(req: Request) {
       }
 
       // 2) claims : maj champs éditables
-      const { rowCount } = await client.query(
-        `update claims set
-           title=$1, message=$2, link_url=$3,
-           cert_style=$4, time_display=$5, local_date_only=$6, text_color=$7,
-           title_public=$8, message_public=$9
-         where ts=$10::timestamptz`,
-        [title, message, link_url, cert_style, time_display, local_date_only, text_color, title_public, message_public, tsISO]
-      )
+       const { rowCount } = await client.query(
+           `update claims set
+              display_name=$1,        
+              title=$2, message=$3, link_url=$4,
+              cert_style=$5, time_display=$6, local_date_only=$7, text_color=$8,
+              title_public=$9, message_public=$10
+            where ts=$11::timestamptz`,
+           [displayName, title, message, link_url, cert_style, time_display, local_date_only, text_color, title_public, message_public, tsISO]
+         )
 
       if (rowCount === 0) {
         await client.query('ROLLBACK')

@@ -42,10 +42,11 @@ export async function applyClaimUpdatesLikeEdit(
   updates: ClaimUpdates,
   opts?: { newOwnerId?: string, customBgDataUrl?: string | null }
 ) {
-  const fields = [
-    'title','message','link_url','cert_style','time_display',
-    'local_date_only','text_color','title_public','message_public'
-  ] as const
+    const fields = [
+        'display_name',                      // 👈 ajouté
+        'title','message','link_url','cert_style','time_display',
+        'local_date_only','text_color','title_public','message_public'
+      ] as const
 
   // 1) transfert d’owner si demandé
   if (opts?.newOwnerId) {

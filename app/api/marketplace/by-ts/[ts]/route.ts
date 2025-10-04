@@ -11,7 +11,7 @@ export async function GET(_req: Request, ctx: any) {
   if (!tsISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
   const { rows } = await pool.query(
     `select l.id, l.ts, l.price_cents, l.currency, l.status,
-            o.display_name as seller_display_name
+        o.username as seller_display_name
        from listings l
        join owners o on o.id = l.seller_owner_id
       where l.ts = $1 and l.status = 'active'`,

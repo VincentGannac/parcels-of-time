@@ -96,7 +96,7 @@ type ClaimForEdit = {
 async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
   try {
     const { rows } = await pool.query(
-      `select o.email, o.display_name,
+      `select o.email, c.display_name,
               c.title, c.message, c.link_url,
               c.cert_style, c.time_display, c.local_date_only, c.text_color,
               c.title_public, c.message_public

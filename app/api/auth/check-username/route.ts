@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     })
   }
   const { rows } = await pool.query(
-    `select 1 from owners where lower(display_name) = lower($1) limit 1`,
+    `select 1 from owners where lower(username) = lower($1) limit 1`,
     [raw],
   )
   const available = rows.length === 0

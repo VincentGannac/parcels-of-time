@@ -150,10 +150,9 @@ export async function GET(req: Request) {
       // 3) Upsert acheteur (affiche le display_name si fourni)
       const displayName = String(P.display_name || '')
       const { rows: brow } = await client.query(
-        `insert into owners(email, display_name)
-         values ($1,$2)
-         on conflict (email) do update
-           set display_name = coalesce(excluded.display_name, owners.display_name)
+        `insert into owners(email)
+         values ($1)
+         on conflict (email) do update set email = excluded.email
          returning id`,
         [buyerEmail, displayName || null]
       )

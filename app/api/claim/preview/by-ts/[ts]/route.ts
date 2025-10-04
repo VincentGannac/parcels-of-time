@@ -19,7 +19,8 @@ export async function GET(_req: Request, ctx: any){
   const { rows } = await pool.query(
     `select c.title, c.message, c.link_url, c.cert_style, c.time_display,
             c.local_date_only, c.text_color, c.title_public, c.message_public,
-            o.display_name
+            c.display_name,
+            o.username as owner_username, o.display_name as owner_legacy_display_name
        from claims c
        left join owners o on o.id = c.owner_id
       where date_trunc('day', c.ts) = $1::timestamptz
@@ -41,7 +42,11 @@ export async function GET(_req: Request, ctx: any){
 
   return NextResponse.json({
     claim: {
-      display_name: claim.display_name || '',
+            display_name:
+        (claim.display_name
+         || claim.owner_username
+         || claim.owner_legacy_display_name
+         || ''),
       title:        claim.title || '',
       message:      claim.message || '',
       link_url:     claim.link_url || '',

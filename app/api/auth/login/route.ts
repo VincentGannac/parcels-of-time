@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       return loginSuccessHTML(toAbs, hostHint, {
         ownerId: String(rec.id),
         email: String(rec.email),
-        displayName: rec.display_name,
+        displayName: rec.username,
       })
     }
 
@@ -139,7 +139,7 @@ export async function POST(req: Request) {
     setSessionCookieOnResponse(res, {
       ownerId: String(rec.id),
       email: String(rec.email),
-      displayName: rec.display_name,
+      displayName: rec.username,
       iat: Math.floor(Date.now() / 1000),
     }, undefined, hostHint)
     res.headers.set('Cache-Control', 'no-store')

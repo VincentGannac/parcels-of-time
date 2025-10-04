@@ -70,10 +70,10 @@ function money(v:number, curr:string) {
 async function fetchMarketplaceRow(tsISO: string) {
   const { rows } = await pool.query(
     `select s.listing_id, s.ts, s.gross_cents, s.fee_cents, s.net_cents, s.currency,
-            s.seller_owner_id, s.buyer_owner_id,
-            s.stripe_session_id, s.stripe_payment_intent_id,
-            so.email as seller_email, so.display_name as seller_name,
-            bo.email as buyer_email, bo.display_name as buyer_name
+           s.seller_owner_id, s.buyer_owner_id,
+           s.stripe_session_id, s.stripe_payment_intent_id,
+           so.email as seller_email, so.username as seller_name,
+           bo.email as buyer_email, bo.username as buyer_name
        from secondary_sales s
        left join owners so on so.id = s.seller_owner_id
        left join owners bo on bo.id = s.buyer_owner_id
@@ -86,7 +86,7 @@ async function fetchMarketplaceRow(tsISO: string) {
 async function fetchPrimaryRow(tsISO: string) {
   const { rows } = await pool.query(
     `select c.id as claim_id, c.ts, c.price_cents, c.currency, c.created_at,
-            o.id as buyer_owner_id, o.email as buyer_email, o.display_name as buyer_name
+            o.id as buyer_owner_id, o.email as buyer_email, o.username as buyer_name
        from claims c
        left join owners o on o.id = c.owner_id
       where date_trunc('day', c.ts) = $1::timestamptz

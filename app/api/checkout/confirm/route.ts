@@ -141,13 +141,13 @@ export async function GET(req: Request) {
 
       // owners
       const { rows: ownerRows } = await client.query(
-        `insert into owners(email, display_name)
-         values($1,$2)
-         on conflict(email) do update
-           set display_name = coalesce(excluded.display_name, owners.display_name)
-         returning id`,
-        [email, display_name]
-      );
+          `insert into owners(email)
+          values ($1)
+          on conflict (email) do update set email = excluded.email   -- no-op update to RETURNING
+          returning id`,
+          [email]
+      )
+      
       const ownerId = ownerRows[0].id;
       outOwnerId = String(ownerId);
       outEmail = email;
@@ -167,7 +167,8 @@ export async function GET(req: Request) {
         }
       };
 
-      pushOpt('title', title);
+      pushOpt('display_name', display_name)  // 👈 par-certificat
+      pushOpt('title',        title)
       pushOpt('message', message);
       pushOpt('link_url', link_url);
       pushOpt('cert_style', cert_style);
@@ -245,20 +246,31 @@ export async function GET(req: Request) {
 
       await client.query('COMMIT');
 
-      // email après commit (non bloquant)
-      const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
-      const pdfUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
-      import('@/lib/email')
-        .then(({ sendClaimReceiptEmail }) =>
-          sendClaimReceiptEmail({ to: email, ts, displayName: display_name, publicUrl, certUrl: pdfUrl })
+  // email après commit (non bloquant)
+  const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
+  const pdfUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
+  
+  import('@/lib/email').then(async ({ sendClaimReceiptEmail }) => {
+        const { rows } = await (await import('@/lib/db')).pool.query(
+          `select username from owners where email=$1 limit 1`, [email]
         )
-        .catch(e => console.warn('[confirm] email warn:', e?.message || e));
+        const accountName = rows[0]?.username || null
+        await sendClaimReceiptEmail({
+          to: email,
+          ts,
+          displayName: accountName,   // 👈 pseudo compte immuable
+          publicUrl,
+        certUrl: pdfUrl
+      })
+      })
 
     } catch (e:any) {
       try { await pool.query('ROLLBACK') } catch {}
       console.error('[confirm] db_error:', e?.message || e);
       // On laisse le webhook Stripe compléter si besoin
     }
+
+
 
     // Redirection finale
     {

@@ -51,7 +51,7 @@ export async function GET(req: Request, ctx: any) {
     // Claim le plus récent pour ce jour
     const { rows } = await pool.query(
       `
-      select
+        select
         c.id as claim_id,
         c.ts,
         c.title,
@@ -62,7 +62,9 @@ export async function GET(req: Request, ctx: any) {
         c.time_display,
         c.local_date_only,
         c.text_color,
-        o.display_name
+        c.display_name as claim_display_name,
+        o.username as owner_username,
+        o.display_name as owner_legacy_display_name
       from claims c
       join owners o on o.id = c.owner_id
       where date_trunc('day', c.ts) = $1::timestamptz
@@ -113,7 +115,10 @@ export async function GET(req: Request, ctx: any) {
     // Génération PDF (interface legacy)
     const pdfBytes = await generateCertificatePDF({
       ts: tsISO,
-      display_name: claim.display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
+      display_name: claim.claim_display_name
+      || claim.owner_username
+      || claim.owner_legacy_display_name
+      || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
       title: claim.title,
       message: claim.message,
       link_url: claim.link_url || '',
