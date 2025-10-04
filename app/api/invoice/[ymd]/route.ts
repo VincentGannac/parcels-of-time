@@ -6,9 +6,6 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
 
-// Typage compatible avec le check Next 15
-type RouteCtx = { params: Record<string, string | string[]> }
-
 type L = {
   invoice: string
   receipt: string
@@ -77,7 +74,6 @@ function toIsoDay(ymd: string): string | null {
 }
 
 async function fetchMarketplaceRow(tsISO: string) {
-  // Présent si revente marketplace
   const { rows } = await pool.query(
     `select s.listing_id, s.ts, s.gross_cents, s.fee_cents, s.net_cents, s.currency,
             s.seller_owner_id, s.buyer_owner_id,
@@ -95,12 +91,11 @@ async function fetchMarketplaceRow(tsISO: string) {
 }
 
 async function fetchPrimaryRow(tsISO: string) {
-  // Achat direct (29€ etc.)
   const { rows } = await pool.query(
     `select c.id as claim_id, c.ts, c.price_cents, c.currency, c.created_at,
             o.id as buyer_owner_id, o.email as buyer_email, o.display_name as buyer_name
        from claims c
-  left join owners o on o.id = c.owner_id
+       left join owners o on o.id = c.owner_id
       where date_trunc('day', c.ts) = $1::timestamptz
       limit 1`,
     [tsISO],
@@ -109,7 +104,6 @@ async function fetchPrimaryRow(tsISO: string) {
 }
 
 function issuerBlock(loc: 'fr' | 'en') {
-  // Coordonnées émetteur (plateforme) via ENV
   const name = process.env.INVOICE_ISSUER_NAME || 'Parcels of Time'
   const addr = process.env.INVOICE_ISSUER_ADDRESS || ''
   const email = process.env.INVOICE_ISSUER_EMAIL || ''
@@ -140,13 +134,13 @@ function money(v: number, curr: string) {
   return `${(v / 100).toFixed(2)} ${curr.toUpperCase()}`
 }
 
-export async function GET(req: Request, ctx: RouteCtx) {
-  const loc = pickLocale(req)
-  const t = labels(loc)
-
-  const raw = ctx?.params?.['ymd']
-  const ymd = Array.isArray(raw) ? raw[0] : (raw ?? '')
-  const tsISO = toIsoDay(decodeURIComponent(ymd))
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ ymd: string }> },
+) {
+  const { ymd: ymdParam } = await params
+  const ymd = decodeURIComponent(ymdParam || '')
+  const tsISO = toIsoDay(ymd)
   if (!tsISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
 
   // Auth + propriété
@@ -172,6 +166,8 @@ export async function GET(req: Request, ctx: RouteCtx) {
   let totalCents = 0
   let currency = 'EUR'
   let paymentRef = ''
+  const loc = pickLocale(req)
+  const t = labels(loc)
   const docTitle = isMarketplace ? t.receipt : t.invoice
 
   if (isMarketplace && mp) {
