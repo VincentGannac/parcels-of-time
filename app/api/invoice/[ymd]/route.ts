@@ -60,7 +60,7 @@ function labels(loc: 'fr' | 'en'): L {
       }
 }
 
-/** Robust YYYY-MM-DD → ISO midnight */
+/** YYYY-MM-DD -> ISO midnight */
 function toIsoDay(ymd: string): string | null {
   try {
     const d =
@@ -95,7 +95,7 @@ async function fetchPrimaryRow(tsISO: string) {
     `select c.id as claim_id, c.ts, c.price_cents, c.currency, c.created_at,
             o.id as buyer_owner_id, o.email as buyer_email, o.display_name as buyer_name
        from claims c
-       left join owners o on o.id = c.owner_id
+  left join owners o on o.id = c.owner_id
       where date_trunc('day', c.ts) = $1::timestamptz
       limit 1`,
     [tsISO],
@@ -116,7 +116,6 @@ function issuerBlock(loc: 'fr' | 'en') {
 }
 
 async function pdfBuffer(draw: (doc: any) => void): Promise<Buffer> {
-  // import dynamique => runtime Node (pas Edge)
   const mod = await import('pdfkit')
   const PDFDocument = (mod as any).default || (mod as any)
   const doc = new PDFDocument({ size: 'A4', margin: 36 })
@@ -134,29 +133,52 @@ function money(v: number, curr: string) {
   return `${(v / 100).toFixed(2)} ${curr.toUpperCase()}`
 }
 
+async function ownerIdForDaySafe(tsISO: string, ymd: string): Promise<string | null> {
+  try {
+    const a = await ownerIdForDay(tsISO)
+    if (a) return a as any
+  } catch {}
+  try {
+    const b = await ownerIdForDay(ymd)
+    if (b) return b as any
+  } catch {}
+  return null
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ ymd: string }> },
 ) {
   const { ymd: ymdParam } = await params
+  const loc = pickLocale(req)
+  const t = labels(loc)
+
   const ymd = decodeURIComponent(ymdParam || '')
   const tsISO = toIsoDay(ymd)
   if (!tsISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
 
-  // Auth + propriété
+  // Auth
   const sess = await readSession()
   if (!sess) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const ownerToday = await ownerIdForDay(tsISO)
-  if (!ownerToday || ownerToday !== sess.ownerId) {
+  // Récup ventes
+  const mp = await fetchMarketplaceRow(tsISO)
+  const p = mp ? null : await fetchPrimaryRow(tsISO)
+
+  // Autorisation : propriétaire du jour OU (vente marketplace) acheteur/vendeur OU (primaire) acheteur
+  const ownerToday = await ownerIdForDaySafe(tsISO, ymd)
+  const isOwnerNow = !!ownerToday && ownerToday === sess.ownerId
+  const isPartyMarketplace =
+    !!mp &&
+    (mp.seller_owner_id === sess.ownerId || mp.buyer_owner_id === sess.ownerId)
+  const isBuyerPrimary = !!p && p.buyer_owner_id === sess.ownerId
+
+  if (!isOwnerNow && !isPartyMarketplace && !isBuyerPrimary) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  // Marketplace ?
-  const mp = await fetchMarketplaceRow(tsISO)
+  // Données d’affichage
   const isMarketplace = !!mp
-
-  // Données affichage
   let invoiceNumber = ''
   let issueDate = new Date()
   let sellerName = ''
@@ -166,8 +188,6 @@ export async function GET(
   let totalCents = 0
   let currency = 'EUR'
   let paymentRef = ''
-  const loc = pickLocale(req)
-  const t = labels(loc)
   const docTitle = isMarketplace ? t.receipt : t.invoice
 
   if (isMarketplace && mp) {
@@ -181,7 +201,6 @@ export async function GET(
     currency = String(mp.currency || 'EUR')
     paymentRef = mp.stripe_payment_intent_id || mp.stripe_session_id || ''
   } else {
-    const p = await fetchPrimaryRow(tsISO)
     if (!p) return NextResponse.json({ error: 'not_found' }, { status: 404 })
     invoiceNumber = `POT-${ymd.replace(/-/g, '')}-${p.claim_id}`
     issueDate = p.created_at ? new Date(p.created_at) : new Date(p.ts)
@@ -192,7 +211,7 @@ export async function GET(
     currency = String(p.currency || 'EUR')
   }
 
-  // Génère le PDF
+  // PDF
   const buf = await pdfBuffer((doc: any) => {
     // header
     doc.fontSize(18).text(docTitle, { align: 'left' })
@@ -201,11 +220,13 @@ export async function GET(
     doc.text(`${t.issuedOn} ${issueDate.toISOString().slice(0, 10)}`)
     doc.moveDown()
 
-    // émetteur / destinataire
+    // parties
     const topY = doc.y
-    doc.fontSize(12).text(isMarketplace ? t.seller : (loc === 'fr' ? 'Émetteur' : 'Issuer'), {
-      underline: true,
-    })
+    doc
+      .fontSize(12)
+      .text(isMarketplace ? t.seller : (loc === 'fr' ? 'Émetteur' : 'Issuer'), {
+        underline: true,
+      })
     doc.moveDown(0.3)
     if (isMarketplace) {
       doc.fontSize(10).text([sellerName, sellerEmail].filter(Boolean).join('\n'))
@@ -215,7 +236,7 @@ export async function GET(
 
     doc.y = topY
     doc.moveDown(0.2)
-    doc.text(' ', { continued: false }) // spacer
+    doc.text(' ', { continued: false })
     doc.moveDown(0.5)
     doc.text(t.buyer, 320, topY, { underline: true })
     doc.moveDown(0.3)
@@ -223,14 +244,17 @@ export async function GET(
 
     doc.moveDown(1.2)
 
-    // ligne d'items
+    // ligne item
     doc.fontSize(12).text(t.item, { underline: true })
     doc.moveDown(0.3)
     doc.fontSize(10)
     const leftX = 40,
       rightX = 520
     doc.text(`${t.day} ${ymd}`, leftX, doc.y)
-    doc.text(money(totalCents, currency), rightX - 120, doc.y - 12, { width: 120, align: 'right' })
+    doc.text(money(totalCents, currency), rightX - 120, doc.y - 12, {
+      width: 120,
+      align: 'right',
+    })
     doc.moveDown(0.5)
     doc.moveTo(leftX, doc.y).lineTo(rightX, doc.y).strokeColor('#999').stroke()
     doc.moveDown(0.6)
@@ -242,7 +266,6 @@ export async function GET(
       doc.fillColor('#000')
     }
 
-    // note marketplace / conditions
     doc.moveDown(1)
     doc.fontSize(9).fillColor('#666').text(t.mpNote, { align: 'left' })
     doc.moveDown(0.4)
@@ -252,9 +275,7 @@ export async function GET(
     }
   })
 
-  // ✅ BodyInit sans union SharedArrayBuffer : utiliser Uint8Array
   const body = new Uint8Array(buf)
-
   const filename = `invoice_${ymd}.pdf`
   return new NextResponse(body, {
     status: 200,

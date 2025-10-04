@@ -16,7 +16,7 @@ type SearchParams = {
   ok?: string
   debug?: string
   listing?: string
-  reg?: 'pub' | 'priv' // <- ajouté
+  reg?: 'pub' | 'priv'
 }
 
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
@@ -32,17 +32,9 @@ function normalizeTs(input: string): { tsISO: string | null; tsYMD: string | nul
   const tsYMD = tsISO.slice(0, 10)
   return { tsISO, tsYMD }
 }
-
 function ymdSafe(input: string) {
-  try {
-    const d = new Date(input)
-    if (isNaN(d.getTime())) return String(input).slice(0, 10)
-    return d.toISOString().slice(0, 10)
-  } catch {
-    return String(input).slice(0, 10)
-  }
+  try { const d = new Date(input); if (isNaN(d.getTime())) return String(input).slice(0,10); return d.toISOString().slice(0,10) } catch { return String(input).slice(0,10) }
 }
-
 
 /** Public registry (per day, ISO midnight) */
 async function getPublicStateDb(tsISO: string): Promise<boolean> {
@@ -70,7 +62,6 @@ async function setPublicDb(tsISO: string, next: boolean): Promise<boolean> {
   } catch { return false } finally { client.release() }
 }
 
-/** Dark theme tokens */
 const TOKENS = {
   '--color-bg': '#0B0E14',
   '--color-surface': '#111726',
@@ -234,7 +225,6 @@ export default async function Page({
   const listing = isOwner ? null : await readActiveListing(tsISO!)
   if (!isOwner && !listing) redirect(`/${locale}/account?err=not_owner`)
 
-    
   // Owner’s active listings + merchant status
   let myListings: MyListing[] = []
   let merchant: MerchantRow | null = null
@@ -244,20 +234,9 @@ export default async function Page({
   }
 
   const myListingForThisDay = isOwner
-  ? myListings.find(l => (ymdSafe(l.ts) === tsYMD))
-  : null
+    ? myListings.find(l => (ymdSafe(l.ts) === tsYMD))
+    : null
 
-/*
-  // public registry state & optional autopub
-  const isPublicDb = await getPublicStateDb(tsISO!)
-  const wantsAutopub = sp.autopub === '1'
-  if (isOwner && wantsAutopub && !isPublicDb) {
-    await setPublicDb(tsISO!, true)
-    redirect(`/${locale}/m/${encodeURIComponent(tsYMD!)}?reg=pub`)
-  }  
-  const isPublic = isPublicDb
-
-*/
   const isPublic = await getPublicStateDb(tsISO!)
 
   // claim data
@@ -273,8 +252,8 @@ export default async function Page({
   const invoiceHref = `/api/invoice/${encodeURIComponent(tsYMD!)}`
 
   // UI logic
-  const listingJustPublished = (sp.listing === 'ok') // ✅ uniquement marketplace
-  const regAction = sp.reg === 'pub' ? 'pub' : (sp.reg === 'priv' ? 'priv' : null) // ✅ registre
+  const listingJustPublished = (sp.listing === 'ok')
+  const regAction = sp.reg === 'pub' ? 'pub' : (sp.reg === 'priv' ? 'priv' : null)
 
   const canSell =
     isOwner &&
@@ -295,7 +274,6 @@ export default async function Page({
     if (!oid || oid !== s!.ownerId) redirect(`/${locale}/account?err=not_owner`)
     await setPublicDb(norm.tsISO, next)
     redirect(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}?reg=${next ? 'pub' : 'priv'}`)
-    
   }
 
   return (
@@ -351,8 +329,8 @@ export default async function Page({
               <div style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--color-muted)', marginBottom: 10 }}>
                 {locale==='fr' ? 'Votre certificat' : 'Your certificate'}
               </div>
-              
-              
+
+              {/* ✅ Deux boutons uniques */}
               <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
                 <a
                   href={pdfHref}
@@ -370,7 +348,7 @@ export default async function Page({
                     border: '1px solid transparent',
                   }}
                 >
-                  {locale==='fr' ? 'Télécharger le PDF' : 'Download PDF'}
+                  {locale==='fr' ? 'PDF (certificat)' : 'PDF (certificate)'}
                 </a>
 
                 {isOwner && (
@@ -390,7 +368,7 @@ export default async function Page({
                       border: '1px solid var(--color-border)',
                     }}
                   >
-                    {locale==='fr' ? 'Télécharger la facture / reçu' : 'Download invoice / receipt'}
+                    {locale==='fr' ? 'Facture' : 'Invoice'}
                   </a>
                 )}
 
@@ -408,7 +386,8 @@ export default async function Page({
                 >
                   {locale==='fr' ? 'Retour au compte' : 'Back to account'}
                 </a>
-              </div>              
+              </div>
+
               <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--color-muted)' }}>
                 {locale==='fr'
                   ? 'Le PDF est aussi envoyé par e-mail (vérifiez vos indésirables).'
@@ -480,7 +459,7 @@ export default async function Page({
               </section>
             )}
 
-            {/* Success banner when just published OR already active */}
+            {/* Success banners */}
             {isOwner && (listingJustPublished || myListingForThisDay) && (
               <div style={{
                 padding:'10px 12px',
@@ -492,7 +471,6 @@ export default async function Page({
                 ✅ {locale==='fr' ? 'Votre annonce a été publiée sur la marketplace.' : 'Your listing is live on the marketplace.'}
               </div>
             )}
-
             {isOwner && regAction && (
               <div style={{
                 padding:'10px 12px',
@@ -507,7 +485,6 @@ export default async function Page({
                 }
               </div>
             )}
-
 
             {/* Owner: active listing */}
             {isOwner && myListingForThisDay && (
@@ -544,31 +521,29 @@ export default async function Page({
                     </div>
                   </div>
                   <form method="post" action="/api/marketplace/checkout" style={{display:'grid', gap:10}}>
-                <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
-                  <input type="hidden" name="listing_id" value={String(listing.id)} />
-                  <input type="hidden" name="locale" value={locale} />
-                  <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
-                    style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
-                  <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
-                    {locale==='fr' ? 'Acheter' : 'Buy'}
-                  </button>
-                </div>
-
-                {/* Consentements acheteur */}
-                <div style={{display:'grid', gap:6, fontSize:12}}>
-                  <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                    <input type="checkbox" name="accept_terms" required />
-                    <span>J’accepte les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et j’ai lu la <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Politique de confidentialité</a>.</span>
-                  </label>
-                  <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                    <input type="checkbox" name="withdrawal_waiver" required />
-                    <span>Je demande l’<strong>exécution immédiate</strong> et <strong>renonce</strong> à mon droit de rétractation (contenu numérique).</span>
-                  </label>
-                  <small style={{opacity:.75}}>
-                    Le vendeur est l’auteur du certificat ; Parcels of Time opère la plateforme et l’encaissement via Stripe Connect.
-                  </small>
-                </div>
-              </form>
+                    <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+                      <input type="hidden" name="listing_id" value={String(listing.id)} />
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
+                        style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
+                      <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
+                        {locale==='fr' ? 'Acheter' : 'Buy'}
+                      </button>
+                    </div>
+                    <div style={{display:'grid', gap:6, fontSize:12}}>
+                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                        <input type="checkbox" name="accept_terms" required />
+                        <span>J’accepte les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et j’ai lu la <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Politique de confidentialité</a>.</span>
+                      </label>
+                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                        <input type="checkbox" name="withdrawal_waiver" required />
+                        <span>Je demande l’<strong>exécution immédiate</strong> et <strong>renonce</strong> à mon droit de rétractation (contenu numérique).</span>
+                      </label>
+                      <small style={{opacity:.75}}>
+                        Le vendeur est l’auteur du certificat ; Parcels of Time opère la plateforme et l’encaissement via Stripe Connect.
+                      </small>
+                    </div>
+                  </form>
                 </div>
                 <p style={{fontSize:12, opacity:.7, marginTop:8}}>{locale==='fr'?'Paiement sécurisé Stripe. PDF transmis au nouvel acquéreur.':'Secure Stripe checkout. PDF transferred to the buyer.'}</p>
               </section>
@@ -621,7 +596,7 @@ export default async function Page({
             </aside>
           </div>
 
-          {/* Right column — TRUE PDF preview (fixed) */}
+          {/* Right column — PDF preview (sans les boutons dupliqués) */}
           <aside
             aria-label="Aperçu du certificat (PDF)"
             style={{
@@ -647,22 +622,6 @@ export default async function Page({
                     : <>Your browser cannot display the PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Open the PDF in a new tab</a>.</>}
                 </div>
               </object>
-            </div>
-            <div style={{marginTop:10, display:'flex', gap:10, flexWrap:'wrap'}}>
-              <a href={pdfHref} target="_blank" rel="noreferrer"
-                 style={{textDecoration:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', borderRadius:10, padding:'10px 12px', fontWeight:800}}>
-                {locale==='fr' ? 'Ouvrir le PDF' : 'Open PDF'}
-              </a>
-              {isOwner && (
-                <a href={invoiceHref} target="_blank" rel="noreferrer"
-                   style={{textDecoration:'none', background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px', fontWeight:800}}>
-                  {locale==='fr' ? 'Facture (PDF)' : 'Invoice (PDF)'}
-                </a>
-              )}
-              <a href={accountHref}
-                 style={{textDecoration:'none', background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px'}}>
-                {locale==='fr' ? 'Retour au compte' : 'Back to account'}
-              </a>
             </div>
           </aside>
         </div>
@@ -693,7 +652,7 @@ export default async function Page({
           )}
         </aside>
 
-        {/* ======= ÉDITION (plein écran, comme avant) ======= */}
+        {/* ======= ÉDITION ======= */}
         <section style={{ marginTop: 24 }}>
           <details style={{ border: '1px solid var(--color-border)', borderRadius: 12, background: 'var(--color-surface)' }}>
             <summary
@@ -750,7 +709,8 @@ export default async function Page({
             </div>
           </details>
         </section>
-        {/* ======= Danger zone — release ======= */}
+
+        {/* Danger zone — release */}
         <DangerRelease locale={locale} tsYMD={tsYMD!} />
       </section>
     </main>
