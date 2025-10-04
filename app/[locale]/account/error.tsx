@@ -1,3 +1,4 @@
+//app/account/error.tsx
 'use client'
 
 export default function Error({ error }: { error: Error }) {
