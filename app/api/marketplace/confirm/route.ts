@@ -147,19 +147,29 @@ export async function GET(req: Request) {
         }
       }
 
-     // 3) Upsert acheteur (affiche le display_name si fourni)
-      const displayName = String(P.display_name || '')
-      const { rows: brow } = await client.query(
-        `insert into owners(email, display_name)
-        values ($1, $2)
-        on conflict (email) do update
-          set display_name = coalesce(excluded.display_name, owners.display_name)
-        returning id`,
-        [buyerEmail, displayName || null]
-      )
+      // 3) Upsert acheteur — NE PAS écraser le display_name du compte
+      let buyerId = ''
+      {
+        const { rows: brow } = await client.query(
+          `insert into owners(email)
+          values ($1)
+          on conflict (email) do nothing
+          returning id`,
+          [buyerEmail]
+        )
+        if (brow.length) {
+          buyerId = String(brow[0].id)
+        } else {
+          const { rows: got } = await client.query(
+            `select id from owners where email=$1 limit 1`,
+            [buyerEmail]
+          )
+          buyerId = String(got[0].id)
+        }
+      }
+      buyerOwnerId = buyerId
 
-      const buyerId = brow[0].id
-      buyerOwnerId = String(buyerId)
+
 
       // 4) Appliquer modifs “comme Edit/confirm” + transfert owner
       const updates = normalizeClaimUpdates(P) // titre, message, style, couleurs, flags…
