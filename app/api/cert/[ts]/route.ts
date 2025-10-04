@@ -131,7 +131,8 @@ export async function GET(req: Request, ctx: any) {
     })
 
     const buf = Buffer.from(pdfBytes)
-    return new Response(buf as unknown as BodyInit, {
+    const body = new Uint8Array(buf) // ✅ BodyInit compatible
+    return new Response(body, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,

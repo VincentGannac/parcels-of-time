@@ -33,7 +33,13 @@ function normalizeTs(input: string): { tsISO: string | null; tsYMD: string | nul
   return { tsISO, tsYMD }
 }
 function ymdSafe(input: string) {
-  try { const d = new Date(input); if (isNaN(d.getTime())) return String(input).slice(0,10); return d.toISOString().slice(0,10) } catch { return String(input).slice(0,10) }
+  try {
+    const d = new Date(input)
+    if (isNaN(d.getTime())) return String(input).slice(0, 10)
+    return d.toISOString().slice(0, 10)
+  } catch {
+    return String(input).slice(0, 10)
+  }
 }
 
 /** Public registry (per day, ISO midnight) */
@@ -62,6 +68,7 @@ async function setPublicDb(tsISO: string, next: boolean): Promise<boolean> {
   } catch { return false } finally { client.release() }
 }
 
+/** Dark theme tokens */
 const TOKENS = {
   '--color-bg': '#0B0E14',
   '--color-surface': '#111726',
@@ -233,9 +240,7 @@ export default async function Page({
     merchant = await readMerchant(session.ownerId)
   }
 
-  const myListingForThisDay = isOwner
-    ? myListings.find(l => (ymdSafe(l.ts) === tsYMD))
-    : null
+  const myListingForThisDay = isOwner ? myListings.find(l => (ymdSafe(l.ts) === tsYMD)) : null
 
   const isPublic = await getPublicStateDb(tsISO!)
 
@@ -245,11 +250,11 @@ export default async function Page({
 
   // links
   const pdfHref = `/api/cert/${encodeURIComponent(tsYMD!)}`
+  const invoiceHref = `/api/invoice/${encodeURIComponent(tsYMD!)}`
   const accountHref = `/${locale}/account`
   const exploreHref = `/${locale}/explore`
   const verifyHref = `/api/verify?ts=${encodeURIComponent(tsISO!)}`
   const niceTs = formatISOAsNiceSafe(tsISO!)
-  const invoiceHref = `/api/invoice/${encodeURIComponent(tsYMD!)}`
 
   // UI logic
   const listingJustPublished = (sp.listing === 'ok')
@@ -312,11 +317,11 @@ export default async function Page({
           <p style={{ fontSize: 16, opacity: 0.9, margin: 0 }}>{niceTs}</p>
         </header>
 
-        {/* Main grid (actions left / PDF preview right) */}
+        {/* Main grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 18 }}>
           {/* Left column */}
           <div style={{ display:'grid', gap:18 }}>
-            {/* Certificate actions */}
+            {/* Certificate actions (ONLY TWO BUTTONS) */}
             <div
               style={{
                 background: 'var(--color-surface)',
@@ -330,8 +335,8 @@ export default async function Page({
                 {locale==='fr' ? 'Votre certificat' : 'Your certificate'}
               </div>
 
-              {/* ✅ Deux boutons uniques */}
               <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+                {/* PDF (certificat) */}
                 <a
                   href={pdfHref}
                   target="_blank"
@@ -351,6 +356,7 @@ export default async function Page({
                   {locale==='fr' ? 'PDF (certificat)' : 'PDF (certificate)'}
                 </a>
 
+                {/* Facture / Reçu (owner only) */}
                 {isOwner && (
                   <a
                     href={invoiceHref}
@@ -371,21 +377,6 @@ export default async function Page({
                     {locale==='fr' ? 'Facture' : 'Invoice'}
                   </a>
                 )}
-
-                <a
-                  href={accountHref}
-                  style={{
-                    textDecoration: 'none',
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 12,
-                    padding: '12px 16px',
-                    fontWeight: 700,
-                  }}
-                >
-                  {locale==='fr' ? 'Retour au compte' : 'Back to account'}
-                </a>
               </div>
 
               <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--color-muted)' }}>
@@ -396,8 +387,8 @@ export default async function Page({
               {isOwner && (
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
                   {locale==='fr'
-                    ? 'Votre facture reflète le montant réellement payé (29 € ou prix Marketplace).'
-                    : 'Your invoice reflects the amount actually paid (29€ or marketplace price).'}
+                    ? 'La facture reflète le montant réellement payé (29 € ou prix Marketplace).'
+                    : 'The invoice reflects the amount actually paid (€29 or marketplace price).'}
                 </p>
               )}
             </div>
@@ -442,7 +433,7 @@ export default async function Page({
               </section>
             )}
 
-            {/* Nudge if no merchant */}
+            {/* Nudges / status … (inchangé) */}
             {isOwner && !merchant?.stripe_account_id && (
               <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
@@ -459,8 +450,7 @@ export default async function Page({
               </section>
             )}
 
-            {/* Success banners */}
-            {isOwner && (listingJustPublished || myListingForThisDay) && (
+            {isOwner && (sp.listing === 'ok' || myListingForThisDay) && (
               <div style={{
                 padding:'10px 12px',
                 border:'1px solid rgba(14,170,80,.4)',
@@ -471,15 +461,16 @@ export default async function Page({
                 ✅ {locale==='fr' ? 'Votre annonce a été publiée sur la marketplace.' : 'Your listing is live on the marketplace.'}
               </div>
             )}
-            {isOwner && regAction && (
+
+            {isOwner && (sp.reg === 'pub' || sp.reg === 'priv') && (
               <div style={{
                 padding:'10px 12px',
                 border:'1px solid rgba(14,170,80,.4)',
-                background: regAction === 'pub' ? 'rgba(14,170,80,.12)' : 'rgba(120,130,150,.12)',
+                background: sp.reg === 'pub' ? 'rgba(14,170,80,.12)' : 'rgba(120,130,150,.12)',
                 borderRadius:10,
                 fontSize:14
               }}>
-                {regAction === 'pub'
+                {sp.reg === 'pub'
                   ? (locale==='fr' ? '✅ Votre certificat a été publié dans le registre public.' : '✅ Your certificate is now public in the registry.')
                   : (locale==='fr' ? '🔒 Votre certificat est maintenant privé.' : '🔒 Your certificate is now private.')
                 }
@@ -596,7 +587,7 @@ export default async function Page({
             </aside>
           </div>
 
-          {/* Right column — PDF preview (sans les boutons dupliqués) */}
+          {/* Right column — PDF preview (sans boutons) */}
           <aside
             aria-label="Aperçu du certificat (PDF)"
             style={{
@@ -652,7 +643,7 @@ export default async function Page({
           )}
         </aside>
 
-        {/* ======= ÉDITION ======= */}
+        {/* Edition + Danger zone (inchangés) */}
         <section style={{ marginTop: 24 }}>
           <details style={{ border: '1px solid var(--color-border)', borderRadius: 12, background: 'var(--color-surface)' }}>
             <summary
@@ -710,7 +701,6 @@ export default async function Page({
           </details>
         </section>
 
-        {/* Danger zone — release */}
         <DangerRelease locale={locale} tsYMD={tsYMD!} />
       </section>
     </main>
