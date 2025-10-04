@@ -26,6 +26,16 @@ const TOKENS = {
  * Petit helper requêtes PG avec un micro-retry pour absorber les timeouts fugaces
  * (utile quand le pool côté serverless est frileux).
  */
+
+type OwnerProfile = { email: string; display_name: string | null; username: string | null }
+async function readOwnerProfile(ownerId: string): Promise<OwnerProfile | null> {
+  const { rows } = await q<OwnerProfile>(
+    `select email, display_name, username from owners where id = $1 limit 1`,
+    [ownerId]
+  )
+  return rows[0] || null
+}
+
 async function q<T = any>(text: string, params?: any[]) {
   try {
     // @ts-ignore
@@ -190,18 +200,19 @@ export default async function Page({
   }
 
   // Chargements parallèles + détection d'erreurs
-  const [claimsRes, listingsRes, merchantRes] = await Promise.allSettled([
+  const [claimsRes, listingsRes, merchantRes, ownerRes] = await Promise.allSettled([
     listClaims(sess.ownerId),
     readMyActiveListings(sess.ownerId),
     readMerchant(sess.ownerId),
+    readOwnerProfile(sess.ownerId), // 👈 nouveau
   ])
   const claims     = claimsRes.status === 'fulfilled'   ? claimsRes.value   : []
   const listings   = listingsRes.status === 'fulfilled' ? listingsRes.value : []
   let merchant     = merchantRes.status === 'fulfilled' ? merchantRes.value : null
+  const owner      = ownerRes.status === 'fulfilled'    ? ownerRes.value    : null  // 👈 nouveau
   const claimsErr  = claimsRes.status === 'rejected'
   const listsErr   = listingsRes.status === 'rejected'
   let merchErr     = merchantRes.status === 'rejected'
-
   // Resync Stripe au retour d’onboarding
   const connectParam = firstString(sp?.connect)
   const needsSync = connectParam === 'done'
@@ -220,6 +231,9 @@ export default async function Page({
 
   const year = new Date().getUTCFullYear()
   const activeYmd = new Set(listings.map(l => ymdSafe(l.ts)))
+ 
+  const displayName = owner?.display_name ?? owner?.username ?? sess.displayName ?? null
+  const email = owner?.email ?? sess.email
 
   return (
     <main
@@ -248,11 +262,11 @@ export default async function Page({
         </header>
 
         {/* Identity */}
-        <h1 style={{fontFamily:'Fraunces, serif', fontSize:36, margin:'0 0 6px'}}>
+       <h1 style={{fontFamily:'Fraunces, serif', fontSize:36, margin:'0 0 6px'}}>
           {locale === 'fr' ? 'Mon compte' : 'My account'}
         </h1>
         <p style={{opacity:.8, marginTop:0}}>
-          {sess.displayName ? `${sess.displayName} — ` : ''}{sess.email}
+          {displayName ? `${displayName} — ` : ''}{email}
         </p>
 
         {/* Alerte si la DB a été indisponible (au lieu de "données vides") */}
