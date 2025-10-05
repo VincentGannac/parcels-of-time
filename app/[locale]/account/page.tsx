@@ -419,25 +419,39 @@ export default async function Page({
                   </small>
                 </div>
               )}
-
-              {/* CTA principal */}
+              
+              {/* CTA principal — état dépendant */}
               <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-                <button style={{
-                  padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)',
-                  background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800
-                }}>
-                  {hasMerchant
-                    ? (locale==='fr' ? 'Compléter sur Stripe' : 'Continue on Stripe')
-                    : (locale==='fr' ? 'Devenir vendeur' : 'Become a seller')}
-                </button>
-
-                {/* Lien de secours sans POST (reprise immédiate) */}
-                {hasMerchant && (
-                  <a
-                    href={`/api/connect/onboard`}
-                    style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}
+                {!hasMerchant && (
+                  <button
+                    style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800}}
                   >
-                    {locale==='fr' ? 'Relancer l’onboarding' : 'Resume onboarding'}
+                    {locale==='fr' ? 'Devenir vendeur' : 'Become a seller'}
+                  </button>
+                )}
+
+                {hasMerchant && !isReady && (
+                  <>
+                    <button
+                      style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800}}
+                    >
+                      {locale==='fr' ? 'Compléter sur Stripe' : 'Continue on Stripe'}
+                    </button>
+                    <a
+                      href={`/api/connect/onboard`}
+                      style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}
+                    >
+                      {locale==='fr' ? 'Relancer l’onboarding' : 'Resume onboarding'}
+                    </a>
+                  </>
+                )}
+
+                {hasMerchant && isReady && (
+                  <a
+                    href={`/api/connect/dashboard`}
+                    style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)', background:'rgba(255,255,255,.04)'}}
+                  >
+                    {locale==='fr' ? 'Ouvrir le tableau de bord Stripe' : 'Open Stripe Dashboard'}
                   </a>
                 )}
               </div>

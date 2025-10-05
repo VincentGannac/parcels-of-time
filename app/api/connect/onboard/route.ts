@@ -80,14 +80,13 @@ async function ensurePrefilledAccount(
 function makeOnboardingLink(stripe: Stripe, accountId: string, base: string, locale: 'fr' | 'en') {
   return stripe.accountLinks.create({
     account: accountId,
-    // ⬇️ on propage la locale dans le refresh_url
-    refresh_url: `${base}/api/connect/refresh?loc=${locale}`,
-    // ⬇️ return_url localisé
+    refresh_url: `${base}/api/connect/refresh?loc=${locale}`, // ⬅️ important
     return_url: `${base}/${locale}/account?connect=done`,
     type: 'account_onboarding',
     collect: 'eventually_due',
   })
 }
+
 
 
 export async function POST(req: Request) {
@@ -125,12 +124,14 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ url: link.url })
   } catch (e: any) {
-    const msg = String(e?.message || e)
-    if (ctype.includes('application/x-www-form-urlencoded') || ctype.includes('multipart/form-data')) {
-      return NextResponse.redirect(`${base}/${locale}/account?connect=err`, { status: 303 })
+    const code = e?.raw?.code || e?.code || e?.raw?.type || 'unknown'
+    const msg  = String(e?.message || '')
+    const url  = `${base}/${locale}/account?connect=err&code=${encodeURIComponent(code)}&msg=${encodeURIComponent(msg)}`
+    if ((req.headers.get('content-type') || '').toLowerCase().includes('application/x-www-form-urlencoded')) {
+      return NextResponse.redirect(url, { status: 303 })
     }
-    return NextResponse.json({ error: 'server_error', detail: msg }, { status: 500 })
-  }
+    return NextResponse.json({ error: 'server_error', code, detail: msg }, { status: 500 })
+  }  
 }
 
 export async function GET(req: Request) {
@@ -185,7 +186,12 @@ export async function GET(req: Request) {
       collect: 'eventually_due',
     })
     return NextResponse.redirect(link.url, { status: 303 })
-  } catch {
-    return NextResponse.redirect(`${base}/${locale}/account?connect=err`, { status: 303 })
+  } catch (e: any) {
+    const code = e?.raw?.code || e?.code || e?.raw?.type || 'unknown'
+    const msg  = String(e?.message || '')
+    return NextResponse.redirect(
+      `${base}/${locale}/account?connect=err&code=${encodeURIComponent(code)}&msg=${encodeURIComponent(msg)}`,
+      { status: 303 }
+    )
   }
 }
