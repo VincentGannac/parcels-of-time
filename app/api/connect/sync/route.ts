@@ -48,9 +48,16 @@ export async function POST(req: Request) {
 
   const ctype = req.headers.get('content-type') || ''
   if (ctype.includes('application/x-www-form-urlencoded')) {
-    // retour propre sur la page compte
     const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
-    return NextResponse.redirect(`${base}/account?sync=done`, { status: 303 })
+    const ref = req.headers.get('referer') || ''
+    let locale: 'fr' | 'en' = 'en'
+    try {
+      const u = ref ? new URL(ref) : null
+      const m = u?.pathname.match(/^\/(fr|en)(\/|$)/i)
+      if (m?.[1]) locale = m[1].toLowerCase() as any
+    } catch {}
+    return NextResponse.redirect(`${base}/${locale}/account?sync=done`, { status: 303 })
   }
   return NextResponse.json({ ok: true })
+  
 }
