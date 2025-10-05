@@ -1,6 +1,7 @@
+// app/[locale]/signup/SignupFormClient.tsx
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 type Availability = 'idle' | 'checking' | 'available' | 'taken' | 'error'
 
@@ -56,10 +57,10 @@ export default function SignupForm({
     return Math.min(4, Math.max(0, s - 1))
   }, [password])
   const pwLabel = [
-    t('Très faible', 'Very weak'),
     t('Faible', 'Weak'),
     t('Moyen', 'Fair'),
     t('Bon', 'Good'),
+    t('Très bon', 'Very good'),
     t('Excellent', 'Excellent'),
   ][pwScore] || t('Très faible', 'Very weak')
 
@@ -169,29 +170,6 @@ export default function SignupForm({
     passwordsMatch &&
     userAvail !== 'taken' &&
     userAvail !== 'checking'
-
-  // --- password generator
-  const generatePw = useCallback(() => {
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz'
-    const ALPHABET = alphabet.toUpperCase()
-    const digits = '0123456789'
-    const symbols = '!@#$%^&*()-_=+[]{}:,.?'
-    const all = alphabet + ALPHABET + digits + symbols
-    const len = 16
-    const arr = new Uint32Array(len)
-    crypto.getRandomValues(arr)
-    let pw = ''
-    for (let i = 0; i < len; i++) pw += all[arr[i] % all.length]
-    // ensure variety
-    if (!/[a-z]/.test(pw)) pw = 'a' + pw.slice(1)
-    if (!/[A-Z]/.test(pw)) pw = pw.slice(0, 1) + 'A' + pw.slice(2)
-    if (!/\d/.test(pw)) pw = pw.slice(0, 2) + '9' + pw.slice(3)
-    if (!/[^A-Za-z0-9]/.test(pw)) pw = pw.slice(0, 3) + '!' + pw.slice(4)
-    setPassword(pw)
-    setPassword2(pw)
-    setShowPw(true)
-    setShowPw2(true)
-  }, [])
 
   return (
     <form onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }} aria-describedby="form-progress">
@@ -323,7 +301,7 @@ export default function SignupForm({
         </div>
       </label>
 
-      {/* Password strength + tools */}
+      {/* Password strength */}
       <div style={{ display: 'grid', gap: 6 }}>
         {!!password && (
           <>
@@ -338,13 +316,6 @@ export default function SignupForm({
         )}
         {caps1 && <div style={{ fontSize: 12, color: '#ffdf8a' }}>⇪ {t('Verr. Maj activé', 'Caps Lock enabled')}</div>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={generatePw}
-            style={{ padding: '6px 10px', borderRadius: 10, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text)', cursor: 'pointer', fontSize: 12 }}
-          >
-            🔐 {t('Générer un mot de passe fort', 'Generate a strong password')}
-          </button>
           <span style={{ fontSize: 12, opacity: 0.8 }}>
             {t('Astuce : combinez lettres, chiffres et symboles.', 'Tip: mix letters, numbers & symbols.')}
           </span>

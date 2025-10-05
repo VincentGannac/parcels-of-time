@@ -27,7 +27,18 @@ function t(locale:'fr'|'en') {
     bad:'Lien invalide ou expiré.',
     weak:'Mot de passe trop court (min. 8).',
     mismatch:'Les mots de passe ne correspondent pas.',
-    show:'Afficher', hide:'Masquer'
+    show:'Afficher', hide:'Masquer',
+    pwStrengthTitle:'Sécurité du mot de passe',
+    tip:'Astuce : combinez lettres, chiffres et symboles.',
+    caps:'Verr. Maj activé',
+    labels: {
+      veryWeak:'Très faible',
+      weak:'Faible',
+      fair:'Moyen',
+      good:'Bon',
+      veryGood:'Très bon',
+      excellent:'Excellent',
+    },
   }
   const en = {
     title:'Reset password',
@@ -37,7 +48,18 @@ function t(locale:'fr'|'en') {
     bad:'Invalid or expired link.',
     weak:'Password too short (min. 8).',
     mismatch:'Passwords do not match.',
-    show:'Show', hide:'Hide'
+    show:'Show', hide:'Hide',
+    pwStrengthTitle:'Password strength',
+    tip:'Tip: mix letters, numbers & symbols.',
+    caps:'Caps Lock enabled',
+    labels: {
+      veryWeak:'Very weak',
+      weak:'Weak',
+      fair:'Fair',
+      good:'Good',
+      veryGood:'Very good',
+      excellent:'Excellent',
+    },
   }
   return locale==='fr'?fr:en
 }
@@ -86,55 +108,185 @@ export default async function Page({ params, searchParams }: { params: Promise<P
           <form method="POST" action="/api/auth/reset" style={{display:'grid', gap:12}}>
             <input type="hidden" name="locale" value={locale}/>
             <input type="hidden" name="token" value={token || ''}/>
+
+            {/* PW 1 */}
             <label style={{display:'grid', gap:6}}>
               <span>{i18n.pw}</span>
               <div style={{ position:'relative' }}>
                 <input name="password" type="password" required minLength={8}
                   placeholder="••••••••"
                   data-pw="1"
+                  aria-invalid="false"
                   style={{padding:'12px 44px 12px 14px', border:'1px solid var(--color-border)', background:'rgba(255,255,255,.02)', color:'var(--color-text)', borderRadius:10, width:'100%'}} />
                 <button type="button" data-toggle="1"
                   style={{position:'absolute', right:8, top:8, padding:'6px 10px', borderRadius:8, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', cursor:'pointer'}}>
                   {i18n.show} 👁
                 </button>
               </div>
+
+              {/* Strength block (hidden until typing) */}
+              <div data-strength-block style={{ display:'none', gap:6 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:12 }}>
+                  <span>{i18n.pwStrengthTitle}</span>
+                  <strong data-strength-label aria-live="polite">{i18n.labels.veryWeak}</strong>
+                </div>
+                <div aria-hidden="true" style={{ height:8, background:'rgba(255,255,255,.06)', border:'1px solid var(--color-border)', borderRadius:999, overflow:'hidden' }}>
+                  <div data-strength-bar style={{ width:'0%', height:'100%', background:'var(--color-primary)' }} />
+                </div>
+              </div>
+
+              {/* Caps Lock hint */}
+              <div data-caps="1" style={{ display:'none', fontSize:12, color:'#ffdf8a' }}>⇪ {i18n.caps}</div>
+
+              {/* Tip */}
+              <span style={{ fontSize:12, opacity:.8 }}>{i18n.tip}</span>
             </label>
+
+            {/* PW 2 */}
             <label style={{display:'grid', gap:6}}>
               <span>{i18n.pw2}</span>
               <div style={{ position:'relative' }}>
                 <input name="password2" type="password" required minLength={8}
                   placeholder="••••••••"
                   data-pw="2"
+                  aria-invalid="false"
                   style={{padding:'12px 44px 12px 14px', border:'1px solid var(--color-border)', background:'rgba(255,255,255,.02)', color:'var(--color-text)', borderRadius:10, width:'100%'}} />
                 <button type="button" data-toggle="2"
                   style={{position:'absolute', right:8, top:8, padding:'6px 10px', borderRadius:8, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)', cursor:'pointer'}}>
                   {i18n.show} 👁
                 </button>
               </div>
+
+              {/* Live mismatch + caps */}
+              <div data-mismatch style={{ display:'none', fontSize:12, color:'#ffb2b2' }} role="status" aria-live="polite">
+                {i18n.mismatch}
+              </div>
+              <div data-caps="2" style={{ display:'none', fontSize:12, color:'#ffdf8a' }}>⇪ {i18n.caps}</div>
             </label>
+
             <button type="submit" style={{padding:'12px 16px', borderRadius:12, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800, cursor:'pointer'}}>
               {i18n.cta}
             </button>
           </form>
         </section>
 
-        {/* Script progressif: bascule afficher/masquer mot de passe */}
+        {/* Script progressif: bascule afficher/masquer + force + conseils + vérifs */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
 (function(){
   try {
-    function hook(n){
-      var btn = document.querySelector('[data-toggle="'+n+'"]');
-      var inp = document.querySelector('[data-pw="'+n+'"]');
+    var SHOW_TXT = ${JSON.stringify(i18n.show + ' 👁')};
+    var HIDE_TXT = ${JSON.stringify(i18n.hide + ' 🙈')};
+    var LABELS = ${JSON.stringify([
+      i18n.labels.veryWeak,
+      i18n.labels.weak,
+      i18n.labels.fair,
+      i18n.labels.good,
+      i18n.labels.veryGood,
+      i18n.labels.excellent,
+    ])};
+
+    function $(sel){ return document.querySelector(sel); }
+
+    function hookToggle(n){
+      var btn = $('[data-toggle="'+n+'"]');
+      var inp = $('[data-pw="'+n+'"]');
       if(!btn || !inp) return;
       btn.addEventListener('click', function(){
         var showing = inp.getAttribute('type') === 'text';
         inp.setAttribute('type', showing ? 'password' : 'text');
-        btn.innerText = (showing ? '${i18n.show} 👁' : '${i18n.hide} 🙈');
+        btn.textContent = showing ? SHOW_TXT : HIDE_TXT;
       });
     }
-    hook('1'); hook('2');
+
+    // Strength scoring 0..4 (same logic as signup)
+    function score(pw){
+      if(!pw) return 0;
+      var s = 0;
+      if(pw.length >= 8) s++;
+      if(pw.length >= 12) s++;
+      if(/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+      if(/\\d/.test(pw)) s++;
+      if(/[^A-Za-z0-9]/.test(pw)) s++;
+      s = Math.min(4, Math.max(0, s - 1));
+      return s;
+    }
+
+    var pw1 = $('[data-pw="1"]');
+    var pw2 = $('[data-pw="2"]');
+    var strengthBlock = $('[data-strength-block]');
+    var strengthBar = $('[data-strength-bar]');
+    var strengthLabel = $('[data-strength-label]');
+    var mismatch = $('[data-mismatch]');
+    var caps1 = $('[data-caps="1"]');
+    var caps2 = $('[data-caps="2"]');
+
+    function updateStrength(){
+      var v = pw1 ? pw1.value : '';
+      if(!strengthBlock || !strengthBar || !strengthLabel) return;
+      if(!v){ strengthBlock.style.display = 'none'; return; }
+      strengthBlock.style.display = 'grid';
+      var sc = score(v);
+      var pct = (sc / 4) * 100;
+      strengthBar.style.width = pct + '%';
+      strengthLabel.textContent = LABELS[sc+1] || LABELS[0];
+    }
+
+    function updateMismatch(){
+      if(!pw1 || !pw2 || !mismatch) return;
+      if(pw2.value && pw1.value !== pw2.value){
+        mismatch.style.display = 'block';
+        pw2.setAttribute('aria-invalid','true');
+      } else {
+        mismatch.style.display = 'none';
+        pw2.setAttribute('aria-invalid','false');
+      }
+    }
+
+    function hookCaps(inp, el){
+      if(!inp || !el) return;
+      function setCaps(e){
+        try {
+          var on = e.getModifierState && e.getModifierState('CapsLock');
+          el.style.display = on ? 'block' : 'none';
+        } catch(_) { /* no-op */ }
+      }
+      inp.addEventListener('keyup', setCaps);
+      inp.addEventListener('focus', function(e){ setCaps(e); });
+      inp.addEventListener('blur', function(){ el.style.display = 'none'; });
+    }
+
+    // Submit guard (progressive)
+    var form = document.querySelector('form[action="/api/auth/reset"]');
+    if(form){
+      form.addEventListener('submit', function(e){
+        if(!pw1 || !pw2) return;
+        if((pw1.value||'').length < 8){
+          e.preventDefault();
+          strengthBlock && (strengthBlock.style.display = 'grid');
+          pw1.focus();
+          return;
+        }
+        if(pw1.value !== pw2.value){
+          e.preventDefault();
+          mismatch && (mismatch.style.display = 'block');
+          pw2.focus();
+        }
+      });
+    }
+
+    // Hooks
+    hookToggle('1'); hookToggle('2');
+    if(pw1){ pw1.addEventListener('input', function(){ updateStrength(); updateMismatch(); }); }
+    if(pw2){ pw2.addEventListener('input', updateMismatch); }
+
+    hookCaps(pw1, caps1);
+    hookCaps(pw2, caps2);
+
+    // Initial paint (in case of autofill)
+    updateStrength();
+    updateMismatch();
   } catch(_) {}
 })();`}}
         />
