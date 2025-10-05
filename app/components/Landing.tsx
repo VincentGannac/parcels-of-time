@@ -1,4 +1,4 @@
-// app/components/Landing.tsx 
+// app/components/Landing.tsx
 'use client'
 
 import Link from 'next/link'
@@ -7,8 +7,6 @@ import HeroSlideshow from './HeroSlideshow'
 import { useLocaleHref } from './useLocaleHref'
 import { useT } from '../i18n/I18nProvider'
 import { usePathname } from 'next/navigation'
-
-
 
 function CookieBanner() {
   const [visible, setVisible] = useState(false)
@@ -19,15 +17,15 @@ function CookieBanner() {
     } catch {}
   }, [])
   if (!visible) return null
-  const accept = (val:'accept'|'reject') => {
+  const accept = (val: 'accept' | 'reject') => {
     try { localStorage.setItem('cookieConsent', val) } catch {}
     setVisible(false)
   }
   return (
     <div role="dialog" aria-live="polite"
-      style={{position:'fixed', zIndex:50, left:16, right:16, bottom:16, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:12, boxShadow:'var(--shadow-elev2)'}}>
+         style={{position:'fixed', zIndex:50, left:16, right:16, bottom:16, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:12, boxShadow:'var(--shadow-elev2)'}}>
       <div style={{fontSize:14, marginBottom:8}}>
-        Nous utilisons des cookies essentiels (sécurité, paiement) et de mesure d’audience. 
+        Nous utilisons des cookies essentiels (sécurité, paiement) et de mesure d’audience.
         Consultez la <a href="/fr/legal/cookies" style={{color:'var(--color-text)'}}>Politique des cookies</a>.
       </div>
       <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
@@ -77,33 +75,30 @@ function applyTheme(vars: Record<string, string>) {
 /* -------------------- UI atoms -------------------- */
 function Button({
   href, children, variant='primary', ariaLabel,
-}: { href: string; children: React.ReactNode; variant?: 'primary'|'secondary'|'ghost'|'accent'; ariaLabel?: string }) {
+}: { href: string; children: React.ReactNode; variant?: 'primary'|'secondary'|'ghost'; ariaLabel?: string }) {
   const base: React.CSSProperties = {
     textDecoration:'none', fontWeight:700, borderRadius:12, padding:'14px 18px',
     display:'inline-flex', alignItems:'center', gap:10, outline:'none',
     border:'1px solid var(--color-border)',
     boxShadow:'none', transition:'transform .16s ease, box-shadow .16s ease, background .16s ease',
   }
-  const styles: Record<'primary'|'secondary'|'ghost'|'accent', React.CSSProperties> = {
+  const styles: Record<'primary'|'secondary'|'ghost', React.CSSProperties> = {
     primary: { ...base, background:'var(--color-primary)', color:'var(--color-on-primary)', borderColor:'transparent' },
     secondary: { ...base, background:'var(--color-surface)', color:'var(--color-text)' },
     ghost: { ...base, background:'transparent', color:'var(--color-text)' },
-    // Accent = mettre en avant l’offre cadeau
-    accent: { ...base, background:'var(--color-secondary)', color:'var(--color-on-primary)', borderColor:'transparent' },
   }
   return (
     <Link href={href} aria-label={ariaLabel}
-      style={{ ...styles[variant] }}
-      onMouseEnter={(e)=>{(e.currentTarget as any).style.boxShadow='var(--shadow-glow)'}}
-      onMouseLeave={(e)=>{(e.currentTarget as any).style.boxShadow='none'}}
-      onMouseDown={(e)=>{(e.currentTarget as any).style.transform='translateY(1px)'}}
-      onMouseUp={(e)=>{(e.currentTarget as any).style.transform='translateY(0)'}}
+          style={{ ...styles[variant] }}
+          onMouseEnter={(e)=>{(e.currentTarget as any).style.boxShadow='var(--shadow-glow)'}}
+          onMouseLeave={(e)=>{(e.currentTarget as any).style.boxShadow='none'}}
+          onMouseDown={(e)=>{(e.currentTarget as any).style.transform='translateY(1px)'}}
+          onMouseUp={(e)=>{(e.currentTarget as any).style.transform='translateY(0)'}}
     >
       {children}
     </Link>
   )
 }
-
 
 function SectionLabel(props: React.HTMLAttributes<HTMLDivElement>) {
   const { children, style, ...rest } = props
@@ -141,13 +136,12 @@ function Header({onToggleTheme, href}:{onToggleTheme:()=>void; href:(p:string)=>
           <li><Link href={href('/claim?gift=1')} style={{textDecoration:'none', color:'inherit'}}>{t('nav.gift')}</Link></li>
           <li><a href="#faq"      style={{textDecoration:'none', color:'inherit'}}>{t('nav.faq')}</a></li>
           <li><Link href={href('/explore')} style={{textDecoration:'none', color:'inherit'}}>Registre public</Link></li>
-          {/* ⇩ fixé à "Mon Compte" */}
           <li><Link href={href('/account')} style={{textDecoration:'none', color:'inherit'}}>Mon Compte</Link></li>
         </ul>
 
         <div style={{display:'flex', gap:10, justifyContent:'flex-end', alignItems:'center'}}>
-          {/* Offrir = accentué */}
-          <Button href={href('/claim?gift=1')} variant="accent" ariaLabel={t('cta.gift')}>🎁 {t('cta.gift')}</Button>
+          {/* Offrir comme avant (secondary) + petit logo cadeau */}
+          <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>🎁 {t('cta.gift')}</Button>
           <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>{t('cta.claim')}</Button>
           <button aria-label="Toggle theme" onClick={onToggleTheme}
                   style={{marginLeft:6, padding:10, borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)'}}>
@@ -159,10 +153,7 @@ function Header({onToggleTheme, href}:{onToggleTheme:()=>void; href:(p:string)=>
   )
 }
 
-
-
-
-/* ---------- CertificatePreview (MAJ ordre) ---------- */
+/* ---------- CertificatePreview ---------- */
 type PreviewStyle =
   | 'romantic' | 'birth' | 'wedding' | 'birthday' | 'christmas' | 'newyear' | 'graduation' | 'neutral';
 
@@ -188,13 +179,13 @@ function CertificatePreview({
   ts: string
   href: string
 }) {
-// Affiche uniquement la date UTC
-const tsText = useMemo(() => {
-  const d = new Date(ts)
-  if (isNaN(d.getTime())) return ts
-  const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0,0,0,0))
-  return utc.toISOString().slice(0,10) + ' UTC'
-}, [ts])
+  // Affiche uniquement la date UTC
+  const tsText = useMemo(() => {
+    const d = new Date(ts)
+    if (isNaN(d.getTime())) return ts
+    const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0,0,0,0))
+    return utc.toISOString().slice(0,10) + ' UTC'
+  }, [ts])
   const previewTextColor = 'rgba(26, 31, 42, 0.92)'
   const previewSubtle = 'rgba(26, 31, 42, 0.70)'
 
@@ -216,27 +207,20 @@ const tsText = useMemo(() => {
 
           {/* Overlay */}
           <div aria-hidden style={{ position:'absolute', inset:0, color:previewTextColor }}>
-            {/* Contenu dans la safe-area */}
+            {/* Safe-area */}
             <div style={{
               position:'absolute',
               top:`${ins.top}%`, right:`${ins.right}%`, bottom:`${ins.bottom}%`, left:`${ins.left}%`,
               display:'grid', gridTemplateRows:'auto 1fr', textAlign:'center'
             }}>
-              {/* En-tête */}
+              {/* Header */}
               <div>
                 <div style={{fontWeight:900, fontSize:16}}>Parcels of Time</div>
                 <div style={{opacity:.9, fontSize:12}}>Certificate of Claim</div>
               </div>
 
-
-              {/* ⬆️ Contenu aligné en haut (plus de place sous "Message") */}
-              <div style={{
-                display:'grid',
-                alignItems:'start',     // ⬅️ était placeItems:'center'
-                justifyItems:'center',  // ⬅️ centrage horizontal conservé
-                rowGap:8,               // spacing doux
-                paddingTop:8            // petite respiration
-              }}>
+              {/* Body */}
+              <div style={{display:'grid', alignItems:'start', justifyItems:'center', rowGap:8, paddingTop:8}}>
                 <div style={{fontWeight:800, fontSize:24, letterSpacing:.2}}>{tsText}</div>
 
                 <div style={{opacity:.7, fontSize:12, marginTop:8}}>Owned by</div>
@@ -304,7 +288,7 @@ const tsText = useMemo(() => {
   )
 }
 
-/* -------------------- Usages Carousel (identique) -------------------- */
+/* -------------------- Usages Carousel -------------------- */
 function UsagesCarousel() {
   const items = [
     { title:'Amour & famille', text:'Rencontre, fiançailles, mariage, naissance, premier mot.', icon:'💛' },
@@ -334,7 +318,7 @@ function UsagesCarousel() {
   )
 }
 
-/* -------------------- Feature card (identique) -------------------- */
+/* -------------------- Feature card -------------------- */
 function FeatureCard({title, text}:{title:string; text:string}) {
   return (
     <div style={{
@@ -347,8 +331,7 @@ function FeatureCard({title, text}:{title:string; text:string}) {
   )
 }
 
-
-/* -------------------- Témoignages (identique) -------------------- */
+/* -------------------- Témoignages -------------------- */
 function Testimonials() {
   const items = [
     { q:'“Nous avons revendiqué la journée de la naissance d’Aïcha… frissons à chaque fois !”', a:'Camille' },
@@ -539,7 +522,6 @@ For billing mistakes (duplicates, wrong amount), contact us — we will fix/refu
   )
 }
 
-
 /* -------------------- Hero (photos) -------------------- */
 function HeroPhotos({href}:{href:(p:string)=>string}) {
   const { t } = useT()
@@ -561,10 +543,13 @@ function HeroPhotos({href}:{href:(p:string)=>string}) {
           <p style={{fontSize:18, lineHeight:'28px', maxWidth:560, color:'var(--color-text)'}}>
             {t('hero.subtitle')}
           </p>
+
+          {/* CTA (Hero) — uniquement ici */}
           <div style={{display:'flex', gap:12, flexWrap:'wrap', marginTop:16}}>
             <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>{t('cta.claim')}</Button>
-            <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>{t('cta.gift')}</Button>
+            <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>🎁 {t('cta.gift')}</Button>
           </div>
+
           <div style={{marginTop:14, fontSize:14, color:'var(--color-muted)'}}>
             {t('hero.rarity')}
           </div>
@@ -586,42 +571,57 @@ function HeroPhotos({href}:{href:(p:string)=>string}) {
   )
 }
 
-
-/* -------------------- Gift spotlight (NOUVEAU) -------------------- */
+/* -------------------- Gift spotlight (revu, sans CTA) -------------------- */
 function GiftSpotlight() {
-  const href = useLocaleHref()
   return (
-    <section aria-labelledby="gift" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
+    <section aria-labelledby="gift" style={{maxWidth:1280, margin:'0 auto', padding:'28px 24px'}}>
       <SectionLabel id="gift">Le cadeau original & personnalisable</SectionLabel>
-      <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
-        <div style={{gridColumn:'span 7', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:18}}>
-          <h3 style={{margin:'0 0 8px', fontFamily:'Fraunces, serif'}}>Offrez une journée qui ne se reproduira jamais</h3>
+
+      <div style={{
+        display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16, alignItems:'stretch'
+      }}>
+        {/* Carte descriptive allégée, lisible, sans boutons */}
+        <div style={{
+          gridColumn:'span 7',
+          background:'var(--color-surface)',
+          border:'1px solid var(--color-border)',
+          borderRadius:16,
+          padding:18
+        }}>
+          <h3 style={{margin:'0 0 8px', fontFamily:'Fraunces, serif', lineHeight:'28px'}}>Offrez une journée qui ne se reproduira jamais</h3>
           <ul style={{margin:0, paddingLeft:18, lineHeight:'28px'}}>
-            <li>Certificat HD avec votre **photo** et **message** (modérés)</li>
-            <li>QR vers une **page publique** (ou privée) pour partager l’histoire</li>
-            <li>Livraison **instantanée** par e-mail — parfait pour un cadeau de dernière minute</li>
-            <li>Véritable **rareté** : une seule vente par journée</li>
+            <li>Certificat HD avec votre photo et message (contenu modéré)</li>
+            <li>QR vers une page publique (ou privée) pour partager l’histoire</li>
+            <li>Livraison instantanée par e-mail — parfait en cadeau de dernière minute</li>
+            <li>Véritable rareté : une seule vente par journée</li>
           </ul>
-          <div style={{marginTop:12, display:'flex', gap:10, flexWrap:'wrap'}}>
-            <Button href={href('/claim?gift=1')} variant="accent">🎁 Offrir un jour</Button>
-            <Button href={href('/claim')} variant="secondary">Réserver pour moi</Button>
-          </div>
+          <p style={{margin:'10px 0 0', fontSize:12, color:'var(--color-muted)'}}>
+            Astuce : choisissez un palindrome, un 11:11 ou un moment symbolique pour rendre le cadeau encore plus marquant.
+          </p>
         </div>
-        <div style={{gridColumn:'span 5', display:'grid', gap:10}}>
-          <div style={{border:'1px solid var(--color-border)', borderRadius:16, padding:14, background:'var(--color-surface)'}}>
-            <strong>Occasions</strong>
-            <p style={{margin:'6px 0 0', opacity:.9}}>Anniversaire, rencontre, diplôme, naissance, “le jour où…”</p>
-          </div>
-          <div style={{border:'1px solid var(--color-border)', borderRadius:16, padding:14, background:'var(--color-surface)'}}>
-            <strong>Format</strong>
-            <p style={{margin:'6px 0 0', opacity:.9}}>PDF/JPG haute définition, prêt à imprimer (A4/A3, 300 DPI)</p>
-          </div>
+
+        {/* Mini-vignettes style “grid” pour donner un aperçu visuel sans interaction */}
+        <div style={{gridColumn:'span 5', display:'grid', gap:10, gridTemplateColumns:'1fr 1fr'}}>
+          {['wedding','birth','romantic','newyear'].map((style)=>(
+            <div key={style} style={{
+              border:'1px solid var(--color-border)',
+              borderRadius:12,
+              overflow:'hidden',
+              background:'var(--color-surface)'
+            }}>
+              <img src={`/cert_bg/${style}.png`} alt={`Aperçu ${style}`} width={360} height={240}
+                   style={{width:'100%', height:'auto', display:'block'}} loading="lazy" />
+              <div style={{padding:10, display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                <span style={{textTransform:'capitalize'}}>{style}</span>
+                <span aria-hidden>🎁</span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>
   )
 }
-
 
 /* -------------------- Page -------------------- */
 export default function Landing() {
@@ -630,26 +630,49 @@ export default function Landing() {
 
   useEffect(()=>{ applyTheme(theme === 'dark' ? TOKENS_DARK : TOKENS_LIGHT) },[theme])
 
-  const whyText = useMemo(
-    () =>
-      "Nous accumulons des photos et des vidéos… et l’instant se perd. Parcels of Time vous permet de posséder une journée unique — avec un certificat HD, une page publique, et la possibilité de la revendre plus tard via Stripe Connect.",
+  // “Pourquoi maintenant ?” — texte plus resserré + 3 points clés en cartes
+  const whyLead = useMemo(
+    () => 'Nous capturons tout… mais les moments se perdent. Parcels of Time transforme une date en objet unique, vérifiable et partageable.',
     []
   )
-  
+  const whyBullets = [
+    { icon:'🔒', title:'Authentique', text:'Certificat HD avec empreinte d’intégrité (SHA-256) et QR scannable.' },
+    { icon:'✨', title:'Unique', text:'Chaque journée est vendue une seule fois : vraie rareté, vraie histoire.' },
+    { icon:'🔁', title:'Évolutif', text:'Page publique, mise à jour du message/photo, et revente possible via Stripe.' },
+  ]
 
   return (
     <main style={{background:'var(--color-bg)', color:'var(--color-text)'}}>
       <CookieBanner />
       <Header onToggleTheme={()=>setTheme(t=>t==='dark'?'light':'dark')} href={href} />
-        
+
       <HeroPhotos href={href} />
-      <GiftSpotlight /> 
+      <GiftSpotlight />
 
-
+      {/* POURQUOI MAINTENANT — ergonomie revue */}
       <section id="pourquoi" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
         <SectionLabel>Pourquoi maintenant&nbsp;?</SectionLabel>
         <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16, alignItems:'start'}}>
-          <p style={{gridColumn:'span 7', margin:0, fontSize:18, lineHeight:'28px'}}>{whyText}</p>
+          <div style={{gridColumn:'span 7'}}>
+            <p style={{margin:0, fontSize:18, lineHeight:'28px'}}>{whyLead}</p>
+            <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:12, marginTop:12}}>
+              {whyBullets.map((b, i)=>(
+                <div key={i} style={{
+                  gridColumn:'span 4',
+                  background:'var(--color-surface)',
+                  border:'1px solid var(--color-border)',
+                  borderRadius:12,
+                  padding:14
+                }}>
+                  <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+                    <span aria-hidden style={{fontSize:18}}>{b.icon}</span>
+                    <strong>{b.title}</strong>
+                  </div>
+                  <div style={{opacity:.9}}>{b.text}</div>
+                </div>
+              ))}
+            </div>
+          </div>
           <div style={{gridColumn:'span 5'}}>
             <UsagesCarousel />
           </div>
@@ -713,12 +736,12 @@ export default function Landing() {
               <li>Styles premium : Romantic, Birth, Wedding, Christmas, New Year, Graduation…</li>
             </ul>
             <div style={{marginTop:12, fontSize:14, color:'var(--color-muted)'}}>
-            Paiements & revente sécurisés par Stripe • Commission de place de marché : 10% (min 1 €) lors de la revente.
+              Paiements & revente sécurisés par Stripe • Commission de place de marché : 10% (min 1 €) lors de la revente.
+            </div>
           </div>
-          </div>
-          <div style={{display:'flex', gap:10, alignItems:'center'}}>
-            <Button href={href('/claim')} variant="primary">Réserver un jour</Button>
-            <Button href={href('/claim?gift=1')} variant="secondary">Offrir un jour</Button>
+          {/* Aucune CTA ici pour respecter la consigne */}
+          <div aria-hidden style={{display:'flex', alignItems:'center', justifyContent:'center', opacity:.7}}>
+            —
           </div>
         </div>
       </section>
@@ -765,6 +788,7 @@ export default function Landing() {
       <Testimonials />
       <FAQ />
 
+      {/* CTA FINAL — uniquement ici */}
       <section aria-labelledby="cta-final" style={{
         borderTop:'1px solid var(--color-border)', background:'linear-gradient(0deg, color-mix(in srgb, var(--color-surface) 85%, transparent), transparent)',
         marginTop:16
@@ -776,34 +800,46 @@ export default function Landing() {
           <p style={{margin:'0 0 16px'}}>Réservez le jour qui compte — aujourd’hui.</p>
           <div style={{display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap'}}>
             <Button href={href('/claim')} variant="primary">Réserver mon jour</Button>
-            <Button href={href('/claim?gift=1')} variant="secondary">Offrir un jour</Button>
+            <Button href={href('/claim?gift=1')} variant="secondary">🎁 Offrir un jour</Button>
           </div>
           <div style={{marginTop:12, fontSize:12, color:'var(--color-muted)'}}>
-          Paiement sécurisé Stripe • Certificat HD • Revente C2C possible • Une seule vente par journée
-        </div>
+            Paiement sécurisé Stripe • Certificat HD • Revente C2C possible • Une seule vente par journée
+          </div>
         </div>
       </section>
 
-      <footer style={{borderTop:'1px solid var(--color-border)', color:'var(--color-muted)'}}>
-        <div style={{maxWidth:1280, margin:'0 auto', padding:'20px 24px', display:'flex', flexWrap:'wrap', gap:12, justifyContent:'space-between'}}>
-          <span>© {new Date().getFullYear()} Parcels of Time</span>
-          <div style={{display:'flex', gap:12}}>
-            <Link href={href('/legal/terms')}  style={{textDecoration:'none', color:'inherit'}}>Conditions</Link>
-            <Link href={href('/legal/refund')} style={{textDecoration:'none', color:'inherit'}}>Remboursement</Link>
-            <Link href={href('/legal/privacy')}style={{textDecoration:'none', color:'inherit'}}>Confidentialité</Link>
-            <Link href={href('/company')}      style={{textDecoration:'none', color:'inherit'}}>À propos</Link>
-            <Link href={href('/support')}      style={{textDecoration:'none', color:'inherit'}}>Support</Link>
-            <a href="mailto:hello@parcelsoftime.com" style={{textDecoration:'none', color:'inherit'}}>B2B</a>
+      {/* FOOTER unique (consolidé) */}
+      <footer style={{borderTop:'1px solid var(--color-border)'}}>
+        <div style={{
+          maxWidth:1280, margin:'0 auto', padding:'20px 24px',
+          display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16
+        }}>
+          <div>
+            <div style={{fontWeight:700}}>Parcels of Time</div>
+            <div style={{marginTop:6, color:'var(--color-muted)'}}>© {new Date().getFullYear()} Parcels of Time</div>
           </div>
-        </div>
-      </footer>
-      <footer style={{borderTop:'1px solid var(--color-border)', marginTop:24}}>
-        <div style={{maxWidth:1280, margin:'0 auto', padding:'16px 24px', display:'flex', gap:12, flexWrap:'wrap', fontSize:12, opacity:.85}}>
-          <a href={href('/legal/legal-notice')} style={{color:'var(--color-text)'}}>Mentions légales</a>
-          <a href={href('/legal/terms')} style={{color:'var(--color-text)'}}>CGU/CGV</a>
-          <a href={href('/legal/seller')} style={{color:'var(--color-text)'}}>Conditions Vendeur</a>
-          <a href={href('/legal/privacy')} style={{color:'var(--color-text)'}}>Confidentialité</a>
-          <a href={href('/legal/cookies')} style={{color:'var(--color-text)'}}>Cookies</a>
+
+          <div>
+            <div style={{fontWeight:700, marginBottom:6}}>Légal</div>
+            <div style={{display:'grid', gap:6}}>
+              <Link href={href('/legal/legal-notice')} style={{textDecoration:'none', color:'var(--color-text)'}}>Mentions légales</Link>
+              <Link href={href('/legal/terms')} style={{textDecoration:'none', color:'var(--color-text)'}}>CGU/CGV</Link>
+              <Link href={href('/legal/seller')} style={{textDecoration:'none', color:'var(--color-text)'}}>Conditions Vendeur</Link>
+              <Link href={href('/legal/refund')} style={{textDecoration:'none', color:'var(--color-text)'}}>Remboursement</Link>
+              <Link href={href('/legal/privacy')} style={{textDecoration:'none', color:'var(--color-text)'}}>Confidentialité</Link>
+              <Link href={href('/legal/cookies')} style={{textDecoration:'none', color:'var(--color-text)'}}>Cookies</Link>
+            </div>
+          </div>
+
+          <div>
+            <div style={{fontWeight:700, marginBottom:6}}>Entreprise</div>
+            <div style={{display:'grid', gap:6}}>
+              <Link href={href('/company')} style={{textDecoration:'none', color:'var(--color-text)'}}>À propos</Link>
+              <Link href={href('/support')} style={{textDecoration:'none', color:'var(--color-text)'}}>Support</Link>
+              <a href="mailto:hello@parcelsoftime.com" style={{textDecoration:'none', color:'var(--color-text)'}}>B2B</a>
+              <Link href={href('/explore')} style={{textDecoration:'none', color:'var(--color-text)'}}>Registre public</Link>
+            </div>
+          </div>
         </div>
       </footer>
     </main>
