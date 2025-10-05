@@ -2,7 +2,6 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-// Exécuter en Europe (réduit la latence vers Supabase EU)
 export const preferredRegion = ['cdg1', 'fra1']
 
 import { redirect } from 'next/navigation'
@@ -22,11 +21,6 @@ const TOKENS = {
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
-/** 
- * Petit helper requêtes PG avec un micro-retry pour absorber les timeouts fugaces
- * (utile quand le pool côté serverless est frileux).
- */
-
 type OwnerProfile = { email: string; display_name: string | null; username: string | null }
 async function readOwnerProfile(ownerId: string): Promise<OwnerProfile | null> {
   const { rows } = await q<OwnerProfile>(
@@ -41,7 +35,6 @@ async function q<T = any>(text: string, params?: any[]) {
     // @ts-ignore
     return await pool.query<T>(text, params)
   } catch (e1: any) {
-    // bref délai et 2e tentative
     await new Promise(r => setTimeout(r, 50))
     // @ts-ignore
     return await pool.query<T>(text, params)
@@ -79,7 +72,6 @@ function asStringArray(v: unknown): string[] {
   if (typeof v === 'string') {
     try { const parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed.map(String) : [] } catch { return [] }
   }
-  // si jsonb = {} par erreur → on neutralise
   if (typeof v === 'object') return []
   return []
 }
@@ -110,7 +102,23 @@ async function readMerchant(ownerId: string): Promise<MerchantRow | null> {
   }
 }
 
-// 🔁 Lazy-import Stripe & update requirements_due en JSONB correct
+// 🔁 lecture ponctuelle du type (individual/company) depuis Stripe
+async function readMerchantKind(ownerId: string): Promise<'individual'|'company'|null> {
+  try {
+    const { default: Stripe } = await import('stripe')
+    const key = process.env.STRIPE_SECRET_KEY
+    if (!key) return null
+    const { rows } = await q(`select stripe_account_id from merchant_accounts where owner_id=$1`, [ownerId])
+    const acctId = rows[0]?.stripe_account_id
+    if (!acctId) return null
+    const stripe = new Stripe(key as string)
+    const acct = await stripe.accounts.retrieve(acctId)
+    const metaKind = (acct.metadata as any)?.seller_kind
+    const kind = (metaKind === 'company' || acct.business_type === 'company') ? 'company' : 'individual'
+    return kind
+  } catch { return null }
+}
+
 async function syncMerchantNow(ownerId: string): Promise<MerchantRow | null> {
   try {
     const { default: Stripe } = await import('stripe')
@@ -180,7 +188,6 @@ export default async function Page({
   params,
   searchParams,
 }: {
-  // Signature Promise conforme à ton projet
   params: Promise<Params>,
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
@@ -188,7 +195,6 @@ export default async function Page({
   const locale: 'fr' | 'en' = rawLocale === 'fr' ? 'fr' : 'en'
   const sp = await searchParams
 
-  // Lecture session (ne doit jamais planter le SSR)
   let sess: Awaited<ReturnType<typeof readSession>> | null = null
   try {
     sess = await readSession()
@@ -199,21 +205,20 @@ export default async function Page({
     redirect(`/${locale}/login?next=${encodeURIComponent(`/${locale}/account`)}`)
   }
 
-  // Chargements parallèles + détection d'erreurs
   const [claimsRes, listingsRes, merchantRes, ownerRes] = await Promise.allSettled([
     listClaims(sess.ownerId),
     readMyActiveListings(sess.ownerId),
     readMerchant(sess.ownerId),
-    readOwnerProfile(sess.ownerId), // 👈 nouveau
+    readOwnerProfile(sess.ownerId),
   ])
   const claims     = claimsRes.status === 'fulfilled'   ? claimsRes.value   : []
   const listings   = listingsRes.status === 'fulfilled' ? listingsRes.value : []
   let merchant     = merchantRes.status === 'fulfilled' ? merchantRes.value : null
-  const owner      = ownerRes.status === 'fulfilled'    ? ownerRes.value    : null  // 👈 nouveau
+  const owner      = ownerRes.status === 'fulfilled'    ? ownerRes.value    : null
   const claimsErr  = claimsRes.status === 'rejected'
   const listsErr   = listingsRes.status === 'rejected'
   let merchErr     = merchantRes.status === 'rejected'
-  // Resync Stripe au retour d’onboarding
+
   const connectParam = firstString(sp?.connect)
   const needsSync = connectParam === 'done'
   if (needsSync) {
@@ -231,8 +236,7 @@ export default async function Page({
 
   const year = new Date().getUTCFullYear()
   const activeYmd = new Set(listings.map(l => ymdSafe(l.ts)))
-  
-  // État marchand (UX)
+
   const hasMerchant = !!merchant?.stripe_account_id
   const due = Array.isArray(merchant?.requirements_due) ? merchant.requirements_due! : []
   const chargesOk = !!merchant?.charges_enabled
@@ -240,7 +244,19 @@ export default async function Page({
   const isReady = hasMerchant && chargesOk && payoutsOk && due.length === 0
   const labelCharges = locale === 'fr' ? 'Encaissements' : 'Charges'
   const labelPayouts = locale === 'fr' ? 'Virements' : 'Payouts'
-  
+
+  // Type marchand depuis Stripe (individual/company)
+  let merchantKind: 'individual'|'company'|null = null
+  if (hasMerchant) {
+    try { merchantKind = await readMerchantKind(sess.ownerId) } catch {}
+  }
+  const merchantKindLabel =
+    merchantKind
+      ? (locale === 'fr'
+          ? (merchantKind === 'company' ? 'professionnel' : 'particulier')
+          : (merchantKind === 'company' ? 'business' : 'individual'))
+      : null
+
   function StatusPill({ ok, label }: { ok: boolean, label: string }) {
     return (
       <span style={{
@@ -255,7 +271,6 @@ export default async function Page({
     )
   }
 
- 
   const displayName = owner?.display_name ?? owner?.username ?? sess.displayName ?? null
   const email = owner?.email ?? sess.email
 
@@ -286,14 +301,13 @@ export default async function Page({
         </header>
 
         {/* Identity */}
-       <h1 style={{fontFamily:'Fraunces, serif', fontSize:36, margin:'0 0 6px'}}>
+        <h1 style={{fontFamily:'Fraunces, serif', fontSize:36, margin:'0 0 6px'}}>
           {locale === 'fr' ? 'Mon compte' : 'My account'}
         </h1>
         <p style={{opacity:.8, marginTop:0}}>
           {displayName ? `${displayName} — ` : ''}{email}
         </p>
 
-        {/* Alerte si la DB a été indisponible (au lieu de "données vides") */}
         {(claimsErr || listsErr || merchErr) && (
           <div style={{
             marginTop: 10,
@@ -309,14 +323,15 @@ export default async function Page({
           </div>
         )}
 
-        {/* Grid: merchant + listings */}
+        {/* Grid */}
         <div style={{display:'grid', gridTemplateColumns:'1fr', gap:18, marginTop:18}}>
-          
-          {/* Merchant card (refonte) */}
+
+          {/* Merchant card */}
           <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:16, display:'grid', gap:14}}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10}}>
               <h2 style={{fontSize:18, margin:0}}>
                 {locale==='fr' ? 'Compte marchand' : 'Merchant account'}
+                {hasMerchant && merchantKindLabel ? <> — {merchantKindLabel}</> : null}
               </h2>
               {hasMerchant ? (
                 <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
@@ -329,19 +344,31 @@ export default async function Page({
               ) : null}
             </div>
 
-            <div style={{background:'rgba(255,235,186,.08)', border:'1px solid rgba(245,227,161,.26)', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.35}}>
-              {locale==='fr'
-                ? <>Vous vendez en tant que <strong>particulier</strong> ? C’est autorisé pour des ventes occasionnelles. Si vous vendez régulièrement ou pour en tirer un revenu, vous devez vous <strong>déclarer (micro-entrepreneur, BIC)</strong>.</>
-                : <>Selling as an <strong>individual</strong>? Occasional sales are fine. If sales are regular or for profit, you must <strong>register as a business</strong>.</>}
-            </div>
+            {/* Intro quand aucun compte n'existe */}
+            {!hasMerchant && (
+              <div style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)', lineHeight:1.5}}>
+                {locale==='fr'
+                  ? <>Le mode marchand vous permet d’<strong>encaisser des paiements</strong> via Stripe, puis de <strong>recevoir vos virements</strong> sur votre IBAN. Il est requis pour <strong>revendre vos certificats</strong> sur la place de marché. Les frais de plateforme standard s’appliquent.</>
+                  : <>Merchant mode lets you <strong>accept payments</strong> via Stripe and <strong>receive payouts</strong> to your bank account. It’s required to <strong>resell your certificates</strong> on the marketplace. Standard platform fees apply.</>}
+              </div>
+            )}
 
-            {/* Bloc "infos Stripe" — visible uniquement si le compte marchand existe */}
+            {/* Message réglementation Particulier — visible uniquement si compte en mode Particulier */}
+            {hasMerchant && merchantKind === 'individual' && (
+              <div style={{background:'rgba(255,235,186,.08)', border:'1px solid rgba(245,227,161,.26)', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.35}}>
+                {locale==='fr'
+                  ? <>Vous vendez en tant que <strong>particulier</strong> ? C’est autorisé pour des ventes occasionnelles. Si vous vendez régulièrement ou pour en tirer un revenu, vous devez vous <strong>déclarer (micro-entrepreneur, BIC)</strong>.</>
+                  : <>Selling as an <strong>individual</strong>? Occasional sales are fine. If sales are regular or for profit, you must <strong>register as a business</strong>.</>}
+              </div>
+            )}
+
+            {/* Bloc infos Stripe — visible si compte existe */}
             {hasMerchant && (
               <div style={{display:'grid', gap:6, border:'1px solid var(--color-border)', borderRadius:10, padding:12, background:'rgba(255,255,255,.02)'}}>
                 <div style={{display:'grid', gap:4, fontSize:14}}>
                   <div>Stripe: <code>{merchant!.stripe_account_id}</code></div>
                   <div style={{opacity:.85}}>
-                  {labelCharges}: <strong>{chargesOk ? '✅' : '❌'}</strong> — {labelPayouts}: <strong>{payoutsOk ? '✅' : '❌'}</strong>
+                    {labelCharges}: <strong>{chargesOk ? '✅' : '❌'}</strong> — {labelPayouts}: <strong>{payoutsOk ? '✅' : '❌'}</strong>
                   </div>
                   {due.length > 0 && (
                     <div style={{fontSize:13, color:'#ffb2b2'}}>
@@ -350,57 +377,77 @@ export default async function Page({
                   )}
                 </div>
                 <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:6}}>
-                  <form method="post" action="/api/connect/sync">
-                    <button style={{padding:'8px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>
-                      {locale==='fr' ? 'Rafraîchir statut' : 'Refresh status'}
+                  {!isReady && (
+                    <form method="post" action="/api/connect/sync">
+                      <button style={{padding:'8px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>
+                        {locale==='fr' ? 'Rafraîchir statut' : 'Refresh status'}
+                      </button>
+                    </form>
+                  )}
+                  {isReady && (
+                    <a
+                      href={`/api/connect/dashboard`}
+                      style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}
+                    >
+                      {locale==='fr' ? 'Ouvrir le tableau de bord Stripe' : 'Open Stripe Dashboard'}
+                    </a>
+                  )}
+                </div>
+
+                {/* Lien discret : passer Particulier → Pro (conserve l'historique) */}
+                {isReady && merchantKind === 'individual' && (
+                  <form method="post" action="/api/connect/onboard" style={{marginTop:6}}>
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="seller_kind" value="company" />
+                    <button
+                      type="submit"
+                      style={{background:'transparent', border:'none', color:'var(--color-text)', opacity:.8, textDecoration:'underline', cursor:'pointer', fontSize:12}}
+                    >
+                      {locale==='fr' ? 'Passer en compte professionnel (conserve vos ventes)' : 'Switch to business (keep your sales history)'}
                     </button>
                   </form>
-                  {/* Récap uniquement si mode marchand actif */}
-                  <a
-                    href={`/api/reports/sales?year=${year}&format=csv`}
-                    style={{textDecoration:'none', padding:'8px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}
-                  >
-                    {locale==='fr' ? `Récapitulatif ${year} (CSV)` : `${year} recap (CSV)`}
-                  </a>
-                  <a
-                    href={`/api/reports/sales?year=${year}&format=json`}
-                    style={{textDecoration:'none', padding:'8px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)', opacity:.85}}
-                  >
-                    JSON
-                  </a>
-                </div>
+                )}
               </div>
             )}
 
-            {/* Formulaire d’onboarding / mise à jour */}
-            <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}}>
-              {/* On passe la locale au backend */}
-              <input type="hidden" name="locale" value={locale} />
+            {/* Formulaire d’onboarding — uniquement si aucun compte n’existe */}
+            {!hasMerchant && (
+              <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}} data-merchant-form>
+                <input type="hidden" name="locale" value={locale} />
 
-              {/* Sélecteur Particulier / Professionnel (toujours visible pour permettre le switch) */}
-              <fieldset style={{border:'1px solid var(--color-border)', borderRadius:10, padding:12}}>
-                <legend style={{padding:'0 6px'}}>
-                  {locale==='fr' ? 'Je vends en tant que :' : 'I sell as:'}
-                </legend>
-                <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
-                  <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                    <input type="radio" name="seller_kind" value="individual" defaultChecked />
-                    {locale==='fr' ? 'Particulier' : 'Individual'}
-                  </label>
-                  <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                    <input type="radio" name="seller_kind" value="company" />
-                    {locale==='fr' ? 'Professionnel' : 'Business'}
-                  </label>
-                </div>
-                <div style={{fontSize:12, opacity:.75, marginTop:8}}>
-                  {locale==='fr'
-                    ? 'Vous pouvez basculer en “Professionnel” : nous mettrons à jour votre compte Stripe pour collecter les infos d’entreprise.'
-                    : 'You can switch to “Business”: we’ll update your Stripe account to collect company details.'}
-                </div>
-              </fieldset>
+                {/* Choix Particulier / Pro (aucun coché par défaut) */}
+                <fieldset style={{border:'1px solid var(--color-border)', borderRadius:10, padding:12}}>
+                  <legend style={{padding:'0 6px'}}>
+                    {locale==='fr' ? 'Je vends en tant que :' : 'I sell as:'}
+                  </legend>
 
-              {/* Consentements : visibles uniquement quand aucun compte marchand n’existe encore */}
-              {!hasMerchant && (
+                  <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'center'}}>
+                    <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                      <input type="radio" name="seller_kind" value="individual" required />
+                      {locale==='fr' ? 'Particulier' : 'Individual'}
+                    </label>
+                    <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                      <input type="radio" name="seller_kind" value="company" />
+                      {locale==='fr' ? 'Professionnel' : 'Business'}
+                    </label>
+                  </div>
+
+                  {/* Hints dynamiques sous le choix */}
+                  <div style={{marginTop:8, fontSize:12, lineHeight:1.45}}>
+                    <div id="hint-individual" style={{display:'none', opacity:.9}}>
+                      {locale==='fr'
+                        ? <>Idéal pour des <strong>ventes occasionnelles</strong>. Stripe vous demandera une <strong>vérification d’identité</strong> et un <strong>IBAN</strong> pour les virements. Si l’activité devient régulière ou lucrative, pensez à vous <strong>déclarer (micro-entrepreneur, BIC)</strong>.</>
+                        : <>Best for <strong>occasional sales</strong>. Stripe will ask for <strong>identity verification</strong> and a <strong>bank account (IBAN)</strong> for payouts. For regular/profit activity, you must <strong>register as a business</strong>.</>}
+                    </div>
+                    <div id="hint-company" style={{display:'none', opacity:.9}}>
+                      {locale==='fr'
+                        ? <>Pour les <strong>professionnels</strong> : votre <strong>n° SIRET</strong> et les <strong>informations légales</strong> de l’entreprise (adresse, représentant, IBAN) vous seront demandés par Stripe.</>
+                        : <>For <strong>businesses</strong>: Stripe will request your company’s <strong>registration number</strong> and <strong>legal details</strong> (address, representative, bank account).</>}
+                    </div>
+                  </div>
+                </fieldset>
+
+                {/* Consentements */}
                 <div style={{display:'grid', gap:8, fontSize:12, marginTop:4}}>
                   <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                     <input type="checkbox" name="accept_seller_terms" required />
@@ -418,44 +465,52 @@ export default async function Page({
                     Vos données sont transmises à Stripe pour la vérification KYC/KYB — voir <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Confidentialité</a>.
                   </small>
                 </div>
-              )}
-              
-              {/* CTA principal — état dépendant */}
-              <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-                {!hasMerchant && (
+
+                {/* CTA création */}
+                <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
                   <button
+                    data-merchant-submit
                     style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800}}
                   >
-                    {locale==='fr' ? 'Devenir vendeur' : 'Become a seller'}
+                    {locale==='fr' ? 'Créer mon compte marchand' : 'Create my merchant account'}
                   </button>
-                )}
+                </div>
 
-                {hasMerchant && !isReady && (
-                  <>
-                    <button
-                      style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800}}
-                    >
-                      {locale==='fr' ? 'Compléter sur Stripe' : 'Continue on Stripe'}
-                    </button>
-                    <a
-                      href={`/api/connect/onboard`}
-                      style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}
-                    >
-                      {locale==='fr' ? 'Relancer l’onboarding' : 'Resume onboarding'}
-                    </a>
-                  </>
-                )}
-
-                {hasMerchant && isReady && (
-                  <a
-                    href={`/api/connect/dashboard`}
-                    style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)', background:'rgba(255,255,255,.04)'}}
-                  >
-                    {locale==='fr' ? 'Ouvrir le tableau de bord Stripe' : 'Open Stripe Dashboard'}
-                  </a>
-                )}
-              </div>
-            </form>
+                {/* Petit JS progressif : active le CTA + bascule les hints */}
+                <script
+                  dangerouslySetInnerHTML={{
+                    __html: `
+(function(){
+  try {
+    var form = document.querySelector('[data-merchant-form]');
+    if(!form) return;
+    var radios = form.querySelectorAll('input[name="seller_kind"]');
+    var hintInd = form.querySelector('#hint-individual');
+    var hintPro = form.querySelector('#hint-company');
+    var submit = form.querySelector('[data-merchant-submit]');
+    var checks = form.querySelectorAll('input[type="checkbox"][required]');
+    function update(){
+      var val = '';
+      radios.forEach(function(r){ if(r.checked) val = r.value; });
+      if(hintInd) hintInd.style.display = (val==='individual') ? 'block' : 'none';
+      if(hintPro) hintPro.style.display = (val==='company') ? 'block' : 'none';
+      var okRadio = !!val;
+      var okChecks = true; checks.forEach(function(c){ if(!c.checked) okChecks=false; });
+      if(submit){
+        submit.disabled = !(okRadio && okChecks);
+        submit.style.opacity = submit.disabled ? '.6' : '1';
+        submit.style.cursor = submit.disabled ? 'not-allowed' : 'pointer';
+      }
+    }
+    radios.forEach(function(r){ r.addEventListener('change', update); });
+    checks.forEach(function(c){ c.addEventListener('change', update); });
+    update();
+  } catch(_) {}
+})();
+`}}
+                />
+              </form>
+            )}
 
             {/* Transparence plateforme */}
             <div style={{background:'rgba(255,255,255,.03)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px', fontSize:12, lineHeight:1.35}}>
@@ -505,7 +560,7 @@ export default async function Page({
           </section>
         </div>
 
-        {/* Certificates gallery — date first */}
+        {/* Certificates gallery */}
         <section style={{marginTop:18}}>
           <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
             <h2 style={{fontSize:18, margin:'0 0 10px'}}>{locale === 'fr' ? 'Mes certificats' : 'My certificates'}</h2>
@@ -534,7 +589,6 @@ export default async function Page({
                         boxShadow:'var(--shadow-elev1)'
                       }}
                     >
-                      {/* Vignette simple : date très lisible */}
                       <div style={{position:'relative', display:'grid', placeItems:'center', background:'linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02))', borderBottom:'1px solid var(--color-border)'}}>
                         {isOnSale && (
                           <span style={{
@@ -555,7 +609,6 @@ export default async function Page({
                         </div>
                       </div>
 
-                      {/* Infos */}
                       <div style={{padding:12}}>
                         {c.title && <div style={{fontWeight:800}}>{c.title}</div>}
                         <div style={{opacity:.75, marginTop: c.title ? 6 : 0, whiteSpace:'pre-wrap', maxHeight:48, overflow:'hidden', textOverflow:'ellipsis'}}>
