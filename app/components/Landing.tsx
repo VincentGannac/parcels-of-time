@@ -87,7 +87,12 @@ function Button({
     gap: 10,
     border: '1px solid var(--color-border)',
     transition: 'transform .12s ease, box-shadow .12s ease, background .12s ease',
+    /** ↓ Harmonisation des tailles */
+    fontSize: 14,
+    lineHeight: '20px',
+    minHeight: 46,
   }
+
   const styles: Record<'primary' | 'secondary' | 'ghost', React.CSSProperties> = {
     primary: { ...base, background: 'var(--color-primary)', color: 'var(--color-on-primary)', borderColor: 'transparent' },
     secondary: { ...base, background: 'var(--color-surface)', color: 'var(--color-text)' },
@@ -109,6 +114,7 @@ function Button({
 }
 
 /* ======= NavPill : pour Registre public & Mon Compte (visibilité accrue) ======= */
+/* ======= NavPill : pour Registre public & Mon Compte (visibilité accrue) ======= */
 function NavPill({
   href,
   children,
@@ -123,14 +129,19 @@ function NavPill({
   const base: React.CSSProperties = {
     textDecoration: 'none',
     borderRadius: 12,
-    padding: '10px 14px',
+    /** ↓ Harmonisé avec Button */
+    padding: '14px 18px',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     fontWeight: 700,
+    fontSize: 14,
+    lineHeight: '20px',
+    minHeight: 46,
     border: '1px solid var(--color-border)',
     transition: 'box-shadow .12s ease, transform .12s ease, background .12s ease',
   }
+
   const style =
     emphasis === 'accent'
       ? { ...base, background: 'var(--color-surface)', boxShadow: '0 0 0 1px color-mix(in srgb, var(--color-primary) 60%, transparent) inset', color: 'var(--color-text)' }
@@ -274,16 +285,14 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
 
           {/* Desktop */}
           {!isSmall && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {/* Mise en avant visible */}
+            /** ↓ Alignement harmonisé (mêmes hauteurs) */
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 12 }}>
               <NavPill href={href('/explore')} emphasis="accent" ariaLabel="Registre public">
                 🖼️ <span>Registre public</span>
               </NavPill>
               <NavPill href={href('/account')} emphasis="outline" ariaLabel="Mon Compte">
                 👤 <span>Mon Compte</span>
               </NavPill>
-
-              <span aria-hidden style={{ width: 10 }} />
 
               {/* Actions */}
               <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>
@@ -296,7 +305,16 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
               <button
                 aria-label="Changer de thème"
                 onClick={onToggleTheme}
-                style={{ padding: 10, borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer' }}
+                /** ↓ Même hauteur visuelle que les autres éléments */
+                style={{
+                  height: 46,
+                  padding: '0 14px',
+                  borderRadius: 12,
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  cursor: 'pointer',
+                }}
               >
                 ☀︎/☾
               </button>
@@ -607,13 +625,14 @@ function RegistryShowcase() {
 /* =========================================================
    FEATURE BAND — POURQUOI / VALEUR
    ========================================================= */
-function FeatureBand() {
-  const bullets = [
-    { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR scannable.' },
-    { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois.' },
-    { icon: '🔁', title: 'Évolutif', text: 'Page publique/privée, mise à jour, revente via Stripe.' },
-    { icon: '🎁', title: 'Cadeau idéal', text: 'Instantané, personnalisable, prêt à imprimer.' },
-  ]
+   function FeatureBand() {
+    /** ↓ Nouveau wording + bullets mis à jour */
+    const bullets = [
+      { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR scannable.' },
+      { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois — revente possible via Stripe.' },
+      { icon: '🖼️', title: 'Artistique', text: 'Personnalisable, originale et artistique.' },
+      { icon: '🎁', title: 'Cadeau idéal', text: 'Instantané, personnalisable, prêt à imprimer.' },
+    ]
   return (
     <section>
       <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
@@ -621,7 +640,7 @@ function FeatureBand() {
           <SectionEyebrow>Pourquoi maintenant ?</SectionEyebrow>
           <H2>Possédez le jour qui compte</H2>
           <p style={{ margin: 0, color: 'var(--color-text)', opacity: 0.92 }}>
-            Nous capturons tout… mais les moments se perdent. Parcels of Time transforme une date en objet unique, vérifiable et partageable.
+          Les photos s’accumulent, les instants s’effacent. Avec Parcels of Time transforme une date en objet unique, authentifiée et partageable.
           </p>
         </div>
         <div style={{ gridColumn: 'span 8', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
@@ -982,35 +1001,36 @@ function Footer() {
 /* =========================================================
    JSON-LD (Product + CreativeWork)
    ========================================================= */
-function JsonLd() {
-  const data = {
-    '@context': 'https://schema.org',
-    '@graph': [
-      {
-        '@type': 'Product',
-        name: 'Parcels of Time — Certificate of Claim',
-        brand: { '@type': 'Brand', name: 'Parcels of Time' },
-        description:
-          'Symbolic ownership of a single day materialized by a high-definition digital certificate (PDF/JPG) with QR code and integrity hash.',
-        offers: {
-          '@type': 'Offer',
-          availability: 'https://schema.org/InStock',
-          url: 'https://parcelsoftime.com/claim',
-          priceCurrency: 'EUR',
-          price: '—',
+   function JsonLd() {
+    const data = {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'Product',
+          name: 'Parcels of Time — Certificate of Claim',
+          brand: { '@type': 'Brand', name: 'Parcels of Time' },
+          /** ↓ Description optimisée : cadeau original et personnalisable */
+          description:
+            'Transform a meaningful date into a unique, verifiable keepsake. High-definition digital certificate (PDF/JPG) with QR and integrity hash — an original, fully customizable gift.',
+          offers: {
+            '@type': 'Offer',
+            availability: 'https://schema.org/InStock',
+            url: 'https://parcelsoftime.com/claim',
+            priceCurrency: 'EUR',
+            /** ↓ Prix affiché */
+            price: '29.00',
+          },
         },
-      },
-      {
-        '@type': 'CreativeWork',
-        name: 'Day Certificate',
-        creator: { '@type': 'Organization', name: 'Parcels of Time' },
-        about: 'A participatory art piece turning dates into unique, verifiable keepsakes.',
-      },
-    ],
+        {
+          '@type': 'CreativeWork',
+          name: 'Day Certificate',
+          creator: { '@type': 'Organization', name: 'Parcels of Time' },
+          about: 'A participatory art piece turning dates into unique, verifiable, and shareable keepsakes — perfect as an original and customizable gift.',
+        },
+      ],
+    }
+    return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
   }
-  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
-}
-
 
 /* =========================================================
    PAGE
@@ -1030,14 +1050,14 @@ export default function Landing() {
       {/* 1. Hero */}
       <Hero href={href} />
 
-      {/* 2. Registre public (en avant) */}
-      <RegistryShowcase />
-
-      {/* 3. Bande valeur / Pourquoi */}
+      {/* 2. Bande valeur / Pourquoi */}
       <FeatureBand />
 
-      {/* 4. Démos / Ce que vous recevez */}
+      {/* 3. Démos / Ce que vous recevez */}
       <ReceiveShowcase />
+
+      {/* 4. Registre public (en avant) */}
+      <RegistryShowcase />
 
       {/* 5. Process + Témoignages + FAQ */}
       <HowItWorks />
