@@ -1,17 +1,12 @@
 {
   "brand": "Parcels of Time",
   "nav": {
-    "why": "Pourquoi",
-    "how": "Comment",
-    "pricing": "Prix",
-    "rare": "Journées iconiques",
-    "gift": "Offrir",
     "faq": "FAQ"
   },
   "hero": {
     "h1": "Possédez le jour qui compte.",
-    "subtitle": "Réservez une journée unique, recevez un certificat HD et, si vous le souhaitez, revendez-la sur notre place de marché sécurisée par Stripe.",
-    "rarity": "Rareté réelle : une seule vente par journée."
+    "subtitle": "Réservez une journée unique, recevez un certificat HD et, si vous le souhaitez, revendez la date sur notre place de marché sécurisée par Stripe.",
+    "rarity": "Rareté réelle : chaque date n’est proposée qu’une seule fois."
   },
   "cta": {
     "claim": "Réserver ma date",
@@ -20,30 +15,23 @@
   "receive": {
     "title": "Ce que vous recevez",
     "points": [
-      "Page publique de votre journée (partageable)",
-      "Certificat PDF/JPG haute définition signé",
-      "Message personnel & lien optionnel (modérés)",
-      "E-mail de livraison instantané"
+      "Certificat haute définition signé",
+      "E-mail de livraison instantané",
+      "Page publique de votre journée d’art participatif"
     ]
   },
   "claim": {
     "title": "Réserver votre date",
     "step1": "ÉTAPE 1 — INFORMATIONS",
-    "email": "Votre e-mail (reçu & certificat)",
+    "email": "Votre e-mail (reçu et certificat)",
     "display_name": "Nom du·de la destinataire (public sur le certificat)",
     "message": "Message (optionnel)",
     "link": "Lien",
     "moderation": "Contenu modéré. Restez bienveillant(e) ❤️",
-    "step2": "ÉTAPE 2 — VOTRE JOUR",
-    "utc_input": "Horodatage UTC (ISO, ex. 2100-01-01T00:00Z)",
-    "pick_local": "Ou sélectionnez en local",
+    "step2": "ÉTAPE 2 — VOTRE JOURNÉE",
+    "utc_input": "Date souhaitée",
     "style": "Style du certificat",
-    "pay": "Payer & réserver cette journée",
-    "timeLabel": {
-      "utc_only": "UTC seulement",
-      "utc_plus_local": "UTC + local discret",
-      "local_plus_utc": "Local + UTC discret"
-    }
+    "pay": "Payer & réserver cette journée"
   },
   "certificate": {
     "title": "Certificat de Claim",
