@@ -1,4 +1,4 @@
-// app/components/Landing.tsx — MAJ : ordre d’affichage “Owned by → Title → Message” dans CertificatePreview
+// app/components/Landing.tsx 
 'use client'
 
 import Link from 'next/link'
@@ -153,28 +153,8 @@ function Header({onToggleTheme, href}:{onToggleTheme:()=>void; href:(p:string)=>
   )
 }
 
-/* -------------------- Live UTC jour -------------------- */
-function LiveUTCDate() {
-  const [now, setNow] = useState(new Date())
-  useEffect(()=>{ const t = setInterval(()=>setNow(new Date()), 1000); return ()=>clearInterval(t) },[])
-  const isoDate = useMemo(()=>{
-        const d = new Date(Date.UTC(
-          now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0,0,0,0
-        ))
-        return d.toISOString().slice(0,10) + ' UTC'
-      },[now])
-  return (
-    <div style={{display:'flex', gap:12, alignItems:'center'}}>
-      <input aria-label="Date UTC actuelle" value={isoDate} readOnly
-        style={{flex:1, padding:'14px 16px', border:'1px solid var(--color-border)', borderRadius:12, background:'var(--color-surface)', color:'var(--color-text)', opacity:.9}}/>
-      <button onClick={()=>{ navigator.clipboard?.writeText(isoDate) }}
-        style={{padding:'12px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)'}}
-        aria-label="Copier la date">
-        Copier
-      </button>
-    </div>
-  )
-}
+
+
 
 /* ---------- CertificatePreview (MAJ ordre) ---------- */
 type PreviewStyle =
@@ -368,20 +348,20 @@ function Pricing() {
     <section id="prix" style={{maxWidth:1280, margin:'0 auto', padding:'40px 24px 72px'}}>
       <SectionLabel>Prix & offres</SectionLabel>
       <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 18px'}}>Des journées pour chaque histoire</h3>
-      <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
-        <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
-          <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Standard</div>
-          <div style={{fontSize:32, fontWeight:800}}>9–19 €</div>
-          <p style={{opacity:.9}}>Une journée unique. Certificat, QR code, page dédiée.</p>
-          <Button href={href('/claim')} variant="primary">Réserver ma journée</Button>
-        </div>
-        <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
-          <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Journées iconiques</div>
-          <div style={{fontSize:32, fontWeight:800}}>Prix selon rareté</div>
-          <p style={{opacity:.9}}>Séries spéciales (Nouvel An, éclipses, finales, records).</p>
-          <Link href="#iconiques" style={{textDecoration:'none', color:'var(--color-text)'}}>Voir les journées rares →</Link>
-        </div>
-      </div>
+      <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
+      <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Standard</div>
+      <div style={{fontSize:32, fontWeight:800}}>9–19 €</div>
+      <p style={{opacity:.9}}>Une journée unique. Certificat HD, QR, page dédiée.</p>
+      <p style={{opacity:.7, fontSize:13, marginTop:8}}>Revente possible sur la place de marché.</p>
+      <Button href={href('/claim')} variant="primary">Réserver ma journée</Button>
+    </div>
+
+    <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
+      <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Journées iconiques</div>
+      <div style={{fontSize:32, fontWeight:800}}>Prix selon rareté</div>
+      <p style={{opacity:.9}}>Éditions limitées (Nouvel An, éclipses, finales, records).</p>
+      <Link href="#iconiques" style={{textDecoration:'none', color:'var(--color-text)'}}>Voir les journées iconiques →</Link>
+    </div>
     </section>
   )
 }
@@ -464,9 +444,6 @@ function HeroPhotos({href}:{href:(p:string)=>string}) {
           <div style={{marginTop:14, fontSize:14, color:'var(--color-muted)'}}>
             {t('hero.rarity')}
           </div>
-          <div style={{marginTop:18}}>
-          <LiveUTCDate />
-          </div>
         </div>
 
         <div style={{gridColumn:'span 6'}}>
@@ -492,9 +469,12 @@ export default function Landing() {
 
   useEffect(()=>{ applyTheme(theme === 'dark' ? TOKENS_DARK : TOKENS_LIGHT) },[theme])
 
-  const whyText = useMemo(()=>(
-        'Nous accumulons des photos et des vidéos… mais l’instant se perd dans la masse. Parcels of Time vous permet de posséder la journée qui a changé votre histoire.'
-    ),[])
+  const whyText = useMemo(
+    () =>
+      "Nous accumulons des photos et des vidéos… et l’instant se perd. Parcels of Time vous permet de posséder une journée unique — avec un certificat HD, une page publique, et la possibilité de la revendre plus tard via Stripe Connect.",
+    []
+  )
+  
 
   return (
     <main style={{background:'var(--color-bg)', color:'var(--color-text)'}}>
@@ -569,6 +549,9 @@ export default function Landing() {
               <li>Page dédiée partageable (message + lien), badge d’authenticité</li>
               <li>Styles premium : Romantic, Birth, Wedding, Christmas, New Year, Graduation…</li>
             </ul>
+            <div style={{marginTop:12, fontSize:14, color:'var(--color-muted)'}}>
+            Paiements & revente sécurisés par Stripe • Commission de place de marché : 10% (min 1 €) lors de la revente.
+          </div>
           </div>
           <div style={{display:'flex', gap:10, alignItems:'center'}}>
             <Button href={href('/claim')} variant="primary">Réserver un jour</Button>
@@ -633,7 +616,9 @@ export default function Landing() {
             <Button href={href('/claim')} variant="primary">Réserver mon jour</Button>
             <Button href={href('/claim?gift=1')} variant="secondary">Offrir un jour</Button>
           </div>
-          <div style={{marginTop:12, fontSize:12, color:'var(--color-muted)'}}>Paiement sécurisé Stripe • Certificat haute définition • Jamais vendue deux fois</div>
+          <div style={{marginTop:12, fontSize:12, color:'var(--color-muted)'}}>
+          Paiement sécurisé Stripe • Certificat HD • Revente C2C possible • Une seule vente par journée
+        </div>
         </div>
       </section>
 

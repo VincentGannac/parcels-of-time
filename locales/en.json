@@ -1,37 +1,55 @@
 {
-    "brand": "Parcels of Time",
-    "nav": { "why": "Why", "how": "How", "pricing": "Pricing", "rare": "Rare minutes", "gift": "Gift", "faq": "FAQ" },
-    "hero": {
-      "h1": "Own the day that matters.",
-      "subtitle": "Engrave a life moment by claiming it forever. Unique. Digital. Shareable.",
-      "rarity": "Real rarity: only 365 days per year."
-    },
-    "cta": { "claim": "Reserve my day", "gift": "Gift a day" },
-    "receive": {
-      "title": "What you receive",
-      "points": ["Public page for your day", "Signed PDF certificate", "Personal message & optional link", "Instant email delivery"]
-    },
-    "claim": {
-      "title": "Claim your day",
-      "step1": "STEP 1 — INFORMATION",
-      "email": "Your email (receipt & certificate)",
-      "display_name": "Recipient name (public on certificate)",
-      "message": "Message (optional)",
-      "link": "Link (optional)",
-      "moderation": "Moderated content. Be kind ❤️",
-      "step2": "STEP 2 — YOUR DAY",
-      "utc_input": "UTC timestamp (ISO, e.g. 2100-01-01T00:00Z)",
-      "pick_local": "Or select in local time (rounded to the day)",
-      "style": "Certificate style",
-      "pay": "Pay & claim this day",
-      "timeLabel": { "utc_only": "UTC only", "utc_plus_local": "UTC + local (small)", "local_plus_utc": "Local + UTC (small)" }
-    },
-    "certificate": {
-      "title": "Certificate of Claim",
-      "owned_by": "Owned by",
-      "message": "Message",
-      "certificate_id": "Certificate ID",
-      "integrity": "Integrity (SHA-256)"
+  "brand": "Parcels of Time",
+  "nav": {
+    "why": "Why",
+    "how": "How",
+    "pricing": "Pricing",
+    "rare": "Iconic days",
+    "gift": "Gift",
+    "faq": "FAQ"
+  },
+  "hero": {
+    "h1": "Own the day that matters.",
+    "subtitle": "Reserve a unique day, receive a high-def certificate and, if you want, resell it on our Stripe-powered marketplace.",
+    "rarity": "True scarcity: each day can be sold only once."
+  },
+  "cta": {
+    "claim": "Reserve my day",
+    "gift": "Gift a day"
+  },
+  "receive": {
+    "title": "What you receive",
+    "points": [
+      "Public page for your day (shareable)",
+      "High-definition signed PDF/JPG certificate",
+      "Personal message & optional link (moderated)",
+      "Instant email delivery"
+    ]
+  },
+  "claim": {
+    "title": "Claim your day",
+    "step1": "STEP 1 — INFORMATION",
+    "email": "Your email (receipt & certificate)",
+    "display_name": "Recipient name (public on certificate)",
+    "message": "Message (optional)",
+    "link": "Link (optional)",
+    "moderation": "Moderated content. Be kind ❤️",
+    "step2": "STEP 2 — YOUR DAY",
+    "utc_input": "UTC timestamp (ISO, e.g. 2100-01-01T00:00Z)",
+    "pick_local": "Or select in local time (rounded to the day)",
+    "style": "Certificate style",
+    "pay": "Pay & claim this day",
+    "timeLabel": {
+      "utc_only": "UTC only",
+      "utc_plus_local": "UTC + local (small)",
+      "local_plus_utc": "Local + UTC (small)"
     }
+  },
+  "certificate": {
+    "title": "Certificate of Claim",
+    "owned_by": "Owned by",
+    "message": "Message",
+    "certificate_id": "Certificate ID",
+    "integrity": "Integrity (SHA-256)"
   }
-  
+}
