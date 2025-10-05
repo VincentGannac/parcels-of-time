@@ -18,11 +18,24 @@ const TOKENS = {
   '--color-primary': '#E4B73D',
   '--color-on-primary': '#0B0E14',
   '--color-border': '#1E2A3C',
+  '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
 function t(locale: 'fr' | 'en') {
-  const fr = { title: 'Créer un compte', backHome: 'Retour à l’accueil' }
-  const en = { title: 'Create an account', backHome: 'Back to home' }
+  const fr = {
+    title: 'Créer un compte',
+    subtitle: 'Rejoignez la communauté — c’est rapide et gratuit.',
+    backHome: 'Retour à l’accueil',
+    trust1: 'Aucune carte requise',
+    trust2: 'Vous pouvez supprimer votre compte à tout moment',
+  }
+  const en = {
+    title: 'Create an account',
+    subtitle: 'Join the community — fast and free.',
+    backHome: 'Back to home',
+    trust1: 'No card required',
+    trust2: 'Delete your account anytime',
+  }
   return locale === 'fr' ? fr : en
 }
 
@@ -38,7 +51,7 @@ export default async function Page({
   const i18n = t(locale)
 
   // Déjà connecté ? → redirige
-  const sess = await readSession()
+  const sess = await readSession().catch(() => null)
   if (sess) {
     redirect(next && /^\/(fr|en)\//.test(next) ? next : `/${locale}/account`)
   }
@@ -53,13 +66,15 @@ export default async function Page({
         ['--color-primary' as any]: TOKENS['--color-primary'],
         ['--color-on-primary' as any]: TOKENS['--color-on-primary'],
         ['--color-border' as any]: TOKENS['--color-border'],
+        ['--shadow-elev1' as any]: TOKENS['--shadow-elev1'],
         background: 'var(--color-bg)',
         color: 'var(--color-text)',
         minHeight: '100vh',
         fontFamily: 'Inter, system-ui',
       }}
     >
-      <section style={{ maxWidth: 560, margin: '0 auto', padding: '32px 20px' }}>
+      <section style={{ maxWidth: 720, margin: '0 auto', padding: '32px 20px' }}>
+        {/* Header */}
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <a href={`/${locale}`} style={{ textDecoration: 'none', color: 'var(--color-text)', opacity: 0.85 }}>
             &larr; Parcels of Time
@@ -78,12 +93,49 @@ export default async function Page({
           </a>
         </header>
 
-        <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 36, margin: '0 0 12px' }}>{i18n.title}</h1>
+        {/* Title */}
+        <div style={{ marginBottom: 12 }}>
+          <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 36, margin: 0 }}>{i18n.title}</h1>
+          <p style={{ margin: '6px 0 0', opacity: 0.8 }}>{i18n.subtitle}</p>
+        </div>
 
-        <section style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16 }}>
+        {/* Card */}
+        <section
+          style={{
+            display: 'grid',
+            gap: 16,
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 14,
+            padding: 16,
+            boxShadow: 'var(--shadow-elev1)',
+          }}
+        >
           <SignupForm locale={locale} nextParam={typeof next === 'string' ? next : undefined} />
+
+          {/* Trust signals */}
+          <div
+            aria-hidden="true"
+            style={{
+              display: 'flex',
+              gap: 10,
+              flexWrap: 'wrap',
+              borderTop: '1px solid var(--color-border)',
+              paddingTop: 10,
+              opacity: 0.85,
+              fontSize: 13,
+            }}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid var(--color-border)', borderRadius: 999, padding: '6px 10px' }}>
+              ✅ {i18n.trust1}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid var(--color-border)', borderRadius: 999, padding: '6px 10px' }}>
+              🔒 {i18n.trust2}
+            </span>
+          </div>
         </section>
 
+        {/* Login link */}
         <p style={{ marginTop: 12, fontSize: 14 }}>
           {locale === 'fr' ? 'Déjà un compte ?' : 'Already have an account?'}{' '}
           <a href={`/${locale}/login${next ? `?next=${encodeURIComponent(next)}` : ''}`} style={{ color: 'var(--color-text)' }}>

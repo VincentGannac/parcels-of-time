@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 type Availability = 'idle' | 'checking' | 'available' | 'taken' | 'error'
 
@@ -11,6 +11,9 @@ export default function SignupForm({
   locale: 'fr' | 'en'
   nextParam?: string
 }) {
+  // --- i18n
+  const t = (fr: string, en: string) => (locale === 'fr' ? fr : en)
+
   // --- state
   const [email, setEmail] = useState('')
   const [email2, setEmail2] = useState('')
@@ -22,24 +25,45 @@ export default function SignupForm({
   const [userAvail, setUserAvail] = useState<Availability>('idle')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [caps1, setCaps1] = useState(false)
+  const [caps2, setCaps2] = useState(false)
 
-  // --- i18n helpers
-  const t = (fr: string, en: string) => (locale === 'fr' ? fr : en)
+  const emailInputRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => { emailInputRef.current?.focus() }, [])
 
   // --- validators
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   const isValidEmail = (v: string) => emailRegex.test(v)
-  const emailsMatch = email && email2 && email.trim().toLowerCase() === email2.trim().toLowerCase()
+  const emailsMatch = !!email && !!email2 && email.trim().toLowerCase() === email2.trim().toLowerCase()
 
-  // Pseudo: 3–20 chars, lettres/chiffres . _ -
   const usernameRegex = /^[a-zA-Z0-9._-]{3,20}$/
   const usernameClean = useMemo(() => username.trim(), [username])
   const usernameLooksValid = usernameRegex.test(usernameClean)
 
-  const passwordOk = password.length >= 8
-  const passwordsMatch = password && password2 && password === password2
+  const passwordOk = useMemo(() => password.length >= 8, [password])
+  const passwordsMatch = !!password && !!password2 && password === password2
 
-  // --- debounce username availability check
+  // --- password strength (0–4)
+  const pwScore = useMemo(() => {
+    const pw = password || ''
+    let s = 0
+    if (pw.length >= 8) s++
+    if (pw.length >= 12) s++
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++
+    if (/\d/.test(pw)) s++
+    if (/[^A-Za-z0-9]/.test(pw)) s++
+    // normalize to 0..4
+    return Math.min(4, Math.max(0, s - 1))
+  }, [password])
+  const pwLabel = [
+    t('Très faible', 'Very weak'),
+    t('Faible', 'Weak'),
+    t('Moyen', 'Fair'),
+    t('Bon', 'Good'),
+    t('Excellent', 'Excellent'),
+  ][pwScore] || t('Très faible', 'Very weak')
+
+  // --- username availability (debounced)
   useEffect(() => {
     let alive = true
     if (!usernameClean || !usernameLooksValid) {
@@ -66,48 +90,44 @@ export default function SignupForm({
       } catch {
         setUserAvail('error')
       }
-    }, 400)
-
-    return () => {
-      alive = false
-      clearTimeout(id)
-    }
+    }, 350)
+    return () => { alive = false; clearTimeout(id) }
   }, [usernameClean, usernameLooksValid])
+
+  // --- username suggestions from email
+  const usernameSuggestions = useMemo(() => {
+    if (!isValidEmail(email)) return []
+    const base = email.split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 16)
+    const year = new Date().getFullYear().toString().slice(-2)
+    const uniq = new Set([base, `${base}${year}`, `${base}_01`].filter(Boolean))
+    return Array.from(uniq).filter(v => v.length >= 3 && /^[a-zA-Z0-9._-]+$/.test(v))
+  }, [email])
+
+  // --- completion progress
+  const completion = useMemo(() => {
+    let pct = 0
+    if (isValidEmail(email)) pct += 20
+    if (emailsMatch) pct += 10
+    if (usernameLooksValid) pct += 20
+    pct += pwScore * 10 // 0..40
+    if (passwordsMatch && passwordOk) pct += 10
+    return Math.min(100, pct)
+  }, [email, emailsMatch, usernameLooksValid, pwScore, passwordsMatch, passwordOk])
 
   // --- submit
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setErr(null)
 
-    if (!isValidEmail(email)) {
-      setErr(t('E-mail invalide.', 'Invalid email.'))
-      return
-    }
-    if (!emailsMatch) {
-      setErr(t('Les e-mails ne correspondent pas.', 'Emails do not match.'))
-      return
-    }
+    if (!isValidEmail(email)) { setErr(t('E-mail invalide.', 'Invalid email.')); return }
+    if (!emailsMatch) { setErr(t('Les e-mails ne correspondent pas.', 'Emails do not match.')); return }
     if (!usernameLooksValid) {
-      setErr(
-        t(
-          'Pseudo invalide. Utilisez 3–20 caractères: lettres, chiffres, ".", "_", "-".',
-          'Invalid username. Use 3–20 characters: letters, digits, ".", "_", "-".'
-        )
-      )
+      setErr(t('Pseudo invalide. Utilisez 3–20 caractères: lettres, chiffres, ".", "_", "-".', 'Invalid username. Use 3–20 characters: letters, digits, ".", "_", "-".'))
       return
     }
-    if (!passwordOk) {
-      setErr(t('Mot de passe trop court (min. 8).', 'Password too short (min. 8).'))
-      return
-    }
-    if (!passwordsMatch) {
-      setErr(t('Les mots de passe ne correspondent pas.', 'Passwords do not match.'))
-      return
-    }
-    if (userAvail === 'taken') {
-      setErr(t('Ce pseudo est déjà pris.', 'This username is already taken.'))
-      return
-    }
+    if (!passwordOk) { setErr(t('Mot de passe trop court (min. 8).', 'Password too short (min. 8).')); return }
+    if (!passwordsMatch) { setErr(t('Les mots de passe ne correspondent pas.', 'Passwords do not match.')); return }
+    if (userAvail === 'taken') { setErr(t('Ce pseudo est déjà pris.', 'This username is already taken.')); return }
 
     setLoading(true)
     try {
@@ -116,7 +136,6 @@ export default function SignupForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, display_name: usernameClean }),
       })
-
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         const code = j?.error
@@ -133,7 +152,6 @@ export default function SignupForm({
         setLoading(false)
         return
       }
-
       const next = nextParam && /^\/(fr|en)\//.test(nextParam) ? nextParam : `/${locale}/account`
       window.location.href = next
     } catch {
@@ -152,12 +170,48 @@ export default function SignupForm({
     userAvail !== 'taken' &&
     userAvail !== 'checking'
 
+  // --- password generator
+  const generatePw = useCallback(() => {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz'
+    const ALPHABET = alphabet.toUpperCase()
+    const digits = '0123456789'
+    const symbols = '!@#$%^&*()-_=+[]{}:,.?'
+    const all = alphabet + ALPHABET + digits + symbols
+    const len = 16
+    const arr = new Uint32Array(len)
+    crypto.getRandomValues(arr)
+    let pw = ''
+    for (let i = 0; i < len; i++) pw += all[arr[i] % all.length]
+    // ensure variety
+    if (!/[a-z]/.test(pw)) pw = 'a' + pw.slice(1)
+    if (!/[A-Z]/.test(pw)) pw = pw.slice(0, 1) + 'A' + pw.slice(2)
+    if (!/\d/.test(pw)) pw = pw.slice(0, 2) + '9' + pw.slice(3)
+    if (!/[^A-Za-z0-9]/.test(pw)) pw = pw.slice(0, 3) + '!' + pw.slice(4)
+    setPassword(pw)
+    setPassword2(pw)
+    setShowPw(true)
+    setShowPw2(true)
+  }, [])
+
   return (
-    <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12 }}>
+    <form onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }} aria-describedby="form-progress">
+      {/* Progress */}
+      <div id="form-progress" style={{ display: 'grid', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.85 }}>
+          <span>{t('Progression', 'Progress')}</span>
+          <span>{completion}%</span>
+        </div>
+        <div aria-hidden="true" style={{ height: 10, background: 'rgba(255,255,255,.06)', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+          <div style={{ width: `${completion}%`, height: '100%', background: 'var(--color-primary)' }} />
+        </div>
+      </div>
+
       {/* Email */}
-      <label style={{ display: 'grid', gap: 6 }}>
+      <label htmlFor="email" style={{ display: 'grid', gap: 6 }}>
         <span>{t('E-mail', 'Email')}</span>
         <input
+          id="email"
+          ref={emailInputRef}
           type="email"
           required
           value={email}
@@ -170,9 +224,10 @@ export default function SignupForm({
       </label>
 
       {/* Email confirmation */}
-      <label style={{ display: 'grid', gap: 6 }}>
+      <label htmlFor="email2" style={{ display: 'grid', gap: 6 }}>
         <span>{t('Confirmez votre e-mail', 'Confirm your email')}</span>
         <input
+          id="email2"
           type="email"
           required
           value={email2}
@@ -184,58 +239,73 @@ export default function SignupForm({
         />
       </label>
       {!!email2 && !emailsMatch && (
-        <div style={{ fontSize: 12, color: '#ffb2b2' }}>
+        <div style={{ fontSize: 12, color: '#ffb2b2' }} role="status" aria-live="polite">
           {t('Les e-mails ne correspondent pas.', 'Emails do not match.')}
         </div>
       )}
 
-      {/* Username / Pseudo */}
-      <label style={{ display: 'grid', gap: 6 }}>
+      {/* Username */}
+      <label htmlFor="username" style={{ display: 'grid', gap: 6 }}>
         <span>{t('Pseudo', 'Username')}</span>
         <input
+          id="username"
           type="text"
           required
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoComplete="username"
-          placeholder=""
+          placeholder={t('3–20 caractères (lettres, chiffres, . _ -)', '3–20 characters (letters, digits, . _ -)')}
           aria-invalid={!!username && !usernameLooksValid}
           style={{ padding: '12px 14px', border: '1px solid var(--color-border)', background: 'rgba(255,255,255,.02)', color: 'var(--color-text)', borderRadius: 10 }}
         />
       </label>
-      {usernameClean && (
-        <div style={{ fontSize: 12, marginTop: -6 }}>
-          {!usernameLooksValid && (
+
+      {/* Username helper row */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        <div style={{ fontSize: 12 }}>
+          {!usernameLooksValid && username.length > 0 && (
             <span style={{ color: '#ffb2b2' }}>
               {t('3–20 caractères. Lettres/chiffres/._- autorisés.', '3–20 characters. Letters, digits, . _ - allowed.')}
             </span>
           )}
-          {usernameLooksValid && userAvail === 'checking' && (
-            <span style={{ opacity: 0.7 }}>{t('Vérification du pseudo…', 'Checking username…')}</span>
-          )}
-          {usernameLooksValid && userAvail === 'available' && (
-            <span style={{ color: '#65c18c' }}>{t('Disponible ✓', 'Available ✓')}</span>
-          )}
-          {usernameLooksValid && userAvail === 'taken' && (
-            <span style={{ color: '#ffb2b2' }}>{t('Déjà pris ✕', 'Already taken ✕')}</span>
-          )}
-          {usernameLooksValid && userAvail === 'error' && (
-            <span style={{ opacity: 0.7 }}>
-              {t('Impossible de vérifier. Nous tenterons lors de la création.', 'Could not check. We will verify on submit.')}
+          {usernameLooksValid && (
+            <span aria-live="polite" style={{ opacity: 0.85 }}>
+              {userAvail === 'checking' && t('Vérification du pseudo…', 'Checking username…')}
+              {userAvail === 'available' && <span style={{ color: '#65c18c' }}>{t('Disponible ✓', 'Available ✓')}</span>}
+              {userAvail === 'taken' && <span style={{ color: '#ffb2b2' }}>{t('Déjà pris ✕', 'Already taken ✕')}</span>}
+              {userAvail === 'error' && t('Impossible de vérifier (nous réessayerons).', 'Could not check (we’ll try again).')}
             </span>
           )}
         </div>
-      )}
+        {/* Suggestions */}
+        {usernameSuggestions.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {usernameSuggestions.slice(0, 3).map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setUsername(s)}
+                style={{ padding: '6px 10px', borderRadius: 999, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text)', cursor: 'pointer', fontSize: 12 }}
+                aria-label={t(`Utiliser le pseudo ${s}`, `Use username ${s}`)}
+              >
+                ✨ {s}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Password */}
-      <label style={{ display: 'grid', gap: 6 }}>
+      <label htmlFor="pw1" style={{ display: 'grid', gap: 6 }}>
         <span>{t('Mot de passe', 'Password')}</span>
         <div style={{ position: 'relative' }}>
           <input
+            id="pw1"
             type={showPw ? 'text' : 'password'}
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyUp={(e) => setCaps1((e as any).getModifierState?.('CapsLock'))}
             autoComplete="new-password"
             placeholder="••••••••"
             aria-invalid={!!password && !passwordOk}
@@ -252,21 +322,46 @@ export default function SignupForm({
           </button>
         </div>
       </label>
-      {!!password && !passwordOk && (
-        <div style={{ fontSize: 12, color: '#ffb2b2' }}>
-          {t('Au moins 8 caractères.', 'At least 8 characters.')}
+
+      {/* Password strength + tools */}
+      <div style={{ display: 'grid', gap: 6 }}>
+        {!!password && (
+          <>
+            <div aria-live="polite" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
+              <span>{t('Sécurité du mot de passe', 'Password strength')}</span>
+              <strong>{pwLabel}</strong>
+            </div>
+            <div aria-hidden="true" style={{ height: 8, background: 'rgba(255,255,255,.06)', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{ width: `${(pwScore / 4) * 100}%`, height: '100%', background: 'var(--color-primary)' }} />
+            </div>
+          </>
+        )}
+        {caps1 && <div style={{ fontSize: 12, color: '#ffdf8a' }}>⇪ {t('Verr. Maj activé', 'Caps Lock enabled')}</div>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={generatePw}
+            style={{ padding: '6px 10px', borderRadius: 10, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text)', cursor: 'pointer', fontSize: 12 }}
+          >
+            🔐 {t('Générer un mot de passe fort', 'Generate a strong password')}
+          </button>
+          <span style={{ fontSize: 12, opacity: 0.8 }}>
+            {t('Astuce : combinez lettres, chiffres et symboles.', 'Tip: mix letters, numbers & symbols.')}
+          </span>
         </div>
-      )}
+      </div>
 
       {/* Password confirm */}
-      <label style={{ display: 'grid', gap: 6 }}>
+      <label htmlFor="pw2" style={{ display: 'grid', gap: 6 }}>
         <span>{t('Confirmer le mot de passe', 'Confirm password')}</span>
         <div style={{ position: 'relative' }}>
           <input
+            id="pw2"
             type={showPw2 ? 'text' : 'password'}
             required
             value={password2}
             onChange={(e) => setPassword2(e.target.value)}
+            onKeyUp={(e) => setCaps2((e as any).getModifierState?.('CapsLock'))}
             autoComplete="new-password"
             placeholder="••••••••"
             aria-invalid={!!password2 && !passwordsMatch}
@@ -284,15 +379,17 @@ export default function SignupForm({
         </div>
       </label>
       {!!password2 && !passwordsMatch && (
-        <div style={{ fontSize: 12, color: '#ffb2b2' }}>
+        <div style={{ fontSize: 12, color: '#ffb2b2' }} role="status" aria-live="polite">
           {t('Les mots de passe ne correspondent pas.', 'Passwords do not match.')}
         </div>
       )}
+      {caps2 && <div style={{ fontSize: 12, color: '#ffdf8a' }}>⇪ {t('Verr. Maj activé', 'Caps Lock enabled')}</div>}
 
       {/* Error block */}
       {err && (
         <div
           role="alert"
+          tabIndex={-1}
           style={{
             marginTop: 2,
             padding: '10px 12px',
@@ -320,10 +417,30 @@ export default function SignupForm({
           color: 'var(--color-on-primary)',
           border: '1px solid var(--color-border)',
           opacity: canSubmit ? 1 : 0.7,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
         }}
       >
-        {loading ? t('Création…', 'Creating…') : t('Créer mon compte', 'Create account')}
+        {loading ? (
+          <>
+            <span className="spinner" aria-hidden="true" /> {t('Création…', 'Creating…')}
+          </>
+        ) : (
+          t('Créer mon compte', 'Create account')
+        )}
       </button>
+
+      {/* tiny inline spinner style */}
+      <style>{`
+        .spinner {
+          width: 16px; height: 16px; border-radius: 999px;
+          border: 2px solid rgba(255,255,255,.35); border-top-color: var(--color-on-primary);
+          display: inline-block; animation: sp 0.9s linear infinite;
+        }
+        @keyframes sp { to { transform: rotate(360deg); } }
+      `}</style>
     </form>
   )
 }
