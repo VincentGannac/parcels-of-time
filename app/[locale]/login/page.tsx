@@ -10,6 +10,16 @@ import ClientAutoRedirect from './ClientAutoRedirect'
 type Params = { locale: 'fr' | 'en' }
 type Search = { next?: string; err?: string; debug?: string }
 
+const TOKENS = {
+  '--color-bg': '#0B0E14',
+  '--color-surface': '#111726',
+  '--color-text': '#E6EAF2',
+  '--color-muted': '#A7B0C0',
+  '--color-primary': '#E4B73D',
+  '--color-on-primary': '#0B0E14',
+  '--color-border': '#1E2A3C',
+} as const
+
 function errMessage(locale: 'fr' | 'en', code?: string | null) {
   if (!code) return ''
   const FR: Record<string,string> = {
@@ -32,8 +42,26 @@ function errMessage(locale: 'fr' | 'en', code?: string | null) {
 }
 
 function t(locale: 'fr' | 'en') {
-  const fr = { title: 'Connexion', backHome: 'Retour à l’accueil', email: 'E-mail', password: 'Mot de passe', cta: 'Se connecter', noAccount: 'Pas de compte ? Créez-le', signup: 'Créer un compte', linkHelp: 'Si vous avez reçu un e-mail avec un lien, cliquez-le directement.' }
-  const en = { title: 'Sign in', backHome: 'Back to home', email: 'Email', password: 'Password', cta: 'Sign in', noAccount: 'No account? Create one', signup: 'Create account', linkHelp: 'If you received a sign-in link by email, just click it.' }
+  const fr = {
+    title: 'Connexion',
+    backHome: 'Retour à l’accueil',
+    email: 'E-mail',
+    password: 'Mot de passe',
+    cta: 'Se connecter',
+    noAccount: 'Pas de compte ?',
+    signup: 'Créer un compte',
+    forgot: 'Mot de passe oublié ?'
+  }
+  const en = {
+    title: 'Sign in',
+    backHome: 'Back to home',
+    email: 'Email',
+    password: 'Password',
+    cta: 'Sign in',
+    noAccount: 'No account?',
+    signup: 'Create account',
+    forgot: 'Forgot password?'
+  }
   return locale === 'fr' ? fr : en
 }
 
@@ -59,60 +87,90 @@ export default async function Page({
   const dbg = debug === '1' ? await debugSessionSnapshot() : null
 
   return (
-    <main style={{ maxWidth: 520, margin: '0 auto', padding: '36px 20px', fontFamily: 'Inter, system-ui' }}>
-      {/* Filet client : si la session est présente mais pas encore détectée côté SSR sur ce hit */}
+    <main
+      style={{
+        ['--color-bg' as any]: TOKENS['--color-bg'],
+        ['--color-surface' as any]: TOKENS['--color-surface'],
+        ['--color-text' as any]: TOKENS['--color-text'],
+        ['--color-muted' as any]: TOKENS['--color-muted'],
+        ['--color-primary' as any]: TOKENS['--color-primary'],
+        ['--color-on-primary' as any]: TOKENS['--color-on-primary'],
+        ['--color-border' as any]: TOKENS['--color-border'],
+        background: 'var(--color-bg)',
+        color: 'var(--color-text)',
+        minHeight: '100vh',
+        fontFamily: 'Inter, system-ui',
+      }}
+    >
+      {/* Détection client d’une session valide */}
       <ClientAutoRedirect next={nextSafe} />
 
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-        <a href={`/${locale}`} style={{ textDecoration: 'none', opacity: 0.85 }}>&larr; Parcels of Time</a>
-        <a href={`/${locale}`} style={{ textDecoration: 'none', border: '1px solid #e5e7eb', padding: '8px 12px', borderRadius: 10, color: 'inherit' }}>{i18n.backHome}</a>
-      </header>
+      <section style={{ maxWidth: 560, margin: '0 auto', padding: '32px 20px' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <a href={`/${locale}`} style={{ textDecoration: 'none', color: 'var(--color-text)', opacity: .85 }}>&larr; Parcels of Time</a>
+          <a href={`/${locale}`} style={{ textDecoration: 'none', border: '1px solid var(--color-border)', padding: '8px 12px', borderRadius: 10, color: 'var(--color-text)' }}>
+            {i18n.backHome}
+          </a>
+        </header>
 
-      <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 34, margin: '0 0 8px' }}>{i18n.title}</h1>
+        <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 36, margin: '0 0 12px' }}>{i18n.title}</h1>
 
-      {err && (
-        <div role="alert" style={{ margin: '12px 0 16px', padding: '12px 14px', border: '1px solid #FEE2E2', background: '#FEF2F2', color: '#991B1B', borderRadius: 12, fontSize: 14 }}>
-          {errMessage(locale, err)}
-        </div>
-      )}
-
-      <form method="POST" action="/api/auth/login" style={{ display: 'grid', gap: 12 }}>
-        <input type="hidden" name="next" value={nextSafe} />
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>{i18n.email}</span>
-          <input name="email" type="email" required autoComplete="email" placeholder="you@example.com" style={{ padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 10 }} />
-        </label>
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>{i18n.password}</span>
-          <input name="password" type="password" required autoComplete="current-password" placeholder="••••••••" style={{ padding: '12px 14px', border: '1px solid #e5e7eb', borderRadius: 10 }} />
-        </label>
-        <button type="submit" style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#111827', color: 'white', fontWeight: 800, cursor: 'pointer' }}>
-          {i18n.cta}
-        </button>
-      </form>
-      <div style={{ marginTop: 10, fontSize: 14 }}>
-        <a href={`/${locale}/forgot`} style={{ textDecoration: 'none' }}>
-          {locale === 'fr' ? 'Mot de passe oublié ?' : 'Forgot password?'}
-        </a>
-      </div>
-      <div style={{ marginTop: 10, fontSize: 14 }}>
-        {i18n.noAccount} — <a href={`/${locale}/signup${next ? `?next=${encodeURIComponent(nextSafe)}` : ''}`}>{i18n.signup}</a>
-      </div>
-
-      <p style={{ fontSize: 13, opacity: 0.7, marginTop: 14 }}>{i18n.linkHelp}</p>
-
-      {dbg && (
-        <details style={{ marginTop: 22 }}>
-          <summary style={{ cursor: 'pointer' }}>debug</summary>
-          <div style={{ marginTop: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12 }}>
-            <div><strong>cookie present:</strong> {String(dbg.cookiePresent)} — <strong>rawLen:</strong> {dbg.rawLen}</div>
-            <div><strong>host:</strong> {dbg.host} — <strong>xfh:</strong> {dbg.xfh} — <strong>proto:</strong> {dbg.proto}</div>
-            <div><strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”</div>
-            <div><strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} — <strong>reason:</strong> {dbg.reason || '—'}</div>
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(dbg.payload, null, 2)}</pre>
+        {err && (
+          <div role="alert" style={{ margin: '12px 0 16px', padding: '12px 14px', border: '1px solid #FEE2E2', background: '#FEF2F2', color: '#991B1B', borderRadius: 12, fontSize: 14 }}>
+            {errMessage(locale, err)}
           </div>
-        </details>
-      )}
+        )}
+
+        <section style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16 }}>
+          <form method="POST" action="/api/auth/login" style={{ display: 'grid', gap: 12 }}>
+            <input type="hidden" name="next" value={nextSafe} />
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>{i18n.email}</span>
+              <input name="email" type="email" required autoComplete="email" placeholder="you@example.com"
+                     style={{ padding: '12px 14px', border: '1px solid var(--color-border)', background: 'rgba(255,255,255,.02)', color: 'var(--color-text)', borderRadius: 10 }} />
+            </label>
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>{i18n.password}</span>
+              <input name="password" type="password" required autoComplete="current-password" placeholder="••••••••"
+                     style={{ padding: '12px 14px', border: '1px solid var(--color-border)', background: 'rgba(255,255,255,.02)', color: 'var(--color-text)', borderRadius: 10 }} />
+            </label>
+            <button type="submit"
+                    style={{ padding: '12px 16px', borderRadius: 12, border: '1px solid var(--color-border)', background: 'var(--color-primary)', color: 'var(--color-on-primary)', fontWeight: 800, cursor: 'pointer' }}>
+              {i18n.cta}
+            </button>
+          </form>
+
+          <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a href={`/${locale}/forgot`} style={{ textDecoration: 'none', padding: '10px 12px', border: '1px solid var(--color-border)', borderRadius: 10, color: 'var(--color-text)' }}>
+              {i18n.forgot}
+            </a>
+            {/* Bouton jaune très visible */}
+            <a
+              href={`/${locale}/signup${next ? `?next=${encodeURIComponent(nextSafe)}` : ''}`}
+              style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, background: 'var(--color-primary)', color: 'var(--color-on-primary)', fontWeight: 800, border: '1px solid var(--color-border)' }}
+            >
+              {i18n.signup}
+            </a>
+          </div>
+
+          <p style={{ fontSize: 13, opacity: 0.7, marginTop: 10 }}>
+            {locale === 'fr' ? 'Si vous avez reçu un e-mail avec un lien, cliquez-le directement.' : 'If you received a sign-in link by email, just click it.'}
+          </p>
+        </section>
+
+        {dbg && (
+          <details style={{ marginTop: 22 }}>
+            <summary style={{ cursor: 'pointer' }}>debug</summary>
+            <div style={{ marginTop: 10, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12 }}>
+              <div><strong>cookie present:</strong> {String(dbg.cookiePresent)} — <strong>rawLen:</strong> {dbg.rawLen}</div>
+              <div><strong>host:</strong> {dbg.host} — <strong>xfh:</strong> {dbg.xfh} — <strong>proto:</strong> {dbg.proto}</div>
+              <div><strong>payload:</strong> “{dbg.payloadStart}…{dbg.payloadEnd}” — <strong>sig:</strong> “{dbg.sigStart}…{dbg.sigEnd}”</div>
+              <div><strong>sigOk:</strong> {String(dbg.sigOk)} — <strong>parseOk:</strong> {String(dbg.parseOk)} — <strong>reason:</strong> {dbg.reason || '—'}</div>
+              <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(dbg.payload, null, 2)}</pre>
+            </div>
+          </details>
+        )}
+      </section>
     </main>
   )
 }
