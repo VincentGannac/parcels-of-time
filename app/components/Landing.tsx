@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import HeroSlideshow from './HeroSlideshow'
 import { useLocaleHref } from './useLocaleHref'
 import { useT } from '../i18n/I18nProvider'
+import { usePathname } from 'next/navigation'
 
 
 
@@ -341,30 +342,6 @@ function FeatureCard({title, text}:{title:string; text:string}) {
   )
 }
 
-/* -------------------- Pricing (identique) -------------------- */
-function Pricing() {
-  const href = useLocaleHref()
-  return (
-    <section id="prix" style={{maxWidth:1280, margin:'0 auto', padding:'40px 24px 72px'}}>
-      <SectionLabel>Prix & offres</SectionLabel>
-      <h3 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:'0 0 18px'}}>Des journées pour chaque histoire</h3>
-      <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
-      <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Standard</div>
-      <div style={{fontSize:32, fontWeight:800}}>9–19 €</div>
-      <p style={{opacity:.9}}>Une journée unique. Certificat HD, QR, page dédiée.</p>
-      <p style={{opacity:.7, fontSize:13, marginTop:8}}>Revente possible sur la place de marché.</p>
-      <Button href={href('/claim')} variant="primary">Réserver ma journée</Button>
-    </div>
-
-    <div style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:20}}>
-      <div style={{fontSize:18, fontWeight:700, marginBottom:8}}>Journées iconiques</div>
-      <div style={{fontSize:32, fontWeight:800}}>Prix selon rareté</div>
-      <p style={{opacity:.9}}>Éditions limitées (Nouvel An, éclipses, finales, records).</p>
-      <Link href="#iconiques" style={{textDecoration:'none', color:'var(--color-text)'}}>Voir les journées iconiques →</Link>
-    </div>
-    </section>
-  )
-}
 
 /* -------------------- Témoignages (identique) -------------------- */
 function Testimonials() {
@@ -391,30 +368,177 @@ function Testimonials() {
   )
 }
 
-/* -------------------- FAQ (identique) -------------------- */
+/* -------------------- FAQ (FR + EN, refonte complète) -------------------- */
+
+
+
 function FAQ() {
-  const rows = [
-    { q:'Ma journée m’appartient-elle vraiment ?', a:'Oui. Chaque journée est vendue une seule fois. Votre certificat numérique agit comme preuve d’authenticité.' },
-    { q:'Puis-je changer le message ?', a:'Oui, via votre page dédiée, tant que le contenu respecte nos règles de modération.' },
-    { q:'Fuseaux horaires ?', a:'Horodatage en UTC, avec affichage de l’heure locale sur votre page.' },
-    { q:'Impression ?', a:'Certificat haute définition prêt à imprimer (PDF/JPG).' },
-    { q:'Délai ?', a:'Réservation et réception en moins de 2 minutes.' },
-    { q:'Remboursement ?', a:'Contenu numérique livré immédiatement : vous renoncez au délai de rétractation. Erreurs de facturation → remboursement.' },
+  const pathname = usePathname() || '/'
+  const href = useLocaleHref()
+  const isFR = /^\/fr(\/|$)/.test(pathname)
+
+  const rowsFR = [
+    {
+      q: 'Qu’est-ce que j’achète exactement ?',
+      a: `Vous acquérez la **propriété symbolique d’une journée** (un jour calendaire en UTC), vendue **une seule fois**.
+          Elle est matérialisée par un **certificat numérique** (PDF/JPG HD) et une **page publique** dédiée.
+          Ce n’est pas un droit juridique sur la date elle-même : c’est un **objet de collection** unique (conceptuel), comme une édition limitée.`
+    },
+    {
+      q: 'Le certificat est-il personnalisable (photo) ?',
+      a: `Oui. Vous pouvez définir un **titre**, un **message**, choisir un **style** de certificat et, sur les styles compatibles,
+          **ajouter une photo personnelle**. Le rendu HD inclut un **QR code** vers votre page. Contenu **modéré**.`
+    },
+    {
+      q: 'Photos personnelles : exigences & droits',
+      a: `Formats : **JPG/PNG** haute résolution. Vous devez **détenir les droits** (ou une autorisation).
+          Pas de visages de mineurs sans consentement parental, ni contenus sensibles/illicites.
+          Vous pouvez **remplacer** la photo depuis votre page.`
+    },
+    {
+      q: 'Comment garantissez-vous l’authenticité (SHA-256) ?',
+      a: `Chaque certificat embarque une **empreinte (SHA-256)** calculée sur ses données clés (date UTC, propriétaire, titre, message, style…).
+          L’empreinte est **imprimée** sur le certificat et **vérifiable** via le QR.
+          Toute altération invaliderait l’empreinte : c’est notre **preuve d’authenticité**.`
+    },
+    {
+      q: 'UTC, fuseaux horaires & précision',
+      a: `La journée est **ancrée en UTC**. Sur la page, l’**heure locale** est affichée pour le contexte.
+          L’objet vendu est la **journée** (pas la minute) — vous pouvez toutefois préciser l’heure dans votre message.`
+    },
+    {
+      q: 'Puis-je revendre ma journée ?',
+      a: `Oui. Revente possible sur notre **place de marché**.
+          Activez votre **compte marchand Stripe** (KYC) depuis votre compte.
+          Commission plateforme **10% (min 1 €)** à la vente. **Virements** via Stripe. Vos obligations fiscales s’appliquent.`
+    },
+    {
+      q: 'Compte marchand : Particulier vs Professionnel',
+      a: `En **Particulier**, la revente occasionnelle est possible ; si vos ventes deviennent régulières, passez en **Professionnel**.
+          Le **changement de statut** conserve l’**historique Stripe**. Stripe peut demander des informations KYC/KYB.`
+    },
+    {
+      q: 'Qu’est-ce que le Registre public ?',
+      a: `Une galerie — de l’**art participatif** — où vous pouvez **exposer** (ou non) votre certificat (date, titre, extrait, vignette).
+          Vous contrôlez la **visibilité**. Parcourir : ${href('/explore')}.`
+    },
+    {
+      q: 'Impression & formats',
+      a: `Fichiers **HD (PDF/JPG)** prêts à imprimer, conseillé **A4/A3** en **300 DPI**.
+          Les styles avec photo prévoient une zone optimisée.`
+    },
+    {
+      q: 'Délais & livraison',
+      a: `Génération **quasi instantanée** (souvent < 2 min). Réception par **e-mail** (fichiers + lien page).`
+    },
+    {
+      q: 'Paiement & sécurité',
+      a: `Paiements opérés par **Stripe**. Aucune donnée de carte stockée côté Parcels of Time.
+          En revente, **encaissements**/**virements** via **Stripe Connect**.`
+    },
+    {
+      q: 'Remboursement & erreurs',
+      a: `Produit numérique livré immédiatement : **renonciation au délai de rétractation**.
+          En cas d’**erreur de facturation** (doublon, montant), contactez-nous pour correction/remboursement si applicable.`
+    }
   ]
+
+  const rowsEN = [
+    {
+      q: 'What exactly am I buying?',
+      a: `You acquire the **symbolic ownership of a calendar day** (UTC), sold **only once**.
+          It’s materialized by a **digital certificate** (HD PDF/JPG) and a dedicated **public page**.
+          This is not a legal right over the date itself: it’s a **unique collectible** (concept piece), like a limited edition.`
+    },
+    {
+      q: 'Is the certificate customizable (photo)?',
+      a: `Yes. You can set a **title**, a **message**, pick a **certificate style** and, on compatible styles,
+          **add your own photo**. The HD output includes a **QR code** to your page. All content is **moderated**.`
+    },
+    {
+      q: 'Personal photos: requirements & rights',
+      a: `Use **JPG/PNG** in high resolution. You must **own the rights** (or have permission).
+          No minors’ faces without parental consent, no sensitive/illegal content.
+          You can **replace** the photo from your management page.`
+    },
+    {
+      q: 'How is authenticity guaranteed (SHA-256)?',
+      a: `Each certificate carries an **integrity hash (SHA-256)** computed from its core data (UTC date, owner, title, message, style…).
+          The hash is **printed** on the certificate and **verifiable** via the QR.
+          Any alteration would break the hash — that’s our **proof of authenticity**.`
+    },
+    {
+      q: 'UTC, time zones & precision',
+      a: `The day is **anchored in UTC**. Your page also shows **local time** for context.
+          The object sold is the **day** (not a minute), though you can document the exact time in your message.`
+    },
+    {
+      q: 'Can I resell my day?',
+      a: `Yes. You can resell it on our **marketplace**.
+          Enable your **Stripe merchant account** (KYC) from your account area.
+          Platform fee is **10% (min €1)** at sale. **Payouts** are handled by Stripe. Taxes are your responsibility.`
+    },
+    {
+      q: 'Merchant account: Individual vs Business',
+      a: `As an **Individual**, occasional resales are allowed; if sales become regular, switch to **Business**.
+          Switching status **preserves your Stripe history**. Stripe may require KYC/KYB information.`
+    },
+    {
+      q: 'What is the Public Register?',
+      a: `It’s a gallery — a piece of **participatory art** — where owners can **exhibit** (or not) their certificate
+          (date, title, snippet, thumbnail). You control **visibility**. Browse it here: ${href('/explore')}.`
+    },
+    {
+      q: 'Printing & formats',
+      a: `You’ll receive **HD files (PDF/JPG)** ready to print, recommended **A4/A3** at **300 DPI**.
+          Photo styles have an optimized image area.`
+    },
+    {
+      q: 'Delivery time',
+      a: `**Near-instant** generation (often < 2 minutes). We send an **email** with files and the page link.`
+    },
+    {
+      q: 'Payment & security',
+      a: `Payments are processed by **Stripe**. We do **not** store card details.
+          For resales, **charges** and **payouts** run through **Stripe Connect**.`
+    },
+    {
+      q: 'Refunds & mistakes',
+      a: `Digital goods are delivered immediately, so you **waive the right of withdrawal**.
+          For **billing mistakes** (duplicates, wrong amount), contact us — we’ll fix/refund when applicable.`
+    }
+  ]
+
+  const rows = isFR ? rowsFR : rowsEN
+
   return (
     <section id="faq" style={{maxWidth:1280, margin:'0 auto', padding:'24px 24px 72px'}}>
       <SectionLabel>FAQ</SectionLabel>
       <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:12}}>
         {rows.map((r,i)=>(
-          <details key={i} style={{gridColumn:'span 6', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
-            <summary style={{cursor:'pointer', fontWeight:700}}>{r.q}</summary>
-            <p style={{margin:'10px 0 0'}}>{r.a}</p>
+          <details key={i} style={{
+            gridColumn:'span 6',
+            background:'var(--color-surface)',
+            border:'1px solid var(--color-border)',
+            borderRadius:12,
+            padding:14
+          }}>
+            <summary style={{cursor:'pointer', fontWeight:700, lineHeight:1.2}}>{r.q}</summary>
+            <p style={{margin:'10px 0 0', whiteSpace:'pre-wrap'}}>{r.a}</p>
           </details>
         ))}
+      </div>
+      <div style={{marginTop:12, fontSize:12, color:'var(--color-muted)'}}>
+        {isFR ? (
+          <>Besoin d’aide ? Consultez <a href={href('/legal/terms')} style={{color:'inherit'}}>CGU/CGV</a> • <a href={href('/legal/privacy')} style={{color:'inherit'}}>Confidentialité</a> • <a href="mailto:hello@parcelsoftime.com" style={{color:'inherit'}}>Support</a></>
+        ) : (
+          <>Need help? See <a href={href('/legal/terms')} style={{color:'inherit'}}>Terms</a> • <a href={href('/legal/privacy')} style={{color:'inherit'}}>Privacy</a> • <a href="mailto:hello@parcelsoftime.com" style={{color:'inherit'}}>Support</a></>
+        )}
       </div>
     </section>
   )
 }
+
 
 /* -------------------- Hero (photos) -------------------- */
 function HeroPhotos({href}:{href:(p:string)=>string}) {
@@ -599,7 +723,6 @@ export default function Landing() {
         </div>
       </section>
 
-      <Pricing />
       <Testimonials />
       <FAQ />
 
