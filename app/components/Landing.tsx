@@ -8,9 +8,7 @@ import { useLocaleHref } from './useLocaleHref'
 import { useT } from '../i18n/I18nProvider'
 import { usePathname } from 'next/navigation'
 
-/* =========================================================
-   THEME TOKENS
-   ========================================================= */
+/* ======================= THEME TOKENS ======================= */
 const TOKENS_DARK = {
   '--color-bg': '#0B0E14',
   '--color-surface': '#111726',
@@ -19,7 +17,6 @@ const TOKENS_DARK = {
   '--color-muted': '#A7B0C0',
   '--color-primary': '#E4B73D',
   '--color-on-primary': '#0B0E14',
-  '--color-secondary': '#00D2A8',
   '--color-accent': '#8CD6FF',
   '--color-border': '#1E2A3C',
   '--ring': '0 0 0 4px rgba(228,183,61,.22)',
@@ -35,7 +32,6 @@ const TOKENS_LIGHT = {
   '--color-muted': '#4B5565',
   '--color-primary': '#1C2B6B',
   '--color-on-primary': '#FFFFFF',
-  '--color-secondary': '#4A8FFF',
   '--color-accent': '#D4AF37',
   '--color-border': '#E6E6EA',
   '--ring': '0 0 0 4px rgba(28,43,107,.18)',
@@ -48,59 +44,28 @@ function applyTheme(vars: Record<string, string>) {
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v))
 }
 
-/* =========================================================
-   REUSABLE ATOMS
-   ========================================================= */
-const MAXW = 1200 // largeur harmonisée pour TOUTES les sections
-
+const MAXW = 1200
 function Container(props: React.HTMLAttributes<HTMLDivElement>) {
   const { style, ...rest } = props
-  return (
-    <div
-      {...rest}
-      style={{
-        maxWidth: MAXW,
-        margin: '0 auto',
-        padding: '24px',
-        ...(style || {}),
-      }}
-    />
-  )
+  return <div {...rest} style={{ maxWidth: MAXW, margin: '0 auto', padding: '24px', ...(style || {}) }} />
 }
 
 function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      style={{
-        fontSize: 12,
-        letterSpacing: 1,
-        textTransform: 'uppercase',
-        color: 'var(--color-muted)',
-        marginBottom: 8,
-      }}
-    >
+    <div style={{ fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--color-muted)', marginBottom: 8 }}>
       {children}
     </div>
   )
 }
-
 function H2({ children, id }: { children: React.ReactNode; id?: string }) {
   return (
-    <h2
-      id={id}
-      style={{
-        fontFamily: 'Fraunces, serif',
-        fontSize: 36,
-        lineHeight: '44px',
-        margin: '0 0 12px',
-        color: 'var(--color-text)',
-      }}
-    >
+    <h2 id={id} style={{ fontFamily: 'Fraunces, serif', fontSize: 36, lineHeight: '44px', margin: '0 0 12px', color: 'var(--color-text)' }}>
       {children}
     </h2>
   )
 }
 
+/* ======================= ATOMS ======================= */
 function Button({
   href,
   children,
@@ -143,29 +108,50 @@ function Button({
   )
 }
 
-function Pill({ children }: { children: React.ReactNode }) {
+/* ======= NavPill : pour Registre public & Mon Compte (visibilité accrue) ======= */
+function NavPill({
+  href,
+  children,
+  emphasis = 'accent', // accent | outline
+  ariaLabel,
+}: {
+  href: string
+  children: React.ReactNode
+  emphasis?: 'accent' | 'outline'
+  ariaLabel?: string
+}) {
+  const base: React.CSSProperties = {
+    textDecoration: 'none',
+    borderRadius: 12,
+    padding: '10px 14px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    fontWeight: 700,
+    border: '1px solid var(--color-border)',
+    transition: 'box-shadow .12s ease, transform .12s ease, background .12s ease',
+  }
+  const style =
+    emphasis === 'accent'
+      ? { ...base, background: 'var(--color-surface)', boxShadow: '0 0 0 1px color-mix(in srgb, var(--color-primary) 60%, transparent) inset', color: 'var(--color-text)' }
+      : { ...base, background: 'transparent', color: 'var(--color-text)' }
+
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '8px 12px',
-        fontSize: 12,
-        borderRadius: 999,
-        border: '1px solid var(--color-border)',
-        background: 'var(--color-surface)',
-        color: 'var(--color-text)',
-      }}
+    <Link
+      href={href}
+      aria-label={ariaLabel}
+      style={style}
+      onMouseEnter={(e) => ((e.currentTarget as any).style.boxShadow = 'var(--ring)')}
+      onMouseLeave={(e) => ((e.currentTarget as any).style.boxShadow = 'none')}
+      onMouseDown={(e) => ((e.currentTarget as any).style.transform = 'translateY(1px)')}
+      onMouseUp={(e) => ((e.currentTarget as any).style.transform = 'translateY(0)')}
     >
       {children}
-    </span>
+    </Link>
   )
 }
 
-/* =========================================================
-   COOKIE (RGPD)
-   ========================================================= */
+/* ======================= COOKIE ======================= */
 function CookieBanner() {
   const [visible, setVisible] = useState(false)
   useEffect(() => {
@@ -226,98 +212,153 @@ function CookieBanner() {
   )
 }
 
-/* =========================================================
-   HEADER — NAV COMPACT + CTA
-   ========================================================= */
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '8px 12px',
+        fontSize: 12,
+        borderRadius: 999,
+        border: '1px solid var(--color-border)',
+        background: 'var(--color-surface)',
+        color: 'var(--color-text)',
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
+
+/* ======================= HEADER (refonte) ======================= */
 function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: string) => string }) {
   const { t } = useT()
+  const [isSmall, setIsSmall] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // accessible close on route change or esc
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
     <header
       style={{
         position: 'sticky',
         top: 0,
-        zIndex: 40,
+        zIndex: 50,
         background: 'color-mix(in srgb, var(--color-bg) 88%, transparent)',
         backdropFilter: 'saturate(120%) blur(10px)',
         borderBottom: '1px solid var(--color-border)',
       }}
     >
       <Container style={{ paddingTop: 12, paddingBottom: 12 }}>
-        <nav
-          aria-label="Primary"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto 1fr',
-            alignItems: 'center',
-            gap: 16,
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          {/* Logo */}
           <Link href={href('/')} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--color-text)' }}>
             <img src="/logo.svg" alt="Parcels of Time" width={28} height={28} />
             <strong style={{ fontFamily: 'Fraunces, serif' }}>Parcels of Time</strong>
           </Link>
 
-          <ul style={{ display: 'flex', gap: 18, listStyle: 'none', margin: 0, padding: 0, color: 'var(--color-text)' }}>
-            <li>
-              <a href="#registry" style={{ textDecoration: 'none', color: 'inherit' }}>
-                Registre public
-              </a>
-            </li>
-            <li>
-              <a href="#faq" style={{ textDecoration: 'none', color: 'inherit' }}>
-                FAQ
-              </a>
-            </li>
-            <li>
-              <Link href={href('/account')} style={{ textDecoration: 'none', color: 'inherit' }}>
-                Mon Compte
-              </Link>
-            </li>
-          </ul>
+          {/* Desktop */}
+          {!isSmall && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {/* Mise en avant visible */}
+              <NavPill href={href('/explore')} emphasis="accent" ariaLabel="Registre public">
+                🖼️ <span>Registre public</span>
+              </NavPill>
+              <NavPill href={href('/account')} emphasis="outline" ariaLabel="Mon Compte">
+                👤 <span>Mon Compte</span>
+              </NavPill>
 
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>
-              🎁 {t('cta.gift')}
-            </Button>
-            <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>
-              {t('cta.claim')}
-            </Button>
-            <button
-              aria-label="Changer de thème"
-              onClick={onToggleTheme}
-              style={{ padding: 10, borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer' }}
-            >
-              ☀︎/☾
-            </button>
-          </div>
-        </nav>
+              <span aria-hidden style={{ width: 10 }} />
+
+              {/* Actions */}
+              <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>
+                🎁 {t('cta.gift')}
+              </Button>
+              <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>
+                {t('cta.claim')}
+              </Button>
+
+              <button
+                aria-label="Changer de thème"
+                onClick={onToggleTheme}
+                style={{ padding: 10, borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer' }}
+              >
+                ☀︎/☾
+              </button>
+            </div>
+          )}
+
+          {/* Mobile */}
+          {isSmall && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>
+                {t('cta.claim')}
+              </Button>
+              <button
+                aria-expanded={menuOpen}
+                aria-controls="mobile-menu"
+                onClick={() => setMenuOpen((v) => !v)}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  cursor: 'pointer',
+                }}
+              >
+                ☰
+              </button>
+            </div>
+          )}
+        </div>
       </Container>
 
-      {/* Ruban Registre public (mis en avant) */}
-      <div
-        role="region"
-        aria-label="Mise en avant du Registre public"
-        style={{
-          borderTop: '1px solid var(--color-border)',
-          background:
-            'linear-gradient(90deg, color-mix(in srgb, var(--color-elev) 92%, transparent), transparent), radial-gradient(120% 100% at 0% 0%, rgba(228,183,61,.11), transparent 40%)',
-        }}
-      >
-        <Container style={{ paddingTop: 12, paddingBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Pill>🖼️ Registre public</Pill>
-            <span style={{ color: 'var(--color-text)', opacity: 0.92, fontSize: 14 }}>
-              Une <strong>galerie vivante</strong> d’œuvres datées, exposées volontairement par les propriétaires.
-            </span>
-          </div>
-          <Link
-            href={useLocaleHref()('/explore')}
-            style={{ textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 10, border: '1px solid var(--color-border)', color: 'var(--color-text)', background: 'var(--color-surface)' }}
-          >
-            Explorer le Registre →
-          </Link>
-        </Container>
-      </div>
+      {/* Mobile sheet */}
+      {isSmall && menuOpen && (
+        <div
+          id="mobile-menu"
+          role="menu"
+          style={{
+            borderTop: '1px solid var(--color-border)',
+            background: 'var(--color-elev)',
+            boxShadow: 'var(--shadow-2)',
+          }}
+        >
+          <Container style={{ display: 'grid', gap: 10, paddingTop: 14, paddingBottom: 14 }}>
+            <NavPill href={href('/explore')} emphasis="accent" ariaLabel="Registre public">
+              🖼️ Registre public
+            </NavPill>
+            <NavPill href={href('/account')} emphasis="outline" ariaLabel="Mon Compte">
+              👤 Mon Compte
+            </NavPill>
+            <Button href={href('/claim?gift=1')} variant="secondary">
+              🎁 {t('cta.gift')}
+            </Button>
+            <button
+              onClick={onToggleTheme}
+              style={{ padding: 12, borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', textAlign: 'left' }}
+            >
+              ☀︎/☾ Changer de thème
+            </button>
+          </Container>
+        </div>
+      )}
     </header>
   )
 }
@@ -557,6 +598,7 @@ function RegistryShowcase() {
           </Button>
           <Pill>Modération des contenus publics</Pill>
         </div>
+
       </Container>
     </section>
   )
@@ -628,32 +670,33 @@ function ReceiveShowcase() {
               owner="Clara & Sam"
               title="Notre premier baiser"
               ts="2018-07-19"
-              message="Te souviens-tu ? La pluie, le rire, puis ce baiser."
+              message="Te souviens-tu ? Ce 19 juillet 2018, on s’était abrités de l’averse. Puis, là, tu m’as embrassé."
               href={href('/claim?style=romantic')}
             />
           </div>
+
           <div style={{ gridColumn: 'span 4' }}>
             <CertificatePreview
               styleId="birth"
               owner="Nora & Mehdi"
               title="Bienvenue, Aïcha"
               ts="2023-03-02"
-              message="À 06:12, le 2 mars 2023, tu as crié. La lumière d’après."
+              message="À 06:12, le 2 mars 2023, tu as crié. Le silence d’après s’est rempli de lumière : tu étais née."
               href={href('/claim?style=birth')}
             />
           </div>
+
           <div style={{ gridColumn: 'span 4' }}>
             <CertificatePreview
               styleId="wedding"
               owner="Inès & Hugo"
               title="À 17:31, plus que nous deux"
               ts="2024-07-20"
-              message="Les confettis volaient. On n’entendait plus que nos « oui »."
+              message="Les confettis volaient. À 17:31, nos deux « oui » ont effacé le reste."
               href={href('/claim?style=wedding')}
             />
           </div>
         </div>
-
         <div
           style={{
             marginTop: 18,
@@ -726,39 +769,95 @@ function Testimonials() {
   )
 }
 
+/* =============== FAQ (FR/EN) =============== */
 function FAQ() {
   const pathname = usePathname() || '/'
   const href = useLocaleHref()
   const isFR = /^\/fr(\/|$)/.test(pathname)
+
   const rowsFR = [
     {
       q: 'Qu’est-ce que j’achète exactement ?',
-      a: `Propriété symbolique d’une journée, vendue une seule fois. Certificat numérique (PDF) + page dédiée. Objet artistique, pas de droit juridique.`,
+      a: `Vous acquérez la propriété symbolique d’une journée, vendue une seule fois.
+Elle est matérialisée par un certificat numérique (PDF) et une page publique dédiée.
+Aucun droit juridique sur le temps n’est conféré. C’est un objet symbolique et artistique.`,
     },
-    { q: 'Le certificat est-il personnalisable (photo) ?', a: `Oui : titre, message, style, photo. Le rendu HD inclut un QR vers votre page.` },
     {
-      q: 'Authenticité ?',
-      a: `Empreinte d’intégrité (SHA-256) imprimée sur le certificat et vérifiable via QR. Toute altération l’invalide.`,
+      q: 'Le certificat est-il personnalisable (photo) ?',
+      a: `Oui. Vous pouvez définir un titre, un message, choisir un style ou ajouter une photo personnelle.
+Le rendu HD inclut un QR code vers votre page.`,
+    },
+    {
+      q: 'Comment garantissez-vous l’authenticité de l’acquisition ?',
+      a: `Chaque certificat intègre une empreinte d’intégrité (SHA-256) unique.
+L’empreinte est imprimée sur le certificat et vérifiable via le QR code. Toute altération la rendrait invalide.
+C’est notre preuve d’authenticité, qui rend cet objet numérique tangible.`,
     },
     {
       q: 'Puis-je revendre ma journée ?',
-      a: `Oui, sur la marketplace. Stripe Connect (KYC) requis. Commission 15% (min. 1 €). Virements Stripe. Obligations fiscales applicables.`,
+      a: `Oui. La revente est possible sur notre place de marché.
+Activez votre compte marchand Stripe (KYC) depuis votre espace client.
+Commission plateforme : 15 % (min. 1 €) prélevée lors de la vente. Virements via Stripe. Vos obligations fiscales s’appliquent.`,
     },
-    { q: 'Qu’est-ce que le Registre public ?', a: `Galerie participative. Vous contrôlez la visibilité. Contenus publics modérés.` },
-    { q: 'Impression et formats', a: `Fichiers HD prêts à imprimer. A4 recommandé.` },
-    { q: 'Délais et livraison', a: `Génération quasi immédiate (souvent < 2 min). Envoi par e-mail + lien de page.` },
-    { q: 'Paiement et sécurité', a: `Paiements opérés par Stripe. Aucune donnée carte stockée par Parcels of Time.` },
+    {
+      q: 'Qu’est-ce que le Registre public ?',
+      a: `Une galerie participative où vous pouvez exposer (ou non) votre certificat (date, titre, extrait, photo).
+Vous contrôlez la visibilité. Les contenus publics sont modérés. Évitez les visages de mineurs. Pas de contenus sensibles ou illicites.`,
+    },
+    { q: 'Impression et formats', a: `Fichiers HD prêts à imprimer. Format recommandé : A4.` },
+    {
+      q: 'Délais et livraison',
+      a: `Génération quasi immédiate (souvent moins de 2 minutes).
+Vous recevez un e-mail avec les fichiers et le lien de la page.`,
+    },
+    {
+      q: 'Paiement et sécurité',
+      a: `Les paiements sont opérés par Stripe. Aucune donnée de carte bancaire n’est stockée par Parcels of Time.
+En revente, les encaissements et virements passent par Stripe Connect.`,
+    },
   ]
+
   const rowsEN = [
-    { q: 'What am I buying?', a: `Symbolic ownership of a single day. Digital certificate (PDF) + page. Artistic object, no legal rights.` },
-    { q: 'Customizable?', a: `Yes: title, message, style, photo. HD render includes a QR to your page.` },
-    { q: 'Authenticity?', a: `Integrity fingerprint (SHA-256) printed & verifiable via QR. Any alteration invalidates it.` },
-    { q: 'Can I resell?', a: `Yes, on the marketplace. Stripe Connect (KYC). 15% fee (min €1). Payouts via Stripe. Taxes apply.` },
-    { q: 'Public Registry?', a: `Participatory gallery. You control visibility. Public content is moderated.` },
-    { q: 'Printing', a: `HD files ready to print. A4 recommended.` },
-    { q: 'Turnaround', a: `Near-instant generation (often < 2 min). Email delivery + page link.` },
-    { q: 'Payments', a: `Processed by Stripe. No card data stored by Parcels of Time.` },
+    {
+      q: 'What exactly am I buying?',
+      a: `You acquire the symbolic ownership of a single day, sold only once.
+It is materialized by a digital certificate (PDF) and a dedicated public page.
+No legal rights over time are conferred. It’s a symbolic, artistic object.`,
+    },
+    {
+      q: 'Is the certificate customizable (photo)?',
+      a: `Yes. You can set a title, a message, choose a style, or add a personal photo.
+The HD render includes a QR code to your page.`,
+    },
+    {
+      q: 'How do you guarantee authenticity?',
+      a: `Each certificate includes a unique integrity fingerprint (SHA-256).
+The fingerprint is printed on the certificate and verifiable via the QR code. Any alteration would invalidate it.`,
+    },
+    {
+      q: 'Can I resell my day?',
+      a: `Yes. Resale is possible on our marketplace.
+Activate your Stripe merchant account (KYC) from your dashboard.
+Platform fee: 15% (min €1) charged upon sale. Payouts via Stripe. Taxes apply.`,
+    },
+    {
+      q: 'What is the Public Registry?',
+      a: `A participatory gallery where you may display (or keep private) your certificate (date, title, excerpt, photo).
+You control visibility. Public content is moderated. Avoid faces of minors. No sensitive or illegal content.`,
+    },
+    { q: 'Printing & formats', a: `HD files ready to print. Recommended A4.` },
+    {
+      q: 'Turnaround & delivery',
+      a: `Near-instant generation (often under 2 minutes).
+You’ll receive an email with files and the page link.`,
+    },
+    {
+      q: 'Payment & security',
+      a: `Payments are handled by Stripe. We do not store card data.
+For resales, collection and payouts go through Stripe Connect.`,
+    },
   ]
+
   const rows = isFR ? rowsFR : rowsEN
 
   return (
@@ -792,6 +891,9 @@ function FAQ() {
     </section>
   )
 }
+
+
+  
 
 /* =========================================================
    FINAL CTA
@@ -908,6 +1010,7 @@ function JsonLd() {
   }
   return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
 }
+
 
 /* =========================================================
    PAGE
