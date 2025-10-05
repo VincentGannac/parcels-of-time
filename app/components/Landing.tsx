@@ -77,17 +77,19 @@ function applyTheme(vars: Record<string, string>) {
 /* -------------------- UI atoms -------------------- */
 function Button({
   href, children, variant='primary', ariaLabel,
-}: { href: string; children: React.ReactNode; variant?: 'primary'|'secondary'|'ghost'; ariaLabel?: string }) {
+}: { href: string; children: React.ReactNode; variant?: 'primary'|'secondary'|'ghost'|'accent'; ariaLabel?: string }) {
   const base: React.CSSProperties = {
     textDecoration:'none', fontWeight:700, borderRadius:12, padding:'14px 18px',
     display:'inline-flex', alignItems:'center', gap:10, outline:'none',
     border:'1px solid var(--color-border)',
     boxShadow:'none', transition:'transform .16s ease, box-shadow .16s ease, background .16s ease',
   }
-  const styles: Record<'primary'|'secondary'|'ghost', React.CSSProperties> = {
+  const styles: Record<'primary'|'secondary'|'ghost'|'accent', React.CSSProperties> = {
     primary: { ...base, background:'var(--color-primary)', color:'var(--color-on-primary)', borderColor:'transparent' },
     secondary: { ...base, background:'var(--color-surface)', color:'var(--color-text)' },
     ghost: { ...base, background:'transparent', color:'var(--color-text)' },
+    // Accent = mettre en avant l’offre cadeau
+    accent: { ...base, background:'var(--color-secondary)', color:'var(--color-on-primary)', borderColor:'transparent' },
   }
   return (
     <Link href={href} aria-label={ariaLabel}
@@ -101,6 +103,7 @@ function Button({
     </Link>
   )
 }
+
 
 function SectionLabel(props: React.HTMLAttributes<HTMLDivElement>) {
   const { children, style, ...rest } = props
@@ -138,11 +141,13 @@ function Header({onToggleTheme, href}:{onToggleTheme:()=>void; href:(p:string)=>
           <li><Link href={href('/claim?gift=1')} style={{textDecoration:'none', color:'inherit'}}>{t('nav.gift')}</Link></li>
           <li><a href="#faq"      style={{textDecoration:'none', color:'inherit'}}>{t('nav.faq')}</a></li>
           <li><Link href={href('/explore')} style={{textDecoration:'none', color:'inherit'}}>Registre public</Link></li>
-          <li><Link href={href('/account')} style={{textDecoration:'none', color:'inherit'}}>{t('nav.account') ?? 'Mon Compte'}</Link></li>
+          {/* ⇩ fixé à "Mon Compte" */}
+          <li><Link href={href('/account')} style={{textDecoration:'none', color:'inherit'}}>Mon Compte</Link></li>
         </ul>
 
         <div style={{display:'flex', gap:10, justifyContent:'flex-end', alignItems:'center'}}>
-          <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>{t('cta.gift')}</Button>
+          {/* Offrir = accentué */}
+          <Button href={href('/claim?gift=1')} variant="accent" ariaLabel={t('cta.gift')}>🎁 {t('cta.gift')}</Button>
           <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>{t('cta.claim')}</Button>
           <button aria-label="Toggle theme" onClick={onToggleTheme}
                   style={{marginLeft:6, padding:10, borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-surface)', color:'var(--color-text)'}}>
@@ -368,10 +373,7 @@ function Testimonials() {
   )
 }
 
-/* -------------------- FAQ (FR + EN, refonte complète) -------------------- */
-
-
-
+/* -------------------- FAQ (FR + EN, sans ***, refonte) -------------------- */
 function FAQ() {
   const pathname = usePathname() || '/'
   const href = useLocaleHref()
@@ -380,132 +382,130 @@ function FAQ() {
   const rowsFR = [
     {
       q: 'Qu’est-ce que j’achète exactement ?',
-      a: `Vous acquérez la **propriété symbolique d’une journée** (un jour calendaire en UTC), vendue **une seule fois**.
-          Elle est matérialisée par un **certificat numérique** (PDF/JPG HD) et une **page publique** dédiée.
-          Ce n’est pas un droit juridique sur la date elle-même : c’est un **objet de collection** unique (conceptuel), comme une édition limitée.`
+      a: `Vous acquérez la propriété symbolique d’une journée (en UTC), vendue une seule fois.
+Elle est matérialisée par un certificat numérique (PDF/JPG HD) et une page publique dédiée.
+Ce n’est pas un droit juridique sur la date elle-même : c’est un objet de collection unique, comme une édition limitée.`
     },
     {
       q: 'Le certificat est-il personnalisable (photo) ?',
-      a: `Oui. Vous pouvez définir un **titre**, un **message**, choisir un **style** de certificat et, sur les styles compatibles,
-          **ajouter une photo personnelle**. Le rendu HD inclut un **QR code** vers votre page. Contenu **modéré**.`
+      a: `Oui. Vous pouvez définir un titre, un message, choisir un style de certificat et, sur les styles compatibles, ajouter une photo personnelle.
+Le rendu HD inclut un QR code vers votre page. Contenu modéré.`
     },
     {
-      q: 'Photos personnelles : exigences & droits',
-      a: `Formats : **JPG/PNG** haute résolution. Vous devez **détenir les droits** (ou une autorisation).
-          Pas de visages de mineurs sans consentement parental, ni contenus sensibles/illicites.
-          Vous pouvez **remplacer** la photo depuis votre page.`
+      q: 'Photos personnelles : exigences et droits',
+      a: `Formats acceptés : JPG/PNG en haute résolution. Vous devez détenir les droits (ou disposer d’une autorisation).
+Pas de visages de mineurs sans consentement parental, ni de contenus sensibles ou illicites. Vous pouvez remplacer la photo depuis votre page.`
     },
     {
       q: 'Comment garantissez-vous l’authenticité (SHA-256) ?',
-      a: `Chaque certificat embarque une **empreinte (SHA-256)** calculée sur ses données clés (date UTC, propriétaire, titre, message, style…).
-          L’empreinte est **imprimée** sur le certificat et **vérifiable** via le QR.
-          Toute altération invaliderait l’empreinte : c’est notre **preuve d’authenticité**.`
+      a: `Chaque certificat embarque une empreinte d’intégrité (SHA-256) calculée sur ses données clés (date UTC, propriétaire, titre, message, style…).
+L’empreinte est imprimée sur le certificat et vérifiable via le QR. Toute altération la casserait : c’est notre preuve d’authenticité.`
     },
     {
-      q: 'UTC, fuseaux horaires & précision',
-      a: `La journée est **ancrée en UTC**. Sur la page, l’**heure locale** est affichée pour le contexte.
-          L’objet vendu est la **journée** (pas la minute) — vous pouvez toutefois préciser l’heure dans votre message.`
+      q: 'UTC, fuseaux horaires et précision',
+      a: `La journée est ancrée en UTC. Sur la page, l’heure locale est affichée pour le contexte.
+L’objet vendu est la journée (pas la minute), mais vous pouvez préciser l’heure dans votre message.`
     },
     {
       q: 'Puis-je revendre ma journée ?',
-      a: `Oui. Revente possible sur notre **place de marché**.
-          Activez votre **compte marchand Stripe** (KYC) depuis votre compte.
-          Commission plateforme **10% (min 1 €)** à la vente. **Virements** via Stripe. Vos obligations fiscales s’appliquent.`
+      a: `Oui. Revente possible sur notre place de marché.
+Activez votre compte marchand Stripe (KYC) depuis votre compte.
+Commission plateforme 10 % (min 1 €) lors de la vente. Virements via Stripe. Vos obligations fiscales s’appliquent.`
     },
     {
-      q: 'Compte marchand : Particulier vs Professionnel',
-      a: `En **Particulier**, la revente occasionnelle est possible ; si vos ventes deviennent régulières, passez en **Professionnel**.
-          Le **changement de statut** conserve l’**historique Stripe**. Stripe peut demander des informations KYC/KYB.`
+      q: 'Compte marchand : Particulier ou Professionnel',
+      a: `En Particulier, la revente occasionnelle est possible ; si vos ventes deviennent régulières, passez en Professionnel.
+Le changement de statut conserve l’historique Stripe. Stripe peut demander des informations KYC/KYB.`
     },
     {
       q: 'Qu’est-ce que le Registre public ?',
-      a: `Une galerie — de l’**art participatif** — où vous pouvez **exposer** (ou non) votre certificat (date, titre, extrait, vignette).
-          Vous contrôlez la **visibilité**. Parcourir : ${href('/explore')}.`
+      a: `Une galerie — de l’art participatif — où vous pouvez exposer (ou non) votre certificat (date, titre, extrait, vignette).
+Vous contrôlez la visibilité. Parcourir : ${href('/explore')}.`
     },
     {
-      q: 'Impression & formats',
-      a: `Fichiers **HD (PDF/JPG)** prêts à imprimer, conseillé **A4/A3** en **300 DPI**.
-          Les styles avec photo prévoient une zone optimisée.`
+      q: 'Impression et formats',
+      a: `Fichiers HD (PDF/JPG) prêts à imprimer. Recommandé : A4/A3 en 300 DPI.
+Les styles avec photo réservent une zone optimisée.`
     },
     {
-      q: 'Délais & livraison',
-      a: `Génération **quasi instantanée** (souvent < 2 min). Réception par **e-mail** (fichiers + lien page).`
+      q: 'Délais et livraison',
+      a: `Génération quasi immédiate (souvent moins de 2 minutes).
+Vous recevez un e-mail avec les fichiers et le lien de page.`
     },
     {
-      q: 'Paiement & sécurité',
-      a: `Paiements opérés par **Stripe**. Aucune donnée de carte stockée côté Parcels of Time.
-          En revente, **encaissements**/**virements** via **Stripe Connect**.`
+      q: 'Paiement et sécurité',
+      a: `Paiements opérés par Stripe. Aucune donnée de carte n’est stockée par Parcels of Time.
+En revente, encaissements et virements passent par Stripe Connect.`
     },
     {
-      q: 'Remboursement & erreurs',
-      a: `Produit numérique livré immédiatement : **renonciation au délai de rétractation**.
-          En cas d’**erreur de facturation** (doublon, montant), contactez-nous pour correction/remboursement si applicable.`
+      q: 'Remboursement et erreurs',
+      a: `Produit numérique livré immédiatement : renonciation au droit de rétractation.
+En cas d’erreur de facturation (doublon, montant), contactez-nous pour correction/remboursement si applicable.`
     }
   ]
 
   const rowsEN = [
     {
       q: 'What exactly am I buying?',
-      a: `You acquire the **symbolic ownership of a calendar day** (UTC), sold **only once**.
-          It’s materialized by a **digital certificate** (HD PDF/JPG) and a dedicated **public page**.
-          This is not a legal right over the date itself: it’s a **unique collectible** (concept piece), like a limited edition.`
+      a: `You acquire the symbolic ownership of a calendar day (UTC), sold only once.
+It is materialized by a digital certificate (HD PDF/JPG) and a dedicated public page.
+This is not a legal right over the date itself: it is a unique collectible, like a limited edition.`
     },
     {
       q: 'Is the certificate customizable (photo)?',
-      a: `Yes. You can set a **title**, a **message**, pick a **certificate style** and, on compatible styles,
-          **add your own photo**. The HD output includes a **QR code** to your page. All content is **moderated**.`
+      a: `Yes. You can set a title, a message, pick a certificate style and, on compatible styles, add your own photo.
+The HD output includes a QR code to your page. All content is moderated.`
     },
     {
-      q: 'Personal photos: requirements & rights',
-      a: `Use **JPG/PNG** in high resolution. You must **own the rights** (or have permission).
-          No minors’ faces without parental consent, no sensitive/illegal content.
-          You can **replace** the photo from your management page.`
+      q: 'Personal photos: requirements and rights',
+      a: `Use JPG/PNG in high resolution. You must own the rights (or have permission).
+No minors’ faces without parental consent, and no sensitive/illegal content. You can replace the photo later.`
     },
     {
       q: 'How is authenticity guaranteed (SHA-256)?',
-      a: `Each certificate carries an **integrity hash (SHA-256)** computed from its core data (UTC date, owner, title, message, style…).
-          The hash is **printed** on the certificate and **verifiable** via the QR.
-          Any alteration would break the hash — that’s our **proof of authenticity**.`
+      a: `Each certificate embeds an integrity hash (SHA-256) computed from its core data (UTC date, owner, title, message, style…).
+The hash is printed on the certificate and verifiable via the QR. Any alteration would break it — that’s our proof of authenticity.`
     },
     {
-      q: 'UTC, time zones & precision',
-      a: `The day is **anchored in UTC**. Your page also shows **local time** for context.
-          The object sold is the **day** (not a minute), though you can document the exact time in your message.`
+      q: 'UTC, time zones, and precision',
+      a: `The day is anchored in UTC. Your page also shows the local time for context.
+The object sold is the day (not a minute), though you can note the exact time in your message.`
     },
     {
       q: 'Can I resell my day?',
-      a: `Yes. You can resell it on our **marketplace**.
-          Enable your **Stripe merchant account** (KYC) from your account area.
-          Platform fee is **10% (min €1)** at sale. **Payouts** are handled by Stripe. Taxes are your responsibility.`
+      a: `Yes. You can resell it on our marketplace.
+Enable your Stripe merchant account (KYC) from your account area.
+Platform fee is 10% (min €1) at sale. Payouts handled by Stripe. Taxes are your responsibility.`
     },
     {
       q: 'Merchant account: Individual vs Business',
-      a: `As an **Individual**, occasional resales are allowed; if sales become regular, switch to **Business**.
-          Switching status **preserves your Stripe history**. Stripe may require KYC/KYB information.`
+      a: `As an Individual, occasional resales are allowed; if sales become regular, switch to Business.
+Switching status preserves your Stripe history. Stripe may require KYC/KYB information.`
     },
     {
       q: 'What is the Public Register?',
-      a: `It’s a gallery — a piece of **participatory art** — where owners can **exhibit** (or not) their certificate
-          (date, title, snippet, thumbnail). You control **visibility**. Browse it here: ${href('/explore')}.`
+      a: `A gallery — participatory art — where owners can exhibit (or not) their certificate (date, title, snippet, thumbnail).
+You control visibility. Browse it: ${href('/explore')}.`
     },
     {
-      q: 'Printing & formats',
-      a: `You’ll receive **HD files (PDF/JPG)** ready to print, recommended **A4/A3** at **300 DPI**.
-          Photo styles have an optimized image area.`
+      q: 'Printing and formats',
+      a: `You’ll receive HD files (PDF/JPG) ready to print. Recommended: A4/A3 at 300 DPI.
+Photo styles include an optimized image area.`
     },
     {
       q: 'Delivery time',
-      a: `**Near-instant** generation (often < 2 minutes). We send an **email** with files and the page link.`
+      a: `Near-instant generation (often under 2 minutes).
+We email your files and the page link.`
     },
     {
-      q: 'Payment & security',
-      a: `Payments are processed by **Stripe**. We do **not** store card details.
-          For resales, **charges** and **payouts** run through **Stripe Connect**.`
+      q: 'Payment and security',
+      a: `Payments are processed by Stripe. Parcels of Time does not store card details.
+For resales, charges and payouts run through Stripe Connect.`
     },
     {
-      q: 'Refunds & mistakes',
-      a: `Digital goods are delivered immediately, so you **waive the right of withdrawal**.
-          For **billing mistakes** (duplicates, wrong amount), contact us — we’ll fix/refund when applicable.`
+      q: 'Refunds and mistakes',
+      a: `Digital goods are delivered immediately, so you waive the right of withdrawal.
+For billing mistakes (duplicates, wrong amount), contact us — we will fix/refund when applicable.`
     }
   ]
 
@@ -586,6 +586,43 @@ function HeroPhotos({href}:{href:(p:string)=>string}) {
   )
 }
 
+
+/* -------------------- Gift spotlight (NOUVEAU) -------------------- */
+function GiftSpotlight() {
+  const href = useLocaleHref()
+  return (
+    <section aria-labelledby="gift" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
+      <SectionLabel id="gift">Le cadeau original & personnalisable</SectionLabel>
+      <div style={{display:'grid', gridTemplateColumns:'repeat(12,1fr)', gap:16}}>
+        <div style={{gridColumn:'span 7', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:18}}>
+          <h3 style={{margin:'0 0 8px', fontFamily:'Fraunces, serif'}}>Offrez une journée qui ne se reproduira jamais</h3>
+          <ul style={{margin:0, paddingLeft:18, lineHeight:'28px'}}>
+            <li>Certificat HD avec votre **photo** et **message** (modérés)</li>
+            <li>QR vers une **page publique** (ou privée) pour partager l’histoire</li>
+            <li>Livraison **instantanée** par e-mail — parfait pour un cadeau de dernière minute</li>
+            <li>Véritable **rareté** : une seule vente par journée</li>
+          </ul>
+          <div style={{marginTop:12, display:'flex', gap:10, flexWrap:'wrap'}}>
+            <Button href={href('/claim?gift=1')} variant="accent">🎁 Offrir un jour</Button>
+            <Button href={href('/claim')} variant="secondary">Réserver pour moi</Button>
+          </div>
+        </div>
+        <div style={{gridColumn:'span 5', display:'grid', gap:10}}>
+          <div style={{border:'1px solid var(--color-border)', borderRadius:16, padding:14, background:'var(--color-surface)'}}>
+            <strong>Occasions</strong>
+            <p style={{margin:'6px 0 0', opacity:.9}}>Anniversaire, rencontre, diplôme, naissance, “le jour où…”</p>
+          </div>
+          <div style={{border:'1px solid var(--color-border)', borderRadius:16, padding:14, background:'var(--color-surface)'}}>
+            <strong>Format</strong>
+            <p style={{margin:'6px 0 0', opacity:.9}}>PDF/JPG haute définition, prêt à imprimer (A4/A3, 300 DPI)</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+
 /* -------------------- Page -------------------- */
 export default function Landing() {
   const href = useLocaleHref()
@@ -606,6 +643,8 @@ export default function Landing() {
       <Header onToggleTheme={()=>setTheme(t=>t==='dark'?'light':'dark')} href={href} />
         
       <HeroPhotos href={href} />
+      <GiftSpotlight /> 
+
 
       <section id="pourquoi" style={{maxWidth:1280, margin:'0 auto', padding:'24px'}}>
         <SectionLabel>Pourquoi maintenant&nbsp;?</SectionLabel>
