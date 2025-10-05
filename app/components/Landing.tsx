@@ -558,7 +558,6 @@ function Hero({ href }: { href: (p: string) => string }) {
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 16, fontSize: 12, color: 'var(--color-muted)' }}>
             <span>🔒 Stripe • Paiement sécurisé</span>
             <span>🧾 SHA-256 • Empreinte d’intégrité</span>
-            <span>🖼️ PDF/JPG HD prêts à imprimer</span>
           </div>
         </div>
 
@@ -622,16 +621,16 @@ function RegistryShowcase() {
   )
 }
 
-/* =========================================================
+  /* =========================================================
    FEATURE BAND — POURQUOI / VALEUR
    ========================================================= */
    function FeatureBand() {
     /** ↓ Nouveau wording + bullets mis à jour */
     const bullets = [
-      { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR scannable.' },
-      { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois — revente possible via Stripe.' },
-      { icon: '🖼️', title: 'Artistique', text: 'Personnalisable, originale et artistique.' },
-      { icon: '🎁', title: 'Cadeau idéal', text: 'Instantané, personnalisable, prêt à imprimer.' },
+      { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code scannable menant à votre page souvenir' },
+      { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, instantané.' },
+      { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois.' },
+      { icon: '💎', title: 'Valeur', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
     ]
   return (
     <section>
