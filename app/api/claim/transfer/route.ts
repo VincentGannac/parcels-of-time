@@ -21,10 +21,21 @@ function normCode5(s: string) {
   return /^[A-Z0-9]{5}$/.test(x) ? x : null
 }
 
+async function hasColumn(client: any, table: string, col: string) {
+  const { rows } = await client.query(
+    `select 1
+       from information_schema.columns
+      where table_schema='public' and table_name=$1 and column_name=$2
+      limit 1`,
+    [table, col]
+  )
+  return !!rows.length
+}
+
 export async function POST(req: Request) {
   const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
 
-  // Auth requise (le receveur doit être connecté)
+  // Auth: le receveur doit être connecté
   const sess = await readSession()
   if (!sess?.ownerId) {
     return NextResponse.json({ ok: false, message: 'auth_required' }, { status: 401 })
@@ -65,7 +76,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, message: 'hash_mismatch' }, { status: 400 })
     }
 
-    // 2) Vérifie le token actif (non révoqué, non utilisé) et le verrouille
+    // 2) Vérifie le token actif (non révoqué, non utilisé) et verrouille la ligne
     const codeHash = sha256hex(code)
     const { rows: toks } = await client.query(
       `select id, used_at, is_revoked
@@ -88,24 +99,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, message: 'code_used' }, { status: 400 })
     }
 
-    // 3) Consomme le token + transfert de propriété au receveur connecté
+    // 3) Consomme le token
     await client.query(
       `update claim_transfer_tokens set used_at=now() where id=$1`,
       [tok.id]
     )
-    await client.query(
-      `update claims set owner_id=$1, updated_at=now() where id=$2`,
-      [sess.ownerId, claimId]
-    )
+
+    // 4) Transfert de propriété au receveur connecté
+    const hasUpdatedAt = await hasColumn(client, 'claims', 'updated_at')
+    if (hasUpdatedAt) {
+      await client.query(
+        `update claims set owner_id=$1, updated_at=now() where id=$2`,
+        [sess.ownerId, claimId]
+      )
+    } else {
+      await client.query(
+        `update claims set owner_id=$1 where id=$2`,
+        [sess.ownerId, claimId]
+      )
+    }
 
     await client.query('COMMIT')
 
-    // Redirection vers le compte du receveur
     const accountUrl = `/${locale}/account`
     return NextResponse.json({ ok: true, account_url: accountUrl })
   } catch (e: any) {
     try { await client.query('ROLLBACK') } catch {}
-    console.error('[claim/transfer] error:', e?.message || e)
+    console.error('[claim/transfer] error:', e?.message || e, e?.stack)
+    // Réponse générique côté client
     return NextResponse.json({ ok: false, message: 'server_error' }, { status: 500 })
   } finally {
     client.release()
