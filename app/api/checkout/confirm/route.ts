@@ -1,4 +1,4 @@
-//app/api/checkout/confirm/route.ts
+// app/api/checkout/confirm/route.ts
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -246,31 +246,58 @@ export async function GET(req: Request) {
 
       await client.query('COMMIT');
 
-  // email après commit (non bloquant)
-  const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`;
-  const pdfUrl = `${base}/api/cert/${encodeURIComponent(ts)}`;
-  
-  import('@/lib/email').then(async ({ sendClaimReceiptEmail }) => {
-        const { rows } = await (await import('@/lib/db')).pool.query(
+      // email après commit (non bloquant) — AVEC code + instructions
+      try {
+        const ymd = ts.slice(0, 10)
+        const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`
+        const pdfUrl    = `${base}/api/cert/${encodeURIComponent(ymd)}.pdf`
+
+        // Récupère un pseudo "compte" si dispo
+        const { rows } = await pool.query(
           `select username from owners where email=$1 limit 1`, [email]
         )
         const accountName = rows[0]?.username || null
+
+        // ✅ crée un code de transfert (révoque un éventuel précédent non utilisé)
+        const { createTransferTokenForClaim } = await import('@/lib/gift/transfer')
+        const { rows: idRow } = await pool.query(
+          `select id, cert_hash from claims where ts=$1::timestamptz limit 1`,
+          [ts]
+        )
+        const claimId: string = String(idRow[0].id)
+        const certHash: string = String(idRow[0].cert_hash)
+
+        const { code } = await createTransferTokenForClaim(claimId)
+
+        // Liens “récupération cadeau” + PDF d’instructions
+        const recoverUrl = `${base}/${locale}/gift/recover?claim_id=${encodeURIComponent(claimId)}&cert_hash=${encodeURIComponent(certHash)}`
+        const instructionsPdfUrl = `${base}/api/claim/${encodeURIComponent(claimId)}/transfer-guide.pdf?code=${encodeURIComponent(code)}&locale=${locale}`
+
+        const { sendClaimReceiptEmail } = await import('@/lib/email')
         await sendClaimReceiptEmail({
           to: email,
           ts,
-          displayName: accountName,   // 👈 pseudo compte immuable
+          displayName: accountName,
           publicUrl,
-        certUrl: pdfUrl
-      })
-      })
+          certUrl: pdfUrl,
+          transfer: {
+            claimId,
+            hash: certHash,
+            code,                       // 👈 le fameux code à 5 caractères
+            recoverUrl,
+            instructionsPdfUrl,
+            locale: locale as 'fr' | 'en'
+          }
+        })
+      } catch (e) {
+        console.warn('[confirm] email warn:', (e as any)?.message || e)
+      }
 
     } catch (e:any) {
       try { await pool.query('ROLLBACK') } catch {}
       console.error('[confirm] db_error:', e?.message || e);
       // On laisse le webhook Stripe compléter si besoin
     }
-
-
 
     // Redirection finale
     {

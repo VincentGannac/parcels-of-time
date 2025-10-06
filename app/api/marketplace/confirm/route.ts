@@ -26,7 +26,6 @@ function normIsoDay(s: string): string | null {
   return d.toISOString()
 }
 
-
 async function tableExists(client: any, table: string) {
   const { rows } = await client.query(`select to_regclass($1) as ok`, [`public.${table}`])
   return !!rows[0]?.ok
@@ -169,8 +168,6 @@ export async function GET(req: Request) {
       }
       buyerOwnerId = buyerId
 
-
-
       // 4) Appliquer modifs “comme Edit/confirm” + transfert owner
       const updates = normalizeClaimUpdates(P) // titre, message, style, couleurs, flags…
       await applyClaimUpdatesLikeEdit(client, tsISO, updates, { newOwnerId: buyerOwnerId })
@@ -189,7 +186,7 @@ export async function GET(req: Request) {
         vals
       )
 
-             // 4ter) Image custom : temp -> persist si style=custom
+      // 4ter) Image custom : temp -> persist si style=custom
       const styleLower = String(updates.cert_style || '').toLowerCase()
       if (styleLower === 'custom') {
         const hasPersist = await tableExists(client, 'claim_custom_bg')
@@ -229,7 +226,6 @@ export async function GET(req: Request) {
         }
       }
 
-
       // 4quater) Registre public si demandé
       if (updates.public_registry === true) {
         await client.query(
@@ -257,7 +253,8 @@ export async function GET(req: Request) {
       }
 
       // 6) Journal secondaire (si table présente)
-      if (hasSecondary) {
+      const hasSecondary2 = await tableExists(client, 'secondary_sales')
+      if (hasSecondary2) {
         const hasGross = await hasColumn(client, 'secondary_sales', 'gross_cents')
         const hasPrice = await hasColumn(client, 'secondary_sales', 'price_cents')
         const currency = String(L.currency || 'EUR')
@@ -283,11 +280,11 @@ export async function GET(req: Request) {
 
       await client.query('COMMIT')
 
-      // 7) Email best-effort
+      // 7) Email best-effort (SECONDARY)
       try {
         const ymd = tsISO.slice(0, 10)
         const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}.pdf`
-        const publicUrl = `${base}/${finalLocale}/m/${encodeURIComponent(ymd)}`        
+        const publicUrl = `${base}/${finalLocale}/m/${encodeURIComponent(ymd)}`
         import('@/lib/email').then(async ({ sendSecondarySaleEmails }) => {
           await sendSecondarySaleEmails({
             ts: ymd, buyerEmail, pdfUrl, publicUrl, sessionId: sid
