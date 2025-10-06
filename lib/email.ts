@@ -23,45 +23,123 @@ export async function sendClaimReceiptEmail(input: {
   displayName?: string | null
   publicUrl: string
   certUrl: string
+  transfer?: {
+    claimId: string
+    hash: string
+    code?: string
+    recoverUrl: string
+    instructionsPdfUrl?: string
+    locale: 'fr'|'en'
+  }
 }) {
+  const { to, ts, displayName, publicUrl, certUrl, transfer } = input
+  const isFR = transfer?.locale === 'fr'
+
+  const subject = isFR
+    ? `Votre certificat — ${ts}`
+    : `Your certificate — ${ts}`
+
+  const giftBlockTxt = transfer ? (
+    isFR
+      ? [
+          '',
+          '——',
+          '🎁 Pour offrir (transfert de propriété) :',
+          `ID certificat : ${transfer.claimId}`,
+          `SHA-256 : ${transfer.hash}`,
+          transfer.code ? `Code (à usage unique) : ${transfer.code}` : 'Code : (créé)',
+          `Récupérer un cadeau : ${transfer.recoverUrl}`,
+          transfer.instructionsPdfUrl ? `PDF d’instructions : ${transfer.instructionsPdfUrl}` : '',
+        ].join('\n')
+      : [
+          '',
+          '——',
+          '🎁 To gift (ownership transfer):',
+          `Certificate ID: ${transfer.claimId}`,
+          `SHA-256: ${transfer.hash}`,
+          transfer.code ? `Code (one-time): ${transfer.code}` : 'Code: (created)',
+          `Recover a gift: ${transfer.recoverUrl}`,
+          transfer.instructionsPdfUrl ? `Instructions PDF: ${transfer.instructionsPdfUrl}` : '',
+        ].join('\n')
+  ) : ''
+
+  const text = [
+    isFR
+      ? `Bonjour${displayName ? ' ' + displayName : ''},`
+      : `Hi${displayName ? ' ' + displayName : ''},`,
+    isFR
+      ? `Merci pour votre achat. Vous détenez désormais le certificat du ${ts}.`
+      : `Thanks for your purchase. You now own the certificate for ${ts}.`,
+    `Page publique : ${publicUrl}`,
+    `PDF du certificat : ${certUrl}`,
+    giftBlockTxt,
+    '',
+    '— Parcels of Time',
+  ].join('\n')
+
+  const giftBlockHtml = transfer ? (
+    isFR
+      ? `
+        <hr />
+        <p>🎁 <strong>Pour offrir (transfert de propriété)</strong></p>
+        <ul>
+          <li><strong>ID certificat</strong> : ${transfer.claimId}</li>
+          <li><strong>SHA-256</strong> : ${transfer.hash}</li>
+          ${transfer.code ? `<li><strong>Code (à usage unique)</strong> : ${transfer.code}</li>` : ''}
+          <li><a href="${transfer.recoverUrl}">Récupérer un cadeau</a></li>
+          ${transfer.instructionsPdfUrl ? `<li><a href="${transfer.instructionsPdfUrl}">PDF d’instructions</a></li>` : ''}
+        </ul>
+      `
+      : `
+        <hr />
+        <p>🎁 <strong>To gift (ownership transfer)</strong></p>
+        <ul>
+          <li><strong>Certificate ID</strong>: ${transfer.claimId}</li>
+          <li><strong>SHA-256</strong>: ${transfer.hash}</li>
+          ${transfer.code ? `<li><strong>Code (one-time)</strong>: ${transfer.code}</li>` : ''}
+          <li><a href="${transfer.recoverUrl}">Recover a gift</a></li>
+          ${transfer.instructionsPdfUrl ? `<li><a href="${transfer.instructionsPdfUrl}">Instructions PDF</a></li>` : ''}
+        </ul>
+      `
+  ) : ''
+
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Roboto,Arial">
+      <p>${isFR ? 'Bonjour' : 'Hi'}${displayName ? ' ' + displayName : ''},</p>
+      <p>${isFR
+        ? `Merci pour votre achat. Vous détenez désormais le certificat du <strong>${ts}</strong>.`
+        : `Thanks for your purchase. You now own the certificate for <strong>${ts}</strong>.`}
+      </p>
+      <p>
+        <a href="${publicUrl}">${isFR ? 'Page publique' : 'Public page'}</a>
+        &nbsp;·&nbsp;
+        <a href="${certUrl}">${isFR ? 'PDF du certificat' : 'Certificate (PDF)'}</a>
+      </p>
+      ${giftBlockHtml}
+      <p>— Parcels of Time</p>
+    </div>
+  `.trim()
+
   if (!resend) {
-    console.log('[email][receipt] (dry-run)', input)
+    console.log('[email][receipt] (dry-run)', { to, ts, publicUrl, certUrl, transfer })
     return
   }
-
-  const { to, ts, displayName, publicUrl, certUrl } = input
 
   try {
     await resend.emails.send({
       from: FROM,
       to,
-      replyTo: REPLY_TO,           // 👈 camelCase
+      replyTo: REPLY_TO,
       bcc: resolveBcc(to),
-      subject: `Your minute — ${ts}`,
-      text: [
-        `Hi${displayName ? ' ' + displayName : ''},`,
-        `Thanks for your purchase. You now own the symbolic claim to ${ts}.`,
-        `Public page: ${publicUrl}`,
-        `Certificate (PDF): ${certUrl}`,
-        `— Parcels of Time`,
-      ].join('\n'),
-      html: `
-        <div style="font-family:system-ui,Segoe UI,Roboto,Arial">
-          <p>Hi${displayName ? ' ' + displayName : ''},</p>
-          <p>Thanks for your purchase. You now own the symbolic claim to <strong>${ts}</strong>.</p>
-          <p>
-            <a href="${publicUrl}">Public page</a>
-            &nbsp;·&nbsp;
-            <a href="${certUrl}">Certificate (PDF)</a>
-          </p>
-          <p>— Parcels of Time</p>
-        </div>
-      `,
+      subject,
+      text,
+      html,
     })
   } catch (e) {
     console.error('[email][receipt] send error', e)
   }
 }
+
 
 export async function sendSecondarySaleEmails(opts: {
   ts: string,

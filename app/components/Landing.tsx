@@ -293,6 +293,9 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
               <NavPill href={href('/account')} emphasis="outline" ariaLabel="Mon Compte">
                 👤 <span>Mon Compte</span>
               </NavPill>
+              <Button href={href('/gift/recover')} variant="secondary" ariaLabel="Récupérer un cadeau">
+              🎫 { /* FR */ } Récupérer
+              </Button>
 
               {/* Actions */}
               <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>
@@ -365,6 +368,9 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
             <NavPill href={href('/account')} emphasis="outline" ariaLabel="Mon Compte">
               👤 Mon Compte
             </NavPill>
+            <Button href={href('/gift/recover')} variant="secondary">
+            🎫 Récupérer
+          </Button>
             <Button href={href('/claim?gift=1')} variant="secondary">
               🎁 {t('cta.gift')}
             </Button>
@@ -630,7 +636,7 @@ function RegistryShowcase() {
       { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code scannable menant à votre page souvenir' },
       { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, instantané.' },
       { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois.' },
-      { icon: '💎', title: 'Valeur', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
+      { icon: '💎', title: 'Collector', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
     ]
   return (
     <section>

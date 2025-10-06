@@ -153,6 +153,13 @@ async function writeClaimFromSession(session: Stripe.Checkout.Session) {
       [hash, cert_url, tsISO]
     )
 
+    const { rows: idRows } = await client.query(
+      `select id, cert_hash from claims where ts=$1::timestamptz`,
+      [tsISO]
+    )
+    const claim_id = String(idRows[0].id)
+    const cert_hash = String(idRows[0].cert_hash)
+
     // publication registre public
     if (wantsPublic) {
       await client.query(
@@ -165,7 +172,7 @@ async function writeClaimFromSession(session: Stripe.Checkout.Session) {
 
     await client.query('COMMIT')
 
-    return { tsISO, email, display_name, cert_url }
+return { tsISO, email, display_name, cert_url, claim_id, cert_hash }
   } catch (e) {
     try { await client.query('ROLLBACK') } catch {}
     throw e
@@ -233,23 +240,46 @@ export async function POST(req: Request) {
         // Paiement primaire
         const res = await writeClaimFromSession(session)
 
+        // 🎁 Crée le code de transfert
+        let transferCode: string | null = null
+        try {
+          const { createTransferTokenForClaim } = await import('@/lib/gift/transfer')
+          const t = await createTransferTokenForClaim(res.claim_id)
+          transferCode = t.code
+        } catch (e) {
+          console.warn('[webhook] createTransferTokenForClaim failed:', (e as any)?.message || e)
+        }
+        
         // Email de secours
         try {
           const base = process.env.NEXT_PUBLIC_BASE_URL || ''
-          if (base && res?.tsISO && res?.email) {
-            const guessedLocale =
-              String(session.metadata?.locale || '').toLowerCase().startsWith('fr') ? 'fr' : 'en'
-            const publicUrl = `${base}/${guessedLocale}/m/${encodeURIComponent(res.tsISO)}`
-            const pdfUrl = `${base}/api/cert/${encodeURIComponent(res.tsISO.slice(0,10))}`
-            const { sendClaimReceiptEmail } = await import('@/lib/email')
-            await sendClaimReceiptEmail({
-              to: res.email,
-              ts: res.tsISO,
-              displayName: res.display_name || null,
-              publicUrl,
-              certUrl: pdfUrl,
-            })
-          }
+          const guessedLocale =
+            String(session.metadata?.locale || '').toLowerCase().startsWith('fr') ? 'fr' : 'en'
+          const publicUrl = `${base}/${guessedLocale}/m/${encodeURIComponent(res.tsISO)}`
+          const pdfUrl    = `${base}/api/cert/${encodeURIComponent(res.tsISO.slice(0,10))}`
+          
+          const recoverPrefill = `${base}/${guessedLocale}/gift/recover?claim_id=${encodeURIComponent(res.claim_id)}&cert_hash=${encodeURIComponent(res.cert_hash)}`
+          const instructionsPdf = transferCode
+            ? `${base}/api/claim/${encodeURIComponent(res.claim_id)}/transfer-guide.pdf?code=${encodeURIComponent(transferCode)}&locale=${guessedLocale}`
+            : null
+          
+          const { sendClaimReceiptEmail } = await import('@/lib/email')
+          await sendClaimReceiptEmail({
+            to: res.email,
+            ts: res.tsISO,
+            displayName: res.display_name || null,
+            publicUrl,
+            certUrl: pdfUrl,
+            // 👇 nouveau bloc (optionnel)
+            transfer: {
+              claimId: res.claim_id,
+              hash: res.cert_hash,
+              code: transferCode || undefined,
+              recoverUrl: recoverPrefill,
+              instructionsPdfUrl: instructionsPdf || undefined,
+              locale: guessedLocale as 'fr'|'en'
+            }
+          })
         } catch (e) {
           console.warn('[webhook] email warn:', (e as any)?.message || e)
         }

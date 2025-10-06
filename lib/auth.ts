@@ -325,3 +325,14 @@ export async function debugSessionSnapshot(): Promise<DebugSnapshot> {
     }
   }
 }
+
+// lib/auth.ts (ajoute ceci tout en bas, et exporte)
+export async function getAuthOwnerId(_req?: Request): Promise<string | null> {
+  try {
+    const sess = await readSession()
+    return sess?.ownerId ?? null
+  } catch {
+    return null
+  }
+}
+
