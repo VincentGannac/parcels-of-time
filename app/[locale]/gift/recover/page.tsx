@@ -7,20 +7,16 @@ import { readSession } from '@/lib/auth'
 import RecoverGiftForm from './RecoverGiftForm'
 
 type Params = { locale: 'fr' | 'en' }
+type SP = Record<string, string | undefined>
 
-export default async function Page({
-  params,
-  searchParams,
-}: {
-  params: Params
-  searchParams: Record<string, string | undefined>
-}) {
-  const { locale } = params
-  const sp = searchParams || {}
+export default async function Page({ params, searchParams }: any) {
+  const { locale } = (await params) as Params
+  const sp = ((await searchParams) || {}) as SP
   const sess = await readSession()
 
   if (!sess) {
-    const qs = sp?.claim_id || sp?.cert_hash ? `?${new URLSearchParams(sp as Record<string, string>).toString()}` : ''
+    const entries = Object.entries(sp).filter(([, v]) => v != null && v !== '')
+    const qs = entries.length ? `?${new URLSearchParams(entries as [string, string][]).toString()}` : ''
     const nextPath = `/${locale}/gift/recover${qs}`
     redirect(`/${locale}/login?next=${encodeURIComponent(nextPath)}`)
   }
@@ -31,11 +27,7 @@ export default async function Page({
         <a href={`/${locale}/account`} style={{ textDecoration: 'none', color: '#E6EAF2', opacity: 0.85 }}>
           &larr; {locale === 'fr' ? 'Mon compte' : 'My account'}
         </a>
-        <RecoverGiftForm
-          locale={locale}
-          preClaim={sp?.claim_id ?? ''}
-          preHash={sp?.cert_hash ?? ''}
-        />
+        <RecoverGiftForm locale={locale} preClaim={sp?.claim_id ?? ''} preHash={sp?.cert_hash ?? ''} />
       </section>
     </main>
   )
