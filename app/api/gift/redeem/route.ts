@@ -1,4 +1,4 @@
-//api/gift/redeem
+//app/api/gift/redeem/route.ts
 export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'

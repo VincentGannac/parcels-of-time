@@ -1,4 +1,4 @@
-//lib/gift/transfer.ts
+// lib/gift/transfer.ts
 import crypto from 'node:crypto'
 import { pool } from '@/lib/db'
 
@@ -14,7 +14,7 @@ function randomCode5(): string {
 
 /** Crée/remplace le jeton ACTIF (révoque l’éventuel précédent non utilisé) */
 export async function createTransferTokenForClaim(claimId: string) {
-  const code = randomCode5()
+  const code = randomCode5() // déjà uppercase
   const codeHash = sha256hex(code)
 
   const client = await pool.connect()
@@ -32,6 +32,46 @@ export async function createTransferTokenForClaim(claimId: string) {
     )
     await client.query('COMMIT')
     return { code }
+  } catch (e) {
+    try { await client.query('ROLLBACK') } catch {}
+    throw e
+  } finally {
+    client.release()
+  }
+}
+
+/** (Optionnel) Vérifie + consomme atomiquement un token pour un claim */
+export async function verifyAndConsumeTransferToken(claimId: string, code5: string) {
+  const code = String(code5 || '').trim().toUpperCase()
+  if (!/^[A-Z0-9]{5}$/.test(code)) return { ok: false as const, reason: 'bad_code' }
+  const codeHash = sha256hex(code)
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const { rows } = await client.query(
+      `select id, is_revoked, used_at
+         from claim_transfer_tokens
+        where claim_id=$1 and code_hash=$2
+        for update`,
+      [claimId, codeHash]
+    )
+    if (!rows.length) {
+      await client.query('ROLLBACK')
+      return { ok: false as const, reason: 'invalid_code' }
+    }
+    const t = rows[0]
+    if (t.is_revoked) {
+      await client.query('ROLLBACK')
+      return { ok: false as const, reason: 'code_revoked' }
+    }
+    if (t.used_at) {
+      await client.query('ROLLBACK')
+      return { ok: false as const, reason: 'code_used' }
+    }
+    await client.query(`update claim_transfer_tokens set used_at=now() where id=$1`, [t.id])
+    await client.query('COMMIT')
+    return { ok: true as const }
   } catch (e) {
     try { await client.query('ROLLBACK') } catch {}
     throw e

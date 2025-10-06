@@ -1,146 +1,113 @@
+// app/api/claim/transfer/route.ts
 export const runtime = 'nodejs'
+
 import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { pool } from '@/lib/db'
-import { getAuthOwnerId } from '@/lib/auth'
-import { ClaimTransferRequestSchema, ClaimTransferResponseSchema } from '@/lib/schemas/gift'
+import { readSession } from '@/lib/auth'
 
-const sha256hex = (s: string) => crypto.createHash('sha256').update(s, 'utf8').digest('hex')
+function sha256hex(s: string) {
+  return crypto.createHash('sha256').update(s, 'utf8').digest('hex')
+}
+
+function isUuid(s: string) {
+  return /^[0-9a-fA-F-]{36}$/.test(s || '')
+}
+function isHex64(s: string) {
+  return /^[0-9a-f]{64}$/.test((s || '').toLowerCase())
+}
+function normCode5(s: string) {
+  const x = String(s || '').trim().toUpperCase()
+  return /^[A-Z0-9]{5}$/.test(x) ? x : null
+}
 
 export async function POST(req: Request) {
+  const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
+
+  // Auth requise (le receveur doit être connecté)
+  const sess = await readSession()
+  if (!sess?.ownerId) {
+    return NextResponse.json({ ok: false, message: 'auth_required' }, { status: 401 })
+  }
+
+  let body: any
   try {
-    const meOwnerId = await getAuthOwnerId(req)
-    if (!meOwnerId) {
-      return NextResponse.json(
-        { ok:false, code:'unauthorized', message:'Login required' },
-        { status: 401 }
-      )
-    }
-
-    const body = await req.json().catch(() => null)
-    const parsed = ClaimTransferRequestSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json(
-        { ok:false, code:'server_error', message:'Bad payload' },
-        { status: 400 }
-      )
-    }
-    const { claim_id, cert_hash, code, locale } = parsed.data
-    const codeHash = sha256hex(code.trim().toUpperCase())
-
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-
-      // 1) Lock claim
-      const { rows: claims } = await client.query(
-        `select id, owner_id, cert_hash, ts
-           from claims
-          where id = $1 and cert_hash = $2
-          for update`,
-        [claim_id, cert_hash]
-      )
-      const claim = claims[0]
-      if (!claim) {
-        await client.query('ROLLBACK')
-        return NextResponse.json(
-          { ok:false, code:'not_found', message:'Certificate not found' },
-          { status: 404 }
-        )
-      }
-
-      // 2) Lock token
-      const { rows: tokens } = await client.query(
-        `select id, used_at, is_revoked
-           from claim_transfer_tokens
-          where claim_id = $1 and code_hash = $2
-          for update`,
-        [claim.id, codeHash]
-      )
-      const token = tokens[0]
-      if (!token) {
-        await client.query('ROLLBACK')
-        return NextResponse.json(
-          { ok:false, code:'invalid_code', message:'Invalid transfer code' },
-          { status: 400 }
-        )
-      }
-      if (token.is_revoked) {
-        await client.query('ROLLBACK')
-        return NextResponse.json(
-          { ok:false, code:'revoked', message:'Transfer code revoked' },
-          { status: 403 }
-        )
-      }
-      if (token.used_at) {
-        await client.query('ROLLBACK')
-        return NextResponse.json(
-          { ok:false, code:'already_used', message:'Transfer code already used' },
-          { status: 409 }
-        )
-      }
-
-      const fromOwnerId = String(claim.owner_id)
-      const toOwnerId   = String(meOwnerId)
-
-      // 3) Transfert (si pas déjà le propriétaire)
-      if (fromOwnerId !== toOwnerId) {
-        await client.query(
-          `update claims set owner_id = $1 where id = $2`,
-          [toOwnerId, claim.id]
-        )
-
-        // 3.b Annuler une annonce active éventuelle
-        await client.query(
-          `update listings
-              set status = 'canceled'
-            where ts = $1::timestamptz
-              and status = 'active'`,
-          [claim.ts]
-        )
-      }
-
-      // 4) Marquer token utilisé + journal
-      await client.query(
-        `update claim_transfer_tokens
-            set used_at = now(), used_by_owner_id = $1
-          where id = $2`,
-        [toOwnerId, token.id]
-      )
-      await client.query(
-        `insert into claim_transfers
-           (claim_id, from_owner_id, to_owner_id, token_id, ip, ua)
-         values ($1,$2,$3,$4,$5,$6)`,
-        [
-          claim.id,
-          fromOwnerId,
-          toOwnerId,
-          token.id,
-          (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || null,
-          req.headers.get('user-agent') || null
-        ]
-      )
-
-      await client.query('COMMIT')
-
-      const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
-      const accountUrl = `${base}/${locale || 'en'}/account`
-      const payload = { ok: true as const, account_url: accountUrl }
-      const out = ClaimTransferResponseSchema.parse(payload)
-      return NextResponse.json(out)
-    } catch (e) {
-      try { await pool.query('ROLLBACK') } catch {}
-      return NextResponse.json(
-        { ok:false, code:'server_error', message:'Server error' },
-        { status: 500 }
-      )
-    } finally {
-      client.release()
-    }
+    body = await req.json()
   } catch {
-    return NextResponse.json(
-      { ok:false, code:'server_error', message:'Server error' },
-      { status: 500 }
+    return NextResponse.json({ ok: false, message: 'bad_payload' }, { status: 400 })
+  }
+
+  const claimId = String(body?.claim_id || '').trim()
+  const certHash = String(body?.cert_hash || '').trim().toLowerCase()
+  const locale = (String(body?.locale || 'fr').toLowerCase() === 'en') ? 'en' : 'fr'
+  const code = normCode5(String(body?.code || ''))
+
+  if (!isUuid(claimId) || !isHex64(certHash) || !code) {
+    return NextResponse.json({ ok: false, message: 'bad_input' }, { status: 400 })
+  }
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+
+    // 1) Vérifie le claim + hash
+    const { rows: crows } = await client.query(
+      `select id, owner_id, cert_hash from claims where id=$1 limit 1`,
+      [claimId]
     )
+    if (!crows.length) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ ok: false, message: 'claim_not_found' }, { status: 404 })
+    }
+    const dbHash = String(crows[0].cert_hash || '').toLowerCase()
+    if (dbHash !== certHash) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ ok: false, message: 'hash_mismatch' }, { status: 400 })
+    }
+
+    // 2) Vérifie le token actif (non révoqué, non utilisé) et le verrouille
+    const codeHash = sha256hex(code)
+    const { rows: toks } = await client.query(
+      `select id, used_at, is_revoked
+         from claim_transfer_tokens
+        where claim_id=$1 and code_hash=$2
+        for update`,
+      [claimId, codeHash]
+    )
+    if (!toks.length) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ ok: false, message: 'invalid_code' }, { status: 400 })
+    }
+    const tok = toks[0]
+    if (tok.is_revoked) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ ok: false, message: 'code_revoked' }, { status: 400 })
+    }
+    if (tok.used_at) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ ok: false, message: 'code_used' }, { status: 400 })
+    }
+
+    // 3) Consomme le token + transfert de propriété au receveur connecté
+    await client.query(
+      `update claim_transfer_tokens set used_at=now() where id=$1`,
+      [tok.id]
+    )
+    await client.query(
+      `update claims set owner_id=$1, updated_at=now() where id=$2`,
+      [sess.ownerId, claimId]
+    )
+
+    await client.query('COMMIT')
+
+    // Redirection vers le compte du receveur
+    const accountUrl = `/${locale}/account`
+    return NextResponse.json({ ok: true, account_url: accountUrl })
+  } catch (e: any) {
+    try { await client.query('ROLLBACK') } catch {}
+    console.error('[claim/transfer] error:', e?.message || e)
+    return NextResponse.json({ ok: false, message: 'server_error' }, { status: 500 })
+  } finally {
+    client.release()
   }
 }

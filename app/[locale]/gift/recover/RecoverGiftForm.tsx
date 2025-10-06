@@ -1,3 +1,4 @@
+//app/[locale]/gift/recover/RecoverGiftForm.tsx
 'use client'
 
 type Locale = 'fr' | 'en'
