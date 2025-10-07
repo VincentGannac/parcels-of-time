@@ -3,24 +3,27 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import QRCode from 'qrcode'
-import PDFDocument from 'pdfkit'
 import { pool } from '@/lib/db'
 import crypto from 'node:crypto'
 
-function ymd(ts: string) {
-  try { const d = new Date(ts); if (!isNaN(d.getTime())) return d.toISOString().slice(0,10) } catch {}
-  return (ts || '').slice(0,10)
-}
 const sha256hex = (s: string) => crypto.createHash('sha256').update(s, 'utf8').digest('hex')
 
-// pas de type PDFKit ici (sécurité bundling)
+function ymd(ts: string) {
+  try {
+    const d = new Date(ts)
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+  } catch {}
+  return (ts || '').slice(0, 10)
+}
+
+// petite helper (évite soucis de bundling types)
 function font(doc: any, size: number, bold = false) {
   doc.font('Helvetica' + (bold ? '-Bold' : '')).fontSize(size)
 }
 
 export async function GET(req: Request, ctx: { params?: { id?: string } } | any) {
   try {
+    // --------- Params & sécurité ---------
     const id = String((ctx?.params?.id ?? '')).trim()
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
       return NextResponse.json({ error: 'bad_id' }, { status: 400 })
@@ -31,10 +34,11 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     const locale = (url.searchParams.get('locale') || 'fr').toLowerCase() === 'en' ? 'en' : 'fr'
 
     if (!/^[A-Z0-9]{5}$/.test(code)) {
+      // exiger un code **valide** pour empêcher l’énumération d’ID
       return NextResponse.json({ error: 'bad_code' }, { status: 400 })
     }
 
-    // Vérif sécurité: code actif pour CE claim
+    // Vérifie que le code appartient bien au claim & est actif
     const codeHash = sha256hex(code)
     {
       const { rows } = await pool.query(
@@ -52,7 +56,7 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
       }
     }
 
-    // Récupère claim
+    // --------- Récupération du claim ---------
     const { rows: crows } = await pool.query(
       `select c.id, c.cert_hash, c.ts
          from claims c
@@ -70,22 +74,36 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     const base = process.env.NEXT_PUBLIC_BASE_URL || url.origin
     const recoverUrl = `${base}/${locale}/gift/recover?claim_id=${encodeURIComponent(id)}&cert_hash=${encodeURIComponent(certHash)}`
 
-    // Génération QR robuste + fallback
-    let qrBuf: Buffer | null = null
-    try {
-      qrBuf = await QRCode.toBuffer(recoverUrl, { type: 'png', margin: 0, width: 320, errorCorrectionLevel: 'M' })
-    } catch (e) {
-      console.warn('[transfer-guide] QR generation failed:', (e as any)?.message || e)
-      qrBuf = null // on continue sans QR
+    // --------- Imports dynamiques robustes ---------
+    const QRModule: any = await import('qrcode').catch(() => null)
+    const QR = QRModule?.default || QRModule
+    const PDFModule: any = await import('pdfkit').catch(() => null)
+    const PDFDocument = PDFModule?.default || PDFModule
+    if (!QR || !PDFDocument) {
+      console.error('[transfer-guide] import error', { hasQR: !!QR, hasPDF: !!PDFDocument })
+      return NextResponse.json({ error: 'server_unavailable' }, { status: 503 })
     }
 
-    // PDF
+    // --------- Génération QR (avec fallback) ---------
+    let qrBuf: Buffer | null = null
+    try {
+      qrBuf = await QR.toBuffer(recoverUrl, {
+        type: 'png',
+        margin: 0,
+        width: 320,
+        errorCorrectionLevel: 'M',
+      })
+    } catch (e) {
+      console.warn('[transfer-guide] QR generation failed:', (e as any)?.message || e)
+      qrBuf = null
+    }
+
+    // --------- Construction PDF ---------
     const doc = new PDFDocument({ size: 'A4', margin: 56 })
     const chunks: Buffer[] = []
     doc.on('data', (c: Buffer) => chunks.push(c))
     const done = new Promise<void>((res) => doc.on('end', () => res()))
 
-    // Palette
     const gold = '#E4B73D'
     const ink = '#1A1F2A'
     const muted = '#6B7280'
@@ -102,7 +120,7 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     doc.text(locale === 'fr' ? `Certificat du ${day}` : `Certificate for ${day}`)
     doc.moveDown(1.0)
 
-    // Cartouche
+    // Cartouche intro
     doc.roundedRect(doc.x, doc.y, doc.page.width - doc.page.margins.left - doc.page.margins.right, 80, 8)
       .strokeColor('#E6EAF2').lineWidth(1).stroke()
     doc.save().translate(12, 12)
@@ -144,18 +162,17 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
       doc.text(s, { indent: 22 }); doc.moveDown(0.3)
     })
 
-    // QR + lien (avec fallback si embed PNG échoue)
+    // QR + lien (avec fallback si embed échoue)
     doc.moveDown(0.6)
     const qrSize = 110
-    let drewQR = false
+    let translated = false
     if (qrBuf) {
       try {
         const y0 = doc.y
         doc.image(qrBuf, doc.x, y0, { fit: [qrSize, qrSize] })
         doc.rect(doc.x, y0, qrSize, qrSize).strokeColor('#E6EAF2').lineWidth(1).stroke()
-        // placer le bloc lien à droite
         doc.translate(qrSize + 12, 0)
-        drewQR = true
+        translated = true
       } catch (e) {
         console.warn('[transfer-guide] PDF image embed failed:', (e as any)?.message || e)
       }
@@ -164,11 +181,9 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     font(doc, 11); doc.fillColor(ink).text(recoverUrl, {
       width: doc.page.width - doc.page.margins.right - doc.x,
       link: recoverUrl,
-      underline: true
+      underline: true,
     })
-    if (drewQR) {
-      doc.translate(-(qrSize + 12), 0)
-    }
+    if (translated) doc.translate(-(qrSize + 12), 0)
     doc.moveDown(0.8)
 
     // Champs
@@ -185,22 +200,17 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     drawField(labels.sha, certHash)
     drawField(labels.codeLabel, code)
 
-    // Note
+    // Note + à propos
     doc.moveDown(0.4)
     font(doc, 11); doc.fillColor(ink).text(labels.unique)
     doc.moveDown(0.8)
-
-    // À propos
     font(doc, 14, true); doc.fillColor(ink).text(locale === 'fr' ? 'À propos de Parcels of Time' : 'About Parcels of Time')
     font(doc, 11); doc.fillColor(ink).text(labels.about)
     doc.moveDown(0.8)
 
     // Footer
-    font(doc, 10); doc.fillColor(muted)
-    doc.text(locale === 'fr'
-      ? 'Besoin d’aide ? support@parcelsoftime.com'
-      : 'Need help? support@parcelsoftime.com'
-    )
+    font(doc, 10); doc.fillColor('#6B7280')
+    doc.text(locale === 'fr' ? 'Besoin d’aide ? support@parcelsoftime.com' : 'Need help? support@parcelsoftime.com')
 
     doc.end()
     await done
