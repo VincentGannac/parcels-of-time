@@ -7,7 +7,6 @@ import { pool } from '@/lib/db'
 import crypto from 'node:crypto'
 import { Buffer } from 'node:buffer'
 
-// Imports directs pour garantir l’inclusion
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import QRCode from 'qrcode'
 
@@ -129,23 +128,6 @@ function wrapLines(text: string, maxWidth: number, font: any, size: number) {
   return lines
 }
 
-// Petit pictogramme “cadeau” (pas d’émoji — 100% vectoriel)
-function drawGiftIcon(page: any, x: number, y: number, size: number, colors: { box: any; ribbon: any; stroke: any }) {
-  const w = size, h = size * 0.82
-  // boîte
-  page.drawRectangle({ x, y: y - h, width: w, height: h, color: colors.box, borderColor: colors.stroke, borderWidth: 1 })
-  // couvercle
-  page.drawRectangle({ x, y: y - h + h - 0.26 * h, width: w, height: 0.26 * h, color: colors.box, borderColor: colors.stroke, borderWidth: 1 })
-  // ruban vertical
-  page.drawRectangle({ x: x + w / 2 - w * 0.06, y: y - h, width: w * 0.12, height: h, color: colors.ribbon })
-  // ruban horizontal
-  page.drawRectangle({ x, y: y - h + (h - 0.26 * h) - 2, width: w, height: 4, color: colors.ribbon })
-  // nœud simple (deux petits carrés)
-  const b = w * 0.14
-  page.drawRectangle({ x: x + w/2 - b - 1, y: y - h + h - 0.26*h + 2, width: b, height: b, color: colors.ribbon })
-  page.drawRectangle({ x: x + w/2 + 1, y: y - h + h - 0.26*h + 2, width: b, height: b, color: colors.ribbon })
-}
-
 // ----------------- Handler -----------------
 export async function GET(req: Request, ctx: { params?: { id?: string } } | any) {
   const id = String((ctx?.params?.id ?? '')).trim()
@@ -233,12 +215,12 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
         page.drawText(t, { x, y: yy, size, font: usedFont, color: opts.color ?? ink })
         y = yy - size - 6
       }
-      const paragraph = (t: string, maxWidth: number, opts: { size?: number; font?: any; color?: any; leading?: number } = {}) => {
+      const paragraph = (t: string, x: number, maxWidth: number, opts: { size?: number; font?: any; color?: any; leading?: number } = {}) => {
         const size = opts.size ?? 12
         const usedFont = opts.font ?? font
         const leading = opts.leading ?? (size + 2)
         const lines = wrapLines(t, maxWidth, usedFont, size)
-        for (const ln of lines) { page.drawText(ln, { x: margin, y, size, font: usedFont, color: opts.color ?? ink }); y -= leading }
+        for (const ln of lines) { page.drawText(ln, { x, y, size, font: usedFont, color: opts.color ?? ink }); y -= leading }
       }
       const hr = (yy: number) => page.drawLine({ start: { x: margin, y: yy }, end: { x: width - margin, y: yy }, thickness: 1, color: border })
 
@@ -250,11 +232,8 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
       page.drawText(brand, { x: width - margin - bold.widthOfTextAtSize(brand, 16), y, size: 16, font: bold, color: ink })
       y -= 8
 
-      // Titre principal + pictogramme cadeau
+      // Titre principal
       text(locale === 'fr' ? 'Guide de récupération' : 'Recovery Guide', { size: 30, font: bold })
-      // icône cadeau à gauche du titre
-      drawGiftIcon(page, margin - 28, y + 30, 20, { box: goldSoft, ribbon: gold, stroke: gold })
-
       // Sous-titre date
       text(locale === 'fr' ? `Certificat du ${day}` : `Certificate for ${day}`, { size: 13, color: muted })
       y -= 4; hr(y); y -= 14
@@ -267,7 +246,7 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
         : `Scan the QR or open your Parcels of Time account, click “Recover”, then enter the passwords below.`
       const msgMax = width - 2*margin - 24
       y -= 18
-      paragraph(msg, msgMax, { size: 12, leading: 14 })
+      paragraph(msg, margin + 12, msgMax, { size: 12, leading: 14 })
       y = y - (bandH - 36) // remet en dessous du bandeau
 
       // Grille 60 / 40
@@ -286,70 +265,66 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
         page.drawText(locale === 'fr' ? 'Scanner pour ouvrir' : 'Scan to open', { x: qrX + 8, y: qrY - 20, size: 10, font, color: muted })
       }
 
-      // Colonne gauche : champs
+      // Colonne gauche : champs (labels AU-DESSUS des boxes, plus de recouvrement)
       const leftX = margin
       let leftY = y
-      const fieldBox = (label: string, draw: () => void, height: number) => {
+
+      const fieldBox = (label: string, height: number, drawContent: (bottom: number, top: number) => void) => {
+        // 1) Label
         page.drawText(label, { x: leftX, y: leftY, size: 10, font: bold, color: muted })
-        page.drawRectangle({ x: leftX, y: leftY - height + 6, width: leftW, height, borderColor: border, borderWidth: 1, color: rgb(1,1,1) })
-        draw()
-        leftY -= (height + 12)
+        // 2) Rectangle sous le label
+        const top = leftY - 12
+        const bottom = top - height
+        page.drawRectangle({ x: leftX, y: bottom, width: leftW, height, borderColor: border, borderWidth: 1, color: rgb(1,1,1) })
+        // 3) Contenu
+        drawContent(bottom, top)
+        // 4) Espace après
+        leftY = bottom - 14
       }
 
       // ID
-      fieldBox(locale === 'fr' ? 'ID du certificat' : 'Certificate ID', () => {
-        page.drawText(id || '—', { x: leftX + 10, y: leftY - 16, size: 12, font: bold, color: ink })
-      }, 40)
+      fieldBox(locale === 'fr' ? 'ID du certificat' : 'Certificate ID', 40, (bottom, top) => {
+        page.drawText(id || '—', { x: leftX + 10, y: top - 16, size: 12, font: bold, color: ink })
+      })
 
       // SHA (2 lignes monospaces fixes)
       const sha1 = certHash.slice(0, 32)
       const sha2 = certHash.slice(32, 64)
-      fieldBox('SHA-256', () => {
-        page.drawText(sha1 || '—', { x: leftX + 10, y: leftY - 16, size: 12, font: monoBold, color: ink })
-        if (sha2) page.drawText(sha2, { x: leftX + 10, y: leftY - 34, size: 12, font: monoBold, color: ink })
-      }, 52)
+      fieldBox('SHA-256', 52, (bottom, top) => {
+        page.drawText(sha1 || '—', { x: leftX + 10, y: top - 16, size: 12, font: monoBold, color: ink })
+        if (sha2) page.drawText(sha2, { x: leftX + 10, y: top - 34, size: 12, font: monoBold, color: ink })
+      })
 
-      // Code (gros + pictogramme cadeau à gauche du label)
-      // petit pictogramme à côté du label
-      drawGiftIcon(page, leftX - 24, leftY + 10, 16, { box: goldSoft, ribbon: gold, stroke: gold })
-      fieldBox(locale === 'fr' ? 'Code (5 caractères)' : '5-char code', () => {
+      // Code
+      fieldBox(locale === 'fr' ? 'Code (5 caractères)' : '5-char code', 48, (bottom, top) => {
         const big = code.split('').join('  ')
-        page.drawText(big, { x: leftX + 10, y: leftY - 20, size: 16, font: bold, color: ink })
-      }, 48)
+        page.drawText(big, { x: leftX + 10, y: top - 20, size: 16, font: bold, color: ink })
+      })
 
-      // À propos — Parcels of Time (explication concept)
-      y = Math.min(leftY, (y - 210)) - 8
+      // À propos — reformulé “cadeau”
+      y = Math.min(leftY, (y - 210)) - 10
       if (y < 160) y = 160
       hr(y); y -= 12
 
       text(locale === 'fr' ? 'À propos — Parcels of Time' : 'About — Parcels of Time', { size: 14, font: bold })
-      const bullets = (
-        locale === 'fr'
-          ? [
-              '• Édition unique : vous achetez la propriété symbolique d’une date (objet artistique, pas un droit juridique).',
-              '• Ce que vous recevez : certificat HD prêt à imprimer (PDF/JPG) avec QR vers page dédiée et empreinte d’intégrité SHA-256 imprimée.',
-              '• Personnalisation : titre, message, styles visuels et photo personnelle (contenu public modéré).',
-              '• Achat & cadeau : pour vous ou à offrir — livraison quasi instantanée par e-mail.',
-              '• Registre public : galerie d’art participatif, visibilité sous votre contrôle.',
-              '• Revente : marketplace intégrée (Stripe Connect, KYC). Commission 15 % (min. 1 €) ; virements opérés par Stripe.',
-              '• Sécurité & conformité : paiements sécurisés par Stripe ; aucune donnée de carte stockée.',
-            ]
-          : [
-              '• Single edition: symbolic ownership of a date (artistic object, not legal rights).',
-              '• You receive: HD certificate ready to print (PDF/JPG) with QR to a dedicated page and a printed SHA-256 integrity hash.',
-              '• Personalization: title, message, visual styles, personal photo (public content moderated).',
-              '• Purchase & gift: for yourself or to offer — near-instant email delivery.',
-              '• Public Registry: participatory gallery with full visibility control.',
-              '• Resale: built-in marketplace (Stripe Connect, KYC). 15% fee (min €1); payouts via Stripe.',
-              '• Security & compliance: Stripe payments; no card data stored.',
-            ]
-      )
+
+      const aboutFR = [
+        'Cette date vous a été offerte. Elle est désormais la vôtre — vous en êtes l’unique détenteur symbolique.',
+        'Votre certificat a déjà été personnalisé pour raconter cette histoire (titre, message, visuel). Il est prêt à être affiché, partagé ou imprimé.',
+        'Le QR ouvre votre page dédiée pour l’ajouter à votre compte. Laissez-la privée ou rendez-la visible au public quand vous le souhaitez.',
+        'L’empreinte d’intégrité SHA-256 imprimée ci-dessus permet de vérifier à tout moment l’authenticité de ce document.',
+        'Conservez-le comme on garde un faire-part précieux : une trace officielle du jour qui marque votre histoire.'
+      ]
+      const aboutEN = [
+        'This date was gifted to you. It is now yours — you are the unique symbolic holder.',
+        'Your certificate is already personalized to tell this story (title, message, visual). It’s ready to display, share, or print.',
+        'The QR opens your dedicated page so you can add it to your account. Keep it private or make it public whenever you wish.',
+        'The printed SHA-256 integrity fingerprint lets anyone verify the document’s authenticity at any time.',
+        'Keep it like a cherished announcement: an official trace of the day that marks your story.'
+      ]
+      const paras = locale === 'fr' ? aboutFR : aboutEN
       const pMax = width - 2*margin
-      for (const p of bullets) {
-        const lines = wrapLines(p, pMax, font, 11)
-        for (const ln of lines) { page.drawText(ln, { x: margin, y, size: 11, font, color: ink }); y -= 13 }
-        y -= 3
-      }
+      for (const p of paras) paragraph(p, margin, pMax, { size: 11, leading: 13 })
 
       y -= 6
       const help = locale === 'fr' ? 'Besoin d’aide ? support@parcelsoftime.com' : 'Need help? support@parcelsoftime.com'
