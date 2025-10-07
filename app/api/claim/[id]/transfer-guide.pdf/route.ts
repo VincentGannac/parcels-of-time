@@ -21,6 +21,22 @@ function font(doc: any, size: number, bold = false) {
   doc.font('Helvetica' + (bold ? '-Bold' : '')).fontSize(size)
 }
 
+// --- robust loaders: gèrent CJS/ESM et namespaces ---
+async function loadPDFKit(): Promise<any | null> {
+  try {
+    const m: any = await import('pdfkit')
+    const PDFDocument = m?.default?.PDFDocument || m?.PDFDocument || m?.default || m
+    return typeof PDFDocument === 'function' ? PDFDocument : null
+  } catch { return null }
+}
+async function loadQRCode(): Promise<any | null> {
+  try {
+    const m: any = await import('qrcode')
+    const QR = m?.default || m
+    return (QR && (QR.toBuffer || QR.toString)) ? QR : null
+  } catch { return null }
+}
+
 export async function GET(req: Request, ctx: { params?: { id?: string } } | any) {
   try {
     // --------- Params & sécurité ---------
@@ -30,8 +46,9 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     }
 
     const url = new URL(req.url)
-    const code = (url.searchParams.get('code') || '').toUpperCase().trim()
-    const locale = (url.searchParams.get('locale') || 'fr').toLowerCase() === 'en' ? 'en' : 'fr'
+    const rawCode = (url.searchParams.get('code') || '')
+    const code = rawCode.toUpperCase().trim()
+    const locale = ((url.searchParams.get('locale') || 'fr').toLowerCase() === 'en') ? 'en' : 'fr'
 
     if (!/^[A-Z0-9]{5}$/.test(code)) {
       // exiger un code **valide** pour empêcher l’énumération d’ID
@@ -75,27 +92,26 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     const recoverUrl = `${base}/${locale}/gift/recover?claim_id=${encodeURIComponent(id)}&cert_hash=${encodeURIComponent(certHash)}`
 
     // --------- Imports dynamiques robustes ---------
-    const QRModule: any = await import('qrcode').catch(() => null)
-    const QR = QRModule?.default || QRModule
-    const PDFModule: any = await import('pdfkit').catch(() => null)
-    const PDFDocument = PDFModule?.default || PDFModule
-    if (!QR || !PDFDocument) {
-      console.error('[transfer-guide] import error', { hasQR: !!QR, hasPDF: !!PDFDocument })
+    const [PDFDocument, QR] = await Promise.all([loadPDFKit(), loadQRCode()])
+    if (!PDFDocument) {
+      // dépendance non dispo dans l’environnement: renvoyer 503 explicite
       return NextResponse.json({ error: 'server_unavailable' }, { status: 503 })
     }
 
     // --------- Génération QR (avec fallback) ---------
     let qrBuf: Buffer | null = null
-    try {
-      qrBuf = await QR.toBuffer(recoverUrl, {
-        type: 'png',
-        margin: 0,
-        width: 320,
-        errorCorrectionLevel: 'M',
-      })
-    } catch (e) {
-      console.warn('[transfer-guide] QR generation failed:', (e as any)?.message || e)
-      qrBuf = null
+    if (QR) {
+      try {
+        qrBuf = await QR.toBuffer(recoverUrl, {
+          type: 'png',
+          margin: 0,
+          width: 320,
+          errorCorrectionLevel: 'M',
+        })
+      } catch (e) {
+        console.warn('[transfer-guide] QR generation failed:', (e as any)?.message || e)
+        qrBuf = null
+      }
     }
 
     // --------- Construction PDF ---------
@@ -136,8 +152,8 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
 
     // Étapes
     const steps = [
-      locale === 'fr' ? 'Ouvrez la page « Récupérer un cadeau ».' : 'Open the “Recover a gift” page.',
-      locale === 'fr' ? 'Cliquez sur « Récupérer ».' : 'Click “Recover”.',
+      locale === 'fr' ? 'Ouvrez la page « Récupérer un cadeau ».': 'Open the “Recover a gift” page.',
+      locale === 'fr' ? 'Cliquez sur « Récupérer ».': 'Click “Recover”.',
       locale === 'fr' ? 'Saisissez les informations suivantes :' : 'Enter the following information:',
     ]
     const labels = {
@@ -165,14 +181,14 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     // QR + lien (avec fallback si embed échoue)
     doc.moveDown(0.6)
     const qrSize = 110
-    let translated = false
     if (qrBuf) {
       try {
         const y0 = doc.y
+        doc.save()
         doc.image(qrBuf, doc.x, y0, { fit: [qrSize, qrSize] })
         doc.rect(doc.x, y0, qrSize, qrSize).strokeColor('#E6EAF2').lineWidth(1).stroke()
+        doc.restore()
         doc.translate(qrSize + 12, 0)
-        translated = true
       } catch (e) {
         console.warn('[transfer-guide] PDF image embed failed:', (e as any)?.message || e)
       }
@@ -183,7 +199,7 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
       link: recoverUrl,
       underline: true,
     })
-    if (translated) doc.translate(-(qrSize + 12), 0)
+    if (qrBuf) doc.translate(-(qrSize + 12), 0)
     doc.moveDown(0.8)
 
     // Champs
@@ -216,7 +232,8 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     await done
 
     const pdf = Buffer.concat(chunks)
-    return new NextResponse(pdf, {
+    // Utiliser Response natif (évite quelques surprises de sérialisation)
+    return new Response(pdf, {
       status: 200,
       headers: {
         'content-type': 'application/pdf',
