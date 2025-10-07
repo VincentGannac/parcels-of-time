@@ -15,8 +15,9 @@ function font(doc: any, size: number, bold = false) {
   doc.font('Helvetica' + (bold ? '-Bold' : '')).fontSize(size)
 }
 
-export async function GET(req: Request, ctx: { params: { id: string } }) {
-  const id = String(ctx.params.id || '').trim()
+// ✅ Correction: déstructurer le 2ᵉ argument pour respecter la signature attendue par Next 15
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const id = String(params.id || '').trim()
   if (!/^[0-9a-f-]{36}$/i.test(id)) {
     return NextResponse.json({ error: 'bad_id' }, { status: 400 })
   }
@@ -45,8 +46,10 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
   // Lien "Récupérer"
   const recoverUrl = `${base}/${locale}/gift/recover?claim_id=${encodeURIComponent(id)}&cert_hash=${encodeURIComponent(certHash)}`
 
-  // Génère QR
+  // Génère QR (et passe en Buffer pour pdfkit)
   const qrDataUrl = await QRCode.toDataURL(recoverUrl, { margin: 0, width: 320 })
+  const pngBase64 = qrDataUrl.split(',')[1] || ''
+  const qrBuf = Buffer.from(pngBase64, 'base64')
 
   // PDF
   const doc = new PDFDocument({ size: 'A4', margin: 56 })
@@ -115,7 +118,7 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
   doc.moveDown(0.6)
   const startY = doc.y
   const qrSize = 110
-  doc.image(qrDataUrl, doc.x, startY, { width: qrSize, height: qrSize })
+  doc.image(qrBuf, doc.x, startY, { width: qrSize, height: qrSize })
   doc.rect(doc.x, startY, qrSize, qrSize).strokeColor('#E6EAF2').lineWidth(1).stroke()
   doc.moveUp(1)
   doc.translate(qrSize + 12, 0)
