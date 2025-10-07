@@ -1,4 +1,4 @@
-//app/[locale]/gift/recover/RecoverGiftForm.tsx
+// app/[locale]/gift/recover/RecoverGiftForm.tsx
 'use client'
 
 type Locale = 'fr' | 'en'
@@ -7,6 +7,7 @@ function t(locale: Locale) {
     ? {
         h1: 'Récupérer un cadeau',
         subtitle: 'Entrez l’ID du certificat, son SHA-256 et le code à 5 caractères.',
+        selfNote: 'Vous ne pouvez pas transférer un certificat que vous possédez déjà.',
         fields: { claim_id: 'ID du certificat', cert_hash: 'SHA-256', code: 'Code à 5 caractères' },
         cta: 'Valider le transfert',
         done: 'Transfert réussi. Redirection…',
@@ -15,6 +16,7 @@ function t(locale: Locale) {
     : {
         h1: 'Recover a gift',
         subtitle: 'Enter the certificate ID, its SHA-256 and the 5-char code.',
+        selfNote: 'You can’t transfer a certificate you already own.',
         fields: { claim_id: 'Certificate ID', cert_hash: 'SHA-256', code: '5-char code' },
         cta: 'Confirm transfer',
         done: 'Transfer successful. Redirecting…',
@@ -73,6 +75,7 @@ export default function RecoverGiftForm({
     <>
       <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 36, margin: '10px 0 6px' }}>{i18n.h1}</h1>
       <p style={{ opacity: 0.8, marginTop: 0 }}>{i18n.subtitle}</p>
+      <p style={{ opacity: 0.7, margin: '6px 0 0', fontSize: 13 }}>{i18n.selfNote}</p>
 
       <form
         onSubmit={onSubmit}
