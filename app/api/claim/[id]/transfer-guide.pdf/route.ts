@@ -39,144 +39,153 @@ async function loadQRCode(): Promise<any | null> {
 }
 
 // ----------------- Fallback PDF "plain", zéro dépendance -----------------
-// Construit un petit PDF valide (Helvetica, texte seulement)
-function escapePdfString(s: string) {
-  return String(s)
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)')
-    .replace(/\r/g, '')
-}
-
-function renderPlainGuidePdf(args: {
-  locale: 'fr'|'en'
-  day: string
-  id: string
-  certHash: string
-  code: string
-  recoverUrl: string
-}): Uint8Array {
-  const { locale, day, id, certHash, code, recoverUrl } = args
-  const L = locale === 'fr'
-    ? {
-        title: '🎁 Guide de récupération',
-        subtitle: `Certificat du ${day}`,
-        link: 'Lien de récupération',
-        cid: 'ID du certificat',
-        sha: 'SHA-256',
-        codeLbl: 'Code (5 caractères)',
-        brand: 'Parcels of Time'
-      }
-    : {
-        title: '🎁 Recovery Guide',
-        subtitle: `Certificate for ${day}`,
-        link: 'Recovery link',
-        cid: 'Certificate ID',
-        sha: 'SHA-256',
-        codeLbl: '5-char code',
-        brand: 'Parcels of Time'
-      }
-
-  // Page A4
-  const W = 595.28, H = 841.89
-  // Petit contenu texte
-  const lines = [
-    { x: 50, y: 800, size: 16, text: L.brand, bold: true },
-    { x: 50, y: 770, size: 26, text: L.title, bold: true },
-    { x: 50, y: 745, size: 12, text: L.subtitle },
-
-    { x: 50, y: 705, size: 12, text: L.link, bold: true },
-    { x: 50, y: 688, size: 11, text: recoverUrl },
-
-    { x: 50, y: 655, size: 12, text: L.cid, bold: true },
-    { x: 50, y: 638, size: 11, text: id },
-
-    { x: 50, y: 608, size: 12, text: L.sha, bold: true },
-    { x: 50, y: 591, size: 10, text: certHash.slice(0, 64) },
-    { x: 50, y: 576, size: 10, text: certHash.slice(64) },
-
-    { x: 50, y: 546, size: 12, text: L.codeLbl, bold: true },
-    { x: 50, y: 529, size: 12, text: code },
-  ]
-
-  const objs: string[] = []
-  const offsets: number[] = []
-
-  // 1: Catalog
-  objs.push(`1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-`)
-
-  // 2: Pages
-  objs.push(`2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-`)
-
-  // 3: Page
-  objs.push(`3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}]
-   /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >>
-   /Contents 6 0 R
->>
-endobj
-`)
-
-  // 4: Helvetica (Regular)
-  objs.push(`4 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
-endobj
-`)
-
-  // 5: Helvetica-Bold
-  objs.push(`5 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
-endobj
-`)
-
-  // 6: Contents stream
-  const content = [
-    'BT',
-    ...lines.map(l => {
-      const fontRef = l.bold ? 'F2' : 'F1'
-      const txt = escapePdfString(l.text)
-      return `/${fontRef} ${l.size} Tf ${l.x} ${l.y} Td (${txt}) Tj`
-    }),
-    'ET',
-  ].join('\n')
-
-  const contentBytes = Buffer.from(content, 'utf8')
-  objs.push(`6 0 obj
-<< /Length ${contentBytes.length} >>
-stream
-${content}
-endstream
-endobj
-`)
-
-  // Concat + xref
-  let pdf = `%PDF-1.4\n`
-  offsets.push(pdf.length)
-  for (const obj of objs) {
-    pdf += obj
-    offsets.push(pdf.length)
+  // --- helpers fallback ---
+  function asciiSafe(s: string) {
+    // supprime diacritiques + tout ce qui n'est pas ASCII imprimable
+    return s
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\x20-\x7E]/g, '');
+  }
+  function escapePdfString(s: string) {
+    return asciiSafe(String(s))
+      .replace(/\\/g, '\\\\')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)')
+      .replace(/\r/g, '');
   }
 
-  const xrefStart = pdf.length
-  pdf += `xref\n0 ${objs.length + 1}\n`
-  pdf += `0000000000 65535 f \n`
-  let pos = 0
-  for (let i = 0; i < objs.length; i++) {
-    const off = (i === 0 ? offsets[0] : offsets[i]) // position de début de chaque obj
-    const s = String(off).padStart(10, '0')
-    pdf += `${s} 00000 n \n`
-    pos = off
-  }
-  pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`
+  function renderPlainGuidePdf(args: {
+    locale: 'fr'|'en'
+    day: string
+    id: string
+    certHash: string
+    code: string
+    recoverUrl: string
+  }): Uint8Array {
+    const { locale, day, id, certHash, code, recoverUrl } = args
+    const L = locale === 'fr'
+      ? {
+          title: 'Guide de recuperation',        // pas d’emoji
+          subtitle: `Certificat du ${day}`,
+          link: 'Lien de recuperation',
+          cid: 'ID du certificat',
+          sha: 'SHA-256',
+          codeLbl: 'Code (5 caracteres)',
+          brand: 'Parcels of Time'
+        }
+      : {
+          title: 'Recovery Guide',
+          subtitle: `Certificate for ${day}`,
+          link: 'Recovery link',
+          cid: 'Certificate ID',
+          sha: 'SHA-256',
+          codeLbl: '5-char code',
+          brand: 'Parcels of Time'
+        }
 
-  return new Uint8Array(Buffer.from(pdf, 'utf8'))
-}
+    const W = 595.28, H = 841.89
+    const lines = [
+      { x: 50, y: 800, size: 16, text: L.brand, bold: true },
+      { x: 50, y: 770, size: 26, text: L.title, bold: true },
+      { x: 50, y: 745, size: 12, text: L.subtitle },
+
+      { x: 50, y: 705, size: 12, text: L.link, bold: true },
+      { x: 50, y: 688, size: 11, text: recoverUrl },
+
+      { x: 50, y: 655, size: 12, text: L.cid, bold: true },
+      { x: 50, y: 638, size: 11, text: id },
+
+      { x: 50, y: 608, size: 12, text: L.sha, bold: true },
+      { x: 50, y: 591, size: 10, text: certHash.slice(0, 64) },
+      { x: 50, y: 576, size: 10, text: certHash.slice(64) },
+
+      { x: 50, y: 546, size: 12, text: L.codeLbl, bold: true },
+      { x: 50, y: 529, size: 12, text: code },
+    ]
+
+    const objs: string[] = []
+
+    // 1: Catalog
+    objs.push(`1 0 obj
+  << /Type /Catalog /Pages 2 0 R >>
+  endobj
+  `)
+
+    // 2: Pages
+    objs.push(`2 0 obj
+  << /Type /Pages /Kids [3 0 R] /Count 1 >>
+  endobj
+  `)
+
+    // 3: Page
+    objs.push(`3 0 obj
+  << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}]
+    /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >>
+    /Contents 6 0 R
+  >>
+  endobj
+  `)
+
+    // 4: Helvetica (Regular)
+    objs.push(`4 0 obj
+  << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+  endobj
+  `)
+
+    // 5: Helvetica-Bold
+    objs.push(`5 0 obj
+  << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+  endobj
+  `)
+
+    // 6: Contents stream (ASCII only)
+    const content = [
+      'BT',
+      ...lines.map(l => {
+        const fontRef = l.bold ? 'F2' : 'F1'
+        const txt = escapePdfString(l.text)
+        return `/${fontRef} ${l.size} Tf ${l.x} ${l.y} Td (${txt}) Tj`
+      }),
+      'ET',
+    ].join('\n')
+
+    const contentLen = Buffer.byteLength(content, 'ascii')
+    objs.push(`6 0 obj
+  << /Length ${contentLen} >>
+  stream
+  ${content}
+  endstream
+  endobj
+  `)
+
+    // Concat + xref en mesurant **les octets**
+    let pdf = '%PDF-1.4\n'
+    const offsets: number[] = []
+    for (const obj of objs) {
+      offsets.push(Buffer.byteLength(pdf, 'ascii')) // offset en octets du début d'objet
+      pdf += obj
+    }
+
+    const xrefStart = Buffer.byteLength(pdf, 'ascii')
+    pdf += `xref
+  0 ${objs.length + 1}
+  0000000000 65535 f 
+  `
+    for (let i = 0; i < objs.length; i++) {
+      const off = String(offsets[i]).padStart(10, '0')
+      pdf += `${off} 00000 n 
+  `
+    }
+    pdf += `trailer
+  << /Size ${objs.length + 1} /Root 1 0 R >>
+  startxref
+  ${xrefStart}
+  %%EOF`
+
+    return new Uint8Array(Buffer.from(pdf, 'ascii'))
+  }
+
 
 // ----------------- Handler -----------------
 export async function GET(req: Request, ctx: { params?: { id?: string } } | any) {
