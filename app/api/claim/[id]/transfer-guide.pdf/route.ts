@@ -16,24 +16,23 @@ function ymd(ts: string) {
   return (ts || '').slice(0, 10)
 }
 
-// petite helper (évite soucis de bundling types)
-function font(doc: any, size: number, bold = false) {
-  doc.font('Helvetica' + (bold ? '-Bold' : '')).fontSize(size)
-}
-
-// --- robust loaders: gèrent CJS/ESM et namespaces ---
-async function loadPDFKit(): Promise<any | null> {
+async function loadPdfLib(): Promise<null | {
+  PDFDocument: any; StandardFonts: any; rgb: any
+}> {
   try {
-    const m: any = await import('pdfkit')
-    const PDFDocument = m?.default?.PDFDocument || m?.PDFDocument || m?.default || m
-    return typeof PDFDocument === 'function' ? PDFDocument : null
+    const m: any = await import('pdf-lib')
+    const PDFDocument = m?.PDFDocument
+    const StandardFonts = m?.StandardFonts
+    const rgb = m?.rgb
+    if (PDFDocument && StandardFonts && rgb) return { PDFDocument, StandardFonts, rgb }
+    return null
   } catch { return null }
 }
+
 async function loadQRCode(): Promise<any | null> {
   try {
     const m: any = await import('qrcode')
-    const QR = m?.default || m
-    return (QR && (QR.toBuffer || QR.toString)) ? QR : null
+    return m?.default || m
   } catch { return null }
 }
 
@@ -46,12 +45,9 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     }
 
     const url = new URL(req.url)
-    const rawCode = (url.searchParams.get('code') || '')
-    const code = rawCode.toUpperCase().trim()
+    const code = (url.searchParams.get('code') || '').toUpperCase().trim()
     const locale = ((url.searchParams.get('locale') || 'fr').toLowerCase() === 'en') ? 'en' : 'fr'
-
     if (!/^[A-Z0-9]{5}$/.test(code)) {
-      // exiger un code **valide** pour empêcher l’énumération d’ID
       return NextResponse.json({ error: 'bad_code' }, { status: 400 })
     }
 
@@ -73,7 +69,7 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
       }
     }
 
-    // --------- Récupération du claim ---------
+    // --------- Claim & URLs ---------
     const { rows: crows } = await pool.query(
       `select c.id, c.cert_hash, c.ts
          from claims c
@@ -81,159 +77,158 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
         limit 1`,
       [id]
     )
-    if (!crows.length) {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
-    }
+    if (!crows.length) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
     const certHash = String(crows[0].cert_hash || '')
     const tsISO = new Date(crows[0].ts).toISOString()
     const day = ymd(tsISO)
 
     const base = process.env.NEXT_PUBLIC_BASE_URL || url.origin
-    const recoverUrl = `${base}/${locale}/gift/recover?claim_id=${encodeURIComponent(id)}&cert_hash=${encodeURIComponent(certHash)}`
+    const recoverUrl =
+      `${base}/${locale}/gift/recover?claim_id=${encodeURIComponent(id)}&cert_hash=${encodeURIComponent(certHash)}`
 
-    // --------- Imports dynamiques robustes ---------
-    const [PDFDocument, QR] = await Promise.all([loadPDFKit(), loadQRCode()])
-    if (!PDFDocument) {
-      // dépendance non dispo dans l’environnement: renvoyer 503 explicite
-      return NextResponse.json({ error: 'server_unavailable' }, { status: 503 })
-    }
+    // --------- Libs ---------
+    const libs = await loadPdfLib()
+    if (!libs) return NextResponse.json({ error: 'server_unavailable' }, { status: 503 })
+    const { PDFDocument, StandardFonts, rgb } = libs
 
-    // --------- Génération QR (avec fallback) ---------
-    let qrBuf: Buffer | null = null
+    const QR = await loadQRCode() // facultatif
+    let qrPngBytes: Uint8Array | null = null
     if (QR) {
       try {
-        qrBuf = await QR.toBuffer(recoverUrl, {
-          type: 'png',
+        const dataUrl: string = await QR.toDataURL(recoverUrl, {
+          errorCorrectionLevel: 'M',
           margin: 0,
           width: 320,
-          errorCorrectionLevel: 'M',
         })
+        const b64 = dataUrl.split(',')[1] || ''
+        qrPngBytes = new Uint8Array(Buffer.from(b64, 'base64'))
       } catch (e) {
-        console.warn('[transfer-guide] QR generation failed:', (e as any)?.message || e)
-        qrBuf = null
+        console.warn('[transfer-guide] QR toDataURL failed:', (e as any)?.message || e)
+        qrPngBytes = null
       }
     }
 
-    // --------- Construction PDF ---------
-    const doc = new PDFDocument({ size: 'A4', margin: 56 })
-    const chunks: Buffer[] = []
-    doc.on('data', (c: Buffer) => chunks.push(c))
-    const done = new Promise<void>((res) => doc.on('end', () => res()))
+    // --------- PDF via pdf-lib ---------
+    const pdfDoc = await PDFDocument.create()
+    const page = pdfDoc.addPage([595.28, 841.89]) // A4 en points
+    const { width, height } = page.getSize()
+    const margin = 56
+    let cursorY = height - margin
 
-    const gold = '#E4B73D'
-    const ink = '#1A1F2A'
-    const muted = '#6B7280'
+    // Polices
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+
+    // Couleurs
+    const gold = rgb(0xE4/255, 0xB7/255, 0x3D/255)
+    const ink = rgb(0x1A/255, 0x1F/255, 0x2A/255)
+    const muted = rgb(0x6B/255, 0x72/255, 0x80/255)
+    const border = rgb(0xE6/255, 0xEA/255, 0xF2/255)
+
+    const text = (t: string, opts: { x?: number; y?: number; size?: number; font?: any; color?: any } = {}) => {
+      const size = opts.size ?? 12
+      const usedFont = opts.font ?? font
+      const x = opts.x ?? margin
+      const y = opts.y ?? cursorY
+      page.drawText(t, { x, y, size, font: usedFont, color: opts.color ?? ink })
+      cursorY = y - size - 6
+    }
 
     // Header
-    font(doc, 16, true); doc.fillColor(ink)
-    doc.text('Parcels of Time', { align: 'right' })
-    doc.moveDown(0.5)
+    text('Parcels of Time', { x: width - margin - bold.widthOfTextAtSize('Parcels of Time', 16), y: cursorY, size: 16, font: bold })
+    cursorY -= 8
 
     // Titre
-    font(doc, 26, true)
-    doc.fillColor(ink).text(locale === 'fr' ? '🎁 Guide de récupération' : '🎁 Recovery Guide', { align: 'left' })
-    font(doc, 14); doc.fillColor(muted)
-    doc.text(locale === 'fr' ? `Certificat du ${day}` : `Certificate for ${day}`)
-    doc.moveDown(1.0)
+    text(locale === 'fr' ? '🎁 Guide de récupération' : '🎁 Recovery Guide', { size: 26, font: bold })
+    text(locale === 'fr' ? `Certificat du ${day}` : `Certificate for ${day}`, { size: 14, color: muted })
 
     // Cartouche intro
-    doc.roundedRect(doc.x, doc.y, doc.page.width - doc.page.margins.left - doc.page.margins.right, 80, 8)
-      .strokeColor('#E6EAF2').lineWidth(1).stroke()
-    doc.save().translate(12, 12)
-    font(doc, 12); doc.fillColor(ink)
-    doc.text(
-      locale === 'fr'
-        ? `Ce document permet au destinataire de récupérer le certificat et d’en devenir l’unique détenteur.`
-        : `This document enables the recipient to recover the certificate and become its unique holder.`,
-      { width: doc.page.width - 2 * doc.page.margins.left - 24 }
-    )
-    doc.restore()
-    doc.moveDown(0.6)
+    const boxW = width - 2*margin
+    const boxH = 80
+    page.drawRectangle({
+      x: margin, y: cursorY - boxH + 6, width: boxW, height: boxH, borderColor: border, borderWidth: 1, color: undefined, borderOpacity: 1
+    })
+    const intro = locale === 'fr'
+      ? `Ce document permet au destinataire de récupérer le certificat et d’en devenir l’unique détenteur.`
+      : `This document enables the recipient to recover the certificate and become its unique holder.`
+    page.drawText(intro, { x: margin + 12, y: cursorY - 18, size: 12, font, color: ink, maxWidth: boxW - 24, lineHeight: 14 })
+    cursorY -= (boxH + 6)
 
     // Étapes
     const steps = [
-      locale === 'fr' ? 'Ouvrez la page « Récupérer un cadeau ».': 'Open the “Recover a gift” page.',
-      locale === 'fr' ? 'Cliquez sur « Récupérer ».': 'Click “Recover”.',
+      locale === 'fr' ? 'Ouvrez la page « Récupérer un cadeau ».' : 'Open the “Recover a gift” page.',
+      locale === 'fr' ? 'Cliquez sur « Récupérer ».' : 'Click “Recover”.',
       locale === 'fr' ? 'Saisissez les informations suivantes :' : 'Enter the following information:',
     ]
-    const labels = {
-      id: locale === 'fr' ? 'ID du certificat' : 'Certificate ID',
-      sha: 'SHA-256',
-      codeLabel: locale === 'fr' ? 'Code (5 caractères)' : '5-char code',
-      unique: locale === 'fr'
-        ? 'Une fois validé, vous devenez l’unique détenteur officiel de cette date dans notre registre.'
-        : 'Once validated, you become the official, unique holder of this date in our registry.',
-      about: locale === 'fr'
-        ? 'Parcels of Time est un registre qui attribue chaque journée à un seul détenteur à la fois. Vous pouvez personnaliser votre certificat, le transférer, ou le revendre sur la place de marché.'
-        : 'Parcels of Time is a registry that assigns each calendar day to a single holder at a time. You can personalize your certificate, transfer it, or resell it on the marketplace.',
-    }
-
-    font(doc, 14, true); doc.fillColor(ink).text(locale === 'fr' ? 'Étapes' : 'Steps')
-    font(doc, 12); doc.moveDown(0.4)
+    text(locale === 'fr' ? 'Étapes' : 'Steps', { size: 14, font: bold })
+    cursorY -= 4
     steps.forEach((s, i) => {
-      const cx = doc.x + 6, cy = doc.y + 7
-      doc.circle(cx, cy, 6).fillColor(gold).fill()
-      doc.fillColor('#fff'); font(doc, 10, true); doc.text(String(i + 1), cx - 2, cy - 6)
-      font(doc, 12); doc.fillColor(ink)
-      doc.text(s, { indent: 22 }); doc.moveDown(0.3)
+      // pastille numérotée
+      const cy = cursorY + 10
+      page.drawCircle({ x: margin + 6, y: cy, size: 6, color: gold })
+      page.drawText(String(i + 1), { x: margin + 3.8, y: cy - 5, size: 10, font: bold, color: rgb(1,1,1) })
+      page.drawText(s, { x: margin + 24, y: cursorY, size: 12, font, color: ink })
+      cursorY -= 18
     })
 
-    // QR + lien (avec fallback si embed échoue)
-    doc.moveDown(0.6)
+    // QR + lien
+    cursorY -= 6
     const qrSize = 110
-    if (qrBuf) {
+    let linkX = margin
+    if (qrPngBytes) {
       try {
-        const y0 = doc.y
-        doc.save()
-        doc.image(qrBuf, doc.x, y0, { fit: [qrSize, qrSize] })
-        doc.rect(doc.x, y0, qrSize, qrSize).strokeColor('#E6EAF2').lineWidth(1).stroke()
-        doc.restore()
-        doc.translate(qrSize + 12, 0)
+        const png = await pdfDoc.embedPng(qrPngBytes)
+        const y = cursorY - qrSize + 12
+        page.drawImage(png, { x: margin, y, width: qrSize, height: qrSize })
+        // cadre léger
+        page.drawRectangle({ x: margin, y, width: qrSize, height: qrSize, borderColor: border, borderWidth: 1 })
+        linkX = margin + qrSize + 12
       } catch (e) {
-        console.warn('[transfer-guide] PDF image embed failed:', (e as any)?.message || e)
+        console.warn('[transfer-guide] embedPng failed:', (e as any)?.message || e)
       }
     }
-    font(doc, 12, true); doc.fillColor(ink).text(locale === 'fr' ? 'Lien de récupération' : 'Recovery link')
-    font(doc, 11); doc.fillColor(ink).text(recoverUrl, {
-      width: doc.page.width - doc.page.margins.right - doc.x,
-      link: recoverUrl,
-      underline: true,
-    })
-    if (qrBuf) doc.translate(-(qrSize + 12), 0)
-    doc.moveDown(0.8)
+    page.drawText(locale === 'fr' ? 'Lien de récupération' : 'Recovery link',
+      { x: linkX, y: cursorY + 86, size: 12, font: bold, color: ink })
+    page.drawText(recoverUrl,
+      { x: linkX, y: cursorY + 66, size: 11, font, color: ink, maxWidth: width - margin - linkX })
+    cursorY -= (qrSize + 6)
 
-    // Champs
-    const boxW = doc.page.width - doc.page.margins.left - doc.page.margins.right
+    // Champs (ID / SHA / code)
     const lineH = 22
     const drawField = (label: string, value: string) => {
-      font(doc, 11, true); doc.fillColor(muted).text(label)
-      doc.roundedRect(doc.x, doc.y, boxW, lineH, 6).strokeColor('#D9DFEB').lineWidth(1).stroke()
-      font(doc, 12, true); doc.fillColor(ink)
-      doc.text(value || '—', doc.x + 8, doc.y + 4)
-      doc.moveDown(1.2)
+      page.drawText(label, { x: margin, y: cursorY, size: 11, font: bold, color: muted })
+      page.drawRectangle({ x: margin, y: cursorY - lineH + 4, width: boxW, height: lineH, borderColor: rgb(0xD9/255,0xDF/255,0xEB/255), borderWidth: 1, borderOpacity: 1 })
+      page.drawText(value || '—', { x: margin + 8, y: cursorY - 12, size: 12, font: bold, color: ink })
+      cursorY -= (lineH + 10)
     }
-    drawField(labels.id, id)
-    drawField(labels.sha, certHash)
-    drawField(labels.codeLabel, code)
+    drawField(locale === 'fr' ? 'ID du certificat' : 'Certificate ID', id)
+    drawField('SHA-256', certHash)
+    drawField(locale === 'fr' ? 'Code (5 caractères)' : '5-char code', code)
 
     // Note + à propos
-    doc.moveDown(0.4)
-    font(doc, 11); doc.fillColor(ink).text(labels.unique)
-    doc.moveDown(0.8)
-    font(doc, 14, true); doc.fillColor(ink).text(locale === 'fr' ? 'À propos de Parcels of Time' : 'About Parcels of Time')
-    font(doc, 11); doc.fillColor(ink).text(labels.about)
-    doc.moveDown(0.8)
+    const note = locale === 'fr'
+      ? 'Une fois validé, vous devenez l’unique détenteur officiel de cette date dans notre registre.'
+      : 'Once validated, you become the official, unique holder of this date in our registry.'
+    page.drawText(note, { x: margin, y: cursorY, size: 11, font, color: ink, maxWidth: boxW, lineHeight: 13 })
+    cursorY -= 28
+
+    page.drawText(locale === 'fr' ? 'À propos de Parcels of Time' : 'About Parcels of Time',
+      { x: margin, y: cursorY, size: 14, font: bold, color: ink })
+    cursorY -= 18
+    const about = locale === 'fr'
+      ? 'Parcels of Time est un registre qui attribue chaque journée à un seul détenteur à la fois. Vous pouvez personnaliser votre certificat, le transférer, ou le revendre sur la place de marché.'
+      : 'Parcels of Time is a registry that assigns each calendar day to a single holder at a time. You can personalize your certificate, transfer it, or resell it on the marketplace.'
+    page.drawText(about, { x: margin, y: cursorY, size: 11, font, color: ink, maxWidth: boxW, lineHeight: 13 })
+    cursorY -= 32
 
     // Footer
-    font(doc, 10); doc.fillColor('#6B7280')
-    doc.text(locale === 'fr' ? 'Besoin d’aide ? support@parcelsoftime.com' : 'Need help? support@parcelsoftime.com')
+    page.drawText(locale === 'fr' ? 'Besoin d’aide ? support@parcelsoftime.com' : 'Need help? support@parcelsoftime.com',
+      { x: margin, y: Math.max(cursorY, margin), size: 10, font, color: muted })
 
-    doc.end()
-    await done
+    const bytes = await pdfDoc.save()
 
-    const pdf = Buffer.concat(chunks)
-    // Utiliser Response natif (évite quelques surprises de sérialisation)
-    return new Response(pdf, {
+    return new Response(bytes, {
       status: 200,
       headers: {
         'content-type': 'application/pdf',
