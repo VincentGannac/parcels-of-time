@@ -39,16 +39,15 @@ async function loadQRCode(): Promise<any | null> {
 }
 
 // ----------------- Fallback PDF "plain", zéro dépendance -----------------
-  // --- helpers fallback ---
+  // --- helpers fallback (ASCII-only) ---
   function asciiSafe(s: string) {
-    // supprime diacritiques + tout ce qui n'est pas ASCII imprimable
-    return s
+    return String(s)
       .normalize('NFKD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^\x20-\x7E]/g, '');
   }
   function escapePdfString(s: string) {
-    return asciiSafe(String(s))
+    return asciiSafe(s)
       .replace(/\\/g, '\\\\')
       .replace(/\(/g, '\\(')
       .replace(/\)/g, '\\)')
@@ -66,13 +65,13 @@ async function loadQRCode(): Promise<any | null> {
     const { locale, day, id, certHash, code, recoverUrl } = args
     const L = locale === 'fr'
       ? {
-          title: 'Guide de recuperation',        // pas d’emoji
+          title: 'Guide de recuperation',
           subtitle: `Certificat du ${day}`,
           link: 'Lien de recuperation',
           cid: 'ID du certificat',
           sha: 'SHA-256',
           codeLbl: 'Code (5 caracteres)',
-          brand: 'Parcels of Time'
+          brand: 'Parcels of Time',
         }
       : {
           title: 'Recovery Guide',
@@ -81,110 +80,84 @@ async function loadQRCode(): Promise<any | null> {
           cid: 'Certificate ID',
           sha: 'SHA-256',
           codeLbl: '5-char code',
-          brand: 'Parcels of Time'
+          brand: 'Parcels of Time',
         }
 
-    const W = 595.28, H = 841.89
+    const W = 595, H = 842
+
     const lines = [
-      { x: 50, y: 800, size: 16, text: L.brand, bold: true },
-      { x: 50, y: 770, size: 26, text: L.title, bold: true },
-      { x: 50, y: 745, size: 12, text: L.subtitle },
+      { x: 50, y: 800, size: 16, text: L.brand,   bold: true },
+      { x: 50, y: 770, size: 26, text: L.title,   bold: true },
+      { x: 50, y: 745, size: 12, text: L.subtitle, bold: false },
 
-      { x: 50, y: 705, size: 12, text: L.link, bold: true },
-      { x: 50, y: 688, size: 11, text: recoverUrl },
+      { x: 50, y: 705, size: 12, text: L.link,    bold: true },
+      { x: 50, y: 688, size: 11, text: recoverUrl, bold: false },
 
-      { x: 50, y: 655, size: 12, text: L.cid, bold: true },
-      { x: 50, y: 638, size: 11, text: id },
+      { x: 50, y: 655, size: 12, text: L.cid,     bold: true },
+      { x: 50, y: 638, size: 11, text: id,        bold: false },
 
-      { x: 50, y: 608, size: 12, text: L.sha, bold: true },
-      { x: 50, y: 591, size: 10, text: certHash.slice(0, 64) },
-      { x: 50, y: 576, size: 10, text: certHash.slice(64) },
+      { x: 50, y: 608, size: 12, text: L.sha,     bold: true },
+      { x: 50, y: 591, size: 10, text: certHash.slice(0, 64), bold: false },
+      { x: 50, y: 576, size: 10, text: certHash.slice(64),    bold: false },
 
       { x: 50, y: 546, size: 12, text: L.codeLbl, bold: true },
-      { x: 50, y: 529, size: 12, text: code },
+      { x: 50, y: 529, size: 12, text: code,      bold: false },
     ]
 
+    // --- objets ---
     const objs: string[] = []
 
+    const obj = (n: number, body: string) => `${n} 0 obj\r\n${body}\r\nendobj\r\n`
+
     // 1: Catalog
-    objs.push(`1 0 obj
-  << /Type /Catalog /Pages 2 0 R >>
-  endobj
-  `)
+    objs.push(obj(1, `<< /Type /Catalog /Pages 2 0 R >>`))
 
     // 2: Pages
-    objs.push(`2 0 obj
-  << /Type /Pages /Kids [3 0 R] /Count 1 >>
-  endobj
-  `)
+    objs.push(obj(2, `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`))
 
     // 3: Page
-    objs.push(`3 0 obj
-  << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}]
-    /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >>
-    /Contents 6 0 R
-  >>
-  endobj
-  `)
+    objs.push(obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>`))
 
-    // 4: Helvetica (Regular)
-    objs.push(`4 0 obj
-  << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
-  endobj
-  `)
+    // 4: Helvetica
+    objs.push(obj(4, `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`))
 
     // 5: Helvetica-Bold
-    objs.push(`5 0 obj
-  << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
-  endobj
-  `)
+    objs.push(obj(5, `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>`))
 
-    // 6: Contents stream (ASCII only)
-    const content = [
-      'BT',
-      ...lines.map(l => {
-        const fontRef = l.bold ? 'F2' : 'F1'
-        const txt = escapePdfString(l.text)
-        return `/${fontRef} ${l.size} Tf ${l.x} ${l.y} Td (${txt}) Tj`
-      }),
-      'ET',
-    ].join('\n')
+    // 6: Contents (strict CRLF + Tm absolu)
+    const contentLines: string[] = ['BT']
+    for (const l of lines) {
+      const fontRef = l.bold ? 'F2' : 'F1'
+      contentLines.push(`/${fontRef} ${l.size} Tf`)
+      contentLines.push(`1 0 0 1 ${l.x} ${l.y} Tm`)
+      contentLines.push(`(${escapePdfString(l.text)}) Tj`)
+    }
+    contentLines.push('ET')
+    const contentStr = contentLines.join('\r\n')
+    const contentLen = Buffer.byteLength(contentStr, 'ascii')
+    objs.push(
+      obj(6, `<< /Length ${contentLen} >>\r\nstream\r\n${contentStr}\r\nendstream`)
+    )
 
-    const contentLen = Buffer.byteLength(content, 'ascii')
-    objs.push(`6 0 obj
-  << /Length ${contentLen} >>
-  stream
-  ${content}
-  endstream
-  endobj
-  `)
-
-    // Concat + xref en mesurant **les octets**
-    let pdf = '%PDF-1.4\n'
+    // --- Assemblage + xref strict ---
+    let file = '%PDF-1.4\r\n'
     const offsets: number[] = []
-    for (const obj of objs) {
-      offsets.push(Buffer.byteLength(pdf, 'ascii')) // offset en octets du début d'objet
-      pdf += obj
+    for (const o of objs) {
+      offsets.push(Buffer.byteLength(file, 'ascii'))
+      file += o
     }
-
-    const xrefStart = Buffer.byteLength(pdf, 'ascii')
-    pdf += `xref
-  0 ${objs.length + 1}
-  0000000000 65535 f 
-  `
-    for (let i = 0; i < objs.length; i++) {
-      const off = String(offsets[i]).padStart(10, '0')
-      pdf += `${off} 00000 n 
-  `
+    const xrefStart = Buffer.byteLength(file, 'ascii')
+    file += `xref\r\n`
+    file += `0 ${objs.length + 1}\r\n`
+    file += `0000000000 65535 f \r\n`
+    for (const off of offsets) {
+      file += `${String(off).padStart(10, '0')} 00000 n \r\n`
     }
-    pdf += `trailer
-  << /Size ${objs.length + 1} /Root 1 0 R >>
-  startxref
-  ${xrefStart}
-  %%EOF`
+    file += `trailer\r\n<< /Size ${objs.length + 1} /Root 1 0 R >>\r\nstartxref\r\n${xrefStart}\r\n%%EOF\r\n`
 
-    return new Uint8Array(Buffer.from(pdf, 'ascii'))
+    return new Uint8Array(Buffer.from(file, 'ascii'))
   }
+
 
 
 // ----------------- Handler -----------------
