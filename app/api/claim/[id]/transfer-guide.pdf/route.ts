@@ -369,17 +369,22 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
     }
 
  
-  // 5) Réponse
-  const body = new Blob([bytes], { type: 'application/pdf' })
-  return new Response(body, {
-    status: 200,
-    headers: {
-      'content-type': 'application/pdf',
-      'content-disposition': `inline; filename="transfer-guide-${day}.pdf"`,
-      'cache-control': 'no-store',
-      'X-Guide-Mode': mode,
-    },
-  })
+   
+    // 5) Réponse — convertir vers un ArrayBuffer "strict"
+    const ab = new ArrayBuffer(bytes.byteLength)
+    new Uint8Array(ab).set(bytes) // copie les octets
+
+    return new Response(ab, {
+      status: 200,
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': `inline; filename="transfer-guide-${day}.pdf"`,
+        'cache-control': 'no-store',
+        'X-Guide-Mode': mode,
+      },
+    })
+
+
 
   } catch (err) {
     // Échecs DB/validation → on reste explicite (pas de 500 silencieux pour ces cas)
