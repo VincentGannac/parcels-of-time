@@ -7,6 +7,8 @@ import crypto from 'node:crypto';
 import { pool } from '@/lib/db';
 import { setSessionCookieOnResponse } from '@/lib/auth';
 
+
+
 type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
   | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom';

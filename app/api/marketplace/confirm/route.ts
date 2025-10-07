@@ -56,7 +56,7 @@ export async function GET(req: Request) {
   const qpLocale = (url.searchParams.get('locale') || '').toLowerCase()
   let finalLocale: 'fr' | 'en' = qpLocale === 'en' ? 'en' : 'fr'
   const tsYParam = url.searchParams.get('ts') || ''
-
+  const chosenLocale: 'fr'|'en' = finalLocale
   let fallbackYMD = ''
 
   try {
@@ -287,7 +287,7 @@ export async function GET(req: Request) {
         const publicUrl = `${base}/${finalLocale}/m/${encodeURIComponent(ymd)}`
         import('@/lib/email').then(async ({ sendSecondarySaleEmails }) => {
           await sendSecondarySaleEmails({
-            ts: ymd, buyerEmail, pdfUrl, publicUrl, sessionId: sid
+            ts: ymd, buyerEmail, pdfUrl, publicUrl, sessionId: sid,locale: chosenLocale
           })
         }).catch(()=>{})
       } catch {}
