@@ -14,11 +14,12 @@ function ymd(ts: string) {
 }
 const sha256hex = (s: string) => crypto.createHash('sha256').update(s, 'utf8').digest('hex')
 
-function font(doc: PDFKit.PDFDocument, size: number, bold = false) {
+// pas de type PDFKit ici (sécurité bundling)
+function font(doc: any, size: number, bold = false) {
   doc.font('Helvetica' + (bold ? '-Bold' : '')).fontSize(size)
 }
 
-export async function GET(req: Request, ctx: any) {
+export async function GET(req: Request, ctx: { params?: { id?: string } } | any) {
   try {
     const id = String((ctx?.params?.id ?? '')).trim()
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
@@ -30,11 +31,10 @@ export async function GET(req: Request, ctx: any) {
     const locale = (url.searchParams.get('locale') || 'fr').toLowerCase() === 'en' ? 'en' : 'fr'
 
     if (!/^[A-Z0-9]{5}$/.test(code)) {
-      // Exige toujours un code valide pour empêcher l’énumération d’ID
       return NextResponse.json({ error: 'bad_code' }, { status: 400 })
     }
 
-    // 1) Vérif sécurité : le code doit correspondre à un token actif pour CE claim
+    // Vérif sécurité: code actif pour CE claim
     const codeHash = sha256hex(code)
     {
       const { rows } = await pool.query(
@@ -52,7 +52,7 @@ export async function GET(req: Request, ctx: any) {
       }
     }
 
-    // 2) Récupère claim + hash + ts
+    // Récupère claim
     const { rows: crows } = await pool.query(
       `select c.id, c.cert_hash, c.ts
          from claims c
@@ -70,10 +70,16 @@ export async function GET(req: Request, ctx: any) {
     const base = process.env.NEXT_PUBLIC_BASE_URL || url.origin
     const recoverUrl = `${base}/${locale}/gift/recover?claim_id=${encodeURIComponent(id)}&cert_hash=${encodeURIComponent(certHash)}`
 
-    // 3) QR robuste en Node (évite DataURL qui peut dépendre de canvas)
-    const qrBuf = await QRCode.toBuffer(recoverUrl, { type: 'png', margin: 0, width: 320 })
+    // Génération QR robuste + fallback
+    let qrBuf: Buffer | null = null
+    try {
+      qrBuf = await QRCode.toBuffer(recoverUrl, { type: 'png', margin: 0, width: 320, errorCorrectionLevel: 'M' })
+    } catch (e) {
+      console.warn('[transfer-guide] QR generation failed:', (e as any)?.message || e)
+      qrBuf = null // on continue sans QR
+    }
 
-    // 4) Génère le PDF
+    // PDF
     const doc = new PDFDocument({ size: 'A4', margin: 56 })
     const chunks: Buffer[] = []
     doc.on('data', (c: Buffer) => chunks.push(c))
@@ -138,17 +144,31 @@ export async function GET(req: Request, ctx: any) {
       doc.text(s, { indent: 22 }); doc.moveDown(0.3)
     })
 
-    // QR + lien
+    // QR + lien (avec fallback si embed PNG échoue)
     doc.moveDown(0.6)
-    const startY = doc.y
     const qrSize = 110
-    doc.image(qrBuf, doc.x, startY, { width: qrSize, height: qrSize })
-    doc.rect(doc.x, startY, qrSize, qrSize).strokeColor('#E6EAF2').lineWidth(1).stroke()
-    doc.moveUp(1)
-    doc.translate(qrSize + 12, 0)
+    let drewQR = false
+    if (qrBuf) {
+      try {
+        const y0 = doc.y
+        doc.image(qrBuf, doc.x, y0, { fit: [qrSize, qrSize] })
+        doc.rect(doc.x, y0, qrSize, qrSize).strokeColor('#E6EAF2').lineWidth(1).stroke()
+        // placer le bloc lien à droite
+        doc.translate(qrSize + 12, 0)
+        drewQR = true
+      } catch (e) {
+        console.warn('[transfer-guide] PDF image embed failed:', (e as any)?.message || e)
+      }
+    }
     font(doc, 12, true); doc.fillColor(ink).text(locale === 'fr' ? 'Lien de récupération' : 'Recovery link')
-    font(doc, 11); doc.fillColor(ink).text(recoverUrl, { width: doc.page.width - doc.page.margins.right - doc.x, link: recoverUrl, underline: true })
-    doc.translate(-(qrSize + 12), 0)
+    font(doc, 11); doc.fillColor(ink).text(recoverUrl, {
+      width: doc.page.width - doc.page.margins.right - doc.x,
+      link: recoverUrl,
+      underline: true
+    })
+    if (drewQR) {
+      doc.translate(-(qrSize + 12), 0)
+    }
     doc.moveDown(0.8)
 
     // Champs
@@ -158,7 +178,7 @@ export async function GET(req: Request, ctx: any) {
       font(doc, 11, true); doc.fillColor(muted).text(label)
       doc.roundedRect(doc.x, doc.y, boxW, lineH, 6).strokeColor('#D9DFEB').lineWidth(1).stroke()
       font(doc, 12, true); doc.fillColor(ink)
-      doc.text(value, doc.x + 8, doc.y + 4)
+      doc.text(value || '—', doc.x + 8, doc.y + 4)
       doc.moveDown(1.2)
     }
     drawField(labels.id, id)
