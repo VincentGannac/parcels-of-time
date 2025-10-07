@@ -18,7 +18,7 @@ function font(doc: PDFKit.PDFDocument, size: number, bold = false) {
   doc.font('Helvetica' + (bold ? '-Bold' : '')).fontSize(size)
 }
 
-export async function GET(req: Request, ctx: { params: { id: string } }) {
+export async function GET(req: Request, ctx: any) {
   try {
     const id = String((ctx?.params?.id ?? '')).trim()
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
