@@ -2,7 +2,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import HeroSlideshow from './HeroSlideshow'
 import { useLocaleHref } from './useLocaleHref'
 import { useT } from '../i18n/I18nProvider'
@@ -171,6 +171,8 @@ function NavPill({
 
 /* ======================= COOKIE ======================= */
 function CookieBanner() {
+  const pathname = usePathname() || '/'
+  const isFR = /^\/fr(\/|$)/.test(pathname)
   const [visible, setVisible] = useState(false)
   useEffect(() => {
     try {
@@ -203,27 +205,29 @@ function CookieBanner() {
       }}
     >
       <p style={{ margin: 0, fontSize: 14 }}>
-        Nous utilisons des cookies essentiels (sécurité, paiement) et de mesure d’audience. Voir{' '}
-        <a href="/fr/legal/cookies" style={{ color: 'var(--color-text)' }}>
-          Politique des cookies
-        </a>
-        .
+        {isFR ? (
+          <>Nous utilisons des cookies essentiels (sécurité, paiement) et de mesure d’audience. Voir{' '}
+            <a href="/fr/legal/cookies" style={{ color: 'var(--color-text)' }}>Politique des cookies</a>.</>
+        ) : (
+          <>We use essential (security, payment) and analytics cookies. See{' '}
+            <a href="/fr/legal/cookies" style={{ color: 'var(--color-text)' }}>Cookie Policy</a>.</>
+        )}
       </p>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         <button
           onClick={() => accept('reject')}
           style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text)' }}
         >
-          Refuser (hors essentiels)
+          {isFR ? 'Refuser (hors essentiels)' : 'Reject (except essentials)'}
         </button>
         <button
           onClick={() => accept('accept')}
           style={{ padding: '10px 12px', borderRadius: 10, border: 'none', background: 'var(--color-primary)', color: 'var(--color-on-primary)', fontWeight: 800 }}
         >
-          Accepter
+          {isFR ? 'Accepter' : 'Accept'}
         </button>
         <Link href="/fr/legal/privacy" style={{ textDecoration: 'none', color: 'var(--color-text)', padding: '10px 12px' }}>
-          Préférences
+          {isFR ? 'Préférences' : 'Preferences'}
         </Link>
       </div>
     </div>
@@ -231,7 +235,6 @@ function CookieBanner() {
 }
 
 type PillTone = 'default' | 'success' | 'warning' | 'danger'
-
 function Pill({
   children,
   tone = 'default',
@@ -245,7 +248,6 @@ function Pill({
     warning: { borderColor: 'color-mix(in srgb, var(--color-warning) 55%, var(--color-border))', color: 'var(--color-warning)' },
     danger:  { borderColor: 'color-mix(in srgb, var(--color-danger) 55%, var(--color-border))',  color: 'var(--color-danger)' },
   }
-
   return (
     <span
       style={{
@@ -265,7 +267,6 @@ function Pill({
     </span>
   )
 }
-
 
 /* ======================= HEADER ======================= */
 function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: string) => string }) {
@@ -306,14 +307,14 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
 
           {!isSmall && (
             <div style={{ display: 'flex', alignItems: 'stretch', gap: 12 }}>
-              <NavPill href={href('/explore')} emphasis="accent" ariaLabel="Registre public">
-                🖼️ <span>Registre public</span>
+              <NavPill href={href('/explore')} emphasis="accent" ariaLabel={t('nav.public_registry')}>
+                🖼️ <span>{t('nav.public_registry')}</span>
               </NavPill>
-              <NavPill href={href('/account')} emphasis="outline" ariaLabel="Mon Compte">
-                👤 <span>Mon Compte</span>
+              <NavPill href={href('/account')} emphasis="outline" ariaLabel={t('nav.account')}>
+                👤 <span>{t('nav.account')}</span>
               </NavPill>
-              <Button href={href('/gift/recover')} variant="secondary" ariaLabel="Récupérer un cadeau">
-                🎫 Récupérer
+              <Button href={href('/gift/recover')} variant="secondary" ariaLabel={t('nav.recover')}>
+                🎫 {t('nav.recover')}
               </Button>
               <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>
                 🎁 {t('cta.gift')}
@@ -323,7 +324,7 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
               </Button>
 
               <button
-                aria-label="Changer de thème"
+                aria-label={t('nav.theme')}
                 onClick={onToggleTheme}
                 style={{
                   height: 46,
@@ -376,14 +377,14 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
           }}
         >
           <Container style={{ display: 'grid', gap: 10, paddingTop: 14, paddingBottom: 14 }}>
-            <NavPill href={href('/explore')} emphasis="accent" ariaLabel="Registre public">
-              🖼️ Registre public
+            <NavPill href={href('/explore')} emphasis="accent" ariaLabel={t('nav.public_registry')}>
+              🖼️ {t('nav.public_registry')}
             </NavPill>
-            <NavPill href={href('/account')} emphasis="outline" ariaLabel="Mon Compte">
-              👤 Mon Compte
+            <NavPill href={href('/account')} emphasis="outline" ariaLabel={t('nav.account')}>
+              👤 {t('nav.account')}
             </NavPill>
             <Button href={href('/gift/recover')} variant="secondary">
-              🎫 Récupérer
+              🎫 {t('nav.recover')}
             </Button>
             <Button href={href('/claim?gift=1')} variant="secondary">
               🎁 {t('cta.gift')}
@@ -392,7 +393,7 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
               onClick={onToggleTheme}
               style={{ padding: 12, borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', textAlign: 'left' }}
             >
-              ☀︎/☾ Changer de thème
+              ☀︎/☾ {t('nav.theme')}
             </button>
           </Container>
         </div>
@@ -447,7 +448,7 @@ function CertificatePreview({
   const ins = SAFE_INSETS_PCT[styleId]
 
   return (
-    <a href={href} aria-label={`Choisir le style ${styleId}`} style={{ textDecoration: 'none', color: 'var(--color-text)', display: 'block' }}>
+    <a href={href} aria-label={`Choose style ${styleId}`} style={{ textDecoration: 'none', color: 'var(--color-text)', display: 'block' }}>
       <figure
         style={{
           margin: 0,
@@ -461,7 +462,7 @@ function CertificatePreview({
         <div style={{ position: 'relative', width: '100%', aspectRatio: compact ? '3 / 4' : '595 / 842', background: '#F4F1EC' }}>
           <img
             src={`/cert_bg/${styleId}.png`}
-            alt={`Certificat style ${styleId}`}
+            alt={`Certificate style ${styleId}`}
             width={595}
             height={842}
             loading="lazy"
@@ -513,7 +514,7 @@ function CertificatePreview({
             </div>
 
             <div style={{ position: 'absolute', left: EDGE_PX, bottom: EDGE_PX, fontSize: 12, color: previewSubtle, pointerEvents: 'none' }}>
-              Certificate ID • Integrity hash (aperçu)
+              Certificate ID • Integrity hash (preview)
             </div>
             <div
               style={{
@@ -537,7 +538,7 @@ function CertificatePreview({
         </div>
         {!compact && (
           <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
-            Aperçu non contractuel — le PDF final contient un QR code scannable et l’empreinte d’intégrité.
+            Non-contractual preview — final PDF includes a scannable QR and the integrity fingerprint.
           </figcaption>
         )}
       </figure>
@@ -546,7 +547,7 @@ function CertificatePreview({
 }
 
 /* =========================================================
-   HERO + RARE DATES CAROUSEL
+   HERO
    ========================================================= */
 function Hero({ href }: { href: (p: string) => string }) {
   const { t } = useT()
@@ -570,17 +571,12 @@ function Hero({ href }: { href: (p: string) => string }) {
             </Button>
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 14, color: 'var(--color-muted)' }}>Chaque date n’est proposée qu’une seule fois.</div>
+          <div style={{ marginTop: 12, fontSize: 14, color: 'var(--color-muted)' }}>{t('hero.unique')}</div>
 
           {/* TRUST BAR */}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 16, fontSize: 12, color: 'var(--color-muted)' }}>
-            <span>🔒 Stripe • Paiement sécurisé</span>
-            <span>🧾 SHA-256 • Empreinte d’intégrité</span>
-          </div>
-
-          {/* ↓ Carrousel rareté, reforme d’UsagesCarousel */}
-          <div style={{ marginTop: 16 }}>
-            <UsagesCarousel href={href} />
+            <span>🔒 {t('trust.stripe')}</span>
+            <span>🧾 {t('trust.sha')}</span>
           </div>
         </div>
 
@@ -588,10 +584,10 @@ function Hero({ href }: { href: (p: string) => string }) {
           <HeroSlideshow
             interval={2000}
             slides={[
-              { src: '/hero/love.png', alt: 'Amour — couple au coucher du soleil', focal: 'center 40%' },
-              { src: '/hero/birth.png', alt: 'Naissance — peau à peau, lumière douce' },
-              { src: '/hero/birthday.png', alt: 'Anniversaire — bougies et confettis' },
-              { src: '/hero/graduation.png', alt: 'Diplôme — lancer de toques' },
+              { src: '/hero/love.png', alt: 'Love — couple at sunset', focal: 'center 40%' },
+              { src: '/hero/birth.png', alt: 'Birth — soft light' },
+              { src: '/hero/birthday.png', alt: 'Birthday — candles & confetti' },
+              { src: '/hero/graduation.png', alt: 'Graduation — tossing caps' },
             ]}
           />
         </div>
@@ -600,16 +596,27 @@ function Hero({ href }: { href: (p: string) => string }) {
   )
 }
 
-/* -------------------- Usages Carousel (réformé) -------------------- */
+/* -------------------- Dates convoitées (carrousel) -------------------- */
 function UsagesCarousel({ href }: { href: (p: string) => string }) {
-  // Exemples illustratifs pour créer l’envie / la rareté (disponibilités simulées)
-  const items = [
-    { title:'Passage à l’an 2000', date:'2000-01-01', text:'La minute de bascule du millénaire.', badge:'Très recherché', tone:'warning' as const },
-    { title:'Finale Coupe du Monde', date:'2018-07-15', text:'Une finale qui a marqué des millions de vies.', badge:'Peut déjà être prise', tone:'danger' as const },
-    { title:'Chute du mur de Berlin', date:'1989-11-09', text:'Un jour qui a changé une époque.', badge:'Iconique', tone:'success' as const },
-    { title:'Premier pas sur la Lune', date:'1969-07-20', text:'Un petit pas… une date immense.', badge:'Collector', tone:'success' as const },
-    { title:'Nouvel An', date:'2025-01-01', text:'Chaque 01/01 à minuit : ultra convoité.', badge:'Part au minute près', tone:'warning' as const },
-  ]
+  const pathname = usePathname() || '/'
+  const isFR = /^\/fr(\/|$)/.test(pathname)
+  // Exemples illustratifs
+  const items = isFR
+    ? [
+        { title:'Passage à l’an 2000', date:'2000-01-01', text:'La minute de bascule du millénaire.', badge:'Très recherché', tone:'warning' as const },
+        { title:'Finale Coupe du Monde', date:'2018-07-15', text:'Une finale qui a marqué des millions de vies.', badge:'Peut déjà être prise', tone:'danger' as const },
+        { title:'Chute du mur de Berlin', date:'1989-11-09', text:'Un jour qui a changé une époque.', badge:'Iconique', tone:'success' as const },
+        { title:'Premier pas sur la Lune', date:'1969-07-20', text:'Un petit pas… une date immense.', badge:'Collector', tone:'success' as const },
+        { title:'Nouvel An', date:'2025-01-01', text:'Chaque 01/01 à minuit : ultra convoité.', badge:'Part au minute près', tone:'warning' as const },
+      ]
+    : [
+        { title:'Y2K New Millennium', date:'2000-01-01', text:'The minute the millennium flipped.', badge:'Highly sought-after', tone:'warning' as const },
+        { title:'World Cup Final', date:'2018-07-15', text:'A final that moved millions.', badge:'May already be taken', tone:'danger' as const },
+        { title:'Fall of the Berlin Wall', date:'1989-11-09', text:'A day that changed an era.', badge:'Iconic', tone:'success' as const },
+        { title:'First Moon Landing', date:'1969-07-20', text:'One small step… a massive date.', badge:'Collector', tone:'success' as const },
+        { title:'New Year’s Day', date:'2025-01-01', text:'Every 01/01 at midnight: ultra-coveted.', badge:'Goes minute by minute', tone:'warning' as const },
+      ]
+
   const [i, setI] = useState(0)
   useEffect(()=>{ const t = setInterval(()=>setI(v=>(v+1)%items.length), 3600); return ()=>clearInterval(t) },[])
   const it = items[i]
@@ -618,11 +625,12 @@ function UsagesCarousel({ href }: { href: (p: string) => string }) {
     warning: 'var(--color-warning)',
     danger: 'var(--color-danger)',
   }
+  const { t } = useT()
   return (
     <div
       role="region"
       aria-roledescription="carousel"
-      aria-label="Dates convoitées — dépêchez-vous"
+      aria-label={isFR ? 'Dates convoitées — dépêchez-vous' : 'Sought-after dates — hurry up'}
       style={{
         border:'1px solid var(--color-border)',
         background:'var(--color-surface)',
@@ -636,7 +644,7 @@ function UsagesCarousel({ href }: { href: (p: string) => string }) {
           <span style={{fontSize:22}}>⏳</span>
           <strong>{it.title}</strong>
         </div>
-        <Pill tone={it.tone as any}>{it.badge}</Pill>
+        <Pill tone={it.tone}>{it.badge}</Pill>
       </div>
       <p style={{margin:'8px 0 6px', color:'var(--color-text)', opacity:.9}}>
         {it.text} <span style={{opacity:.8}}>— {it.date} UTC</span>
@@ -644,29 +652,30 @@ function UsagesCarousel({ href }: { href: (p: string) => string }) {
       <div style={{ display:'flex', gap:8, marginTop:8, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
         <div style={{ display:'flex', gap:6 }}>
           {items.map((_, idx)=>(
-            <span key={idx} aria-label={idx===i?'élément actif':'élément'}
+            <span key={idx} aria-label={idx===i ? (isFR?'élément actif':'active item') : (isFR?'élément':'item')}
                   style={{width:6, height:6, borderRadius:99, background: idx===i ? toneToColor[it.tone] : 'var(--color-border)'}} />
           ))}
         </div>
         <div style={{display:'flex', gap:8}}>
-          <Button href={href('/explore')} variant="ghost" ariaLabel="Voir le registre">
-            Explorer
+          <Button href={href('/explore')} variant="ghost" ariaLabel={t('carousel.explore')}>
+            {t('carousel.explore')}
           </Button>
-          <Button href={href('/claim')} variant="primary" ariaLabel="Réserver une date rare">
-            Réserver une date rare
+          <Button href={href('/claim')} variant="primary" ariaLabel={t('carousel.reserve')}>
+            {t('carousel.reserve')}
           </Button>
         </div>
       </div>
-      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)'}}>Exemples illustratifs. Disponibilités variables, une seule vente par date.</div>
+      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)'}}>{t('carousel.disclaimer')}</div>
     </div>
   )
 }
 
 /* =========================================================
-   REGISTRE PUBLIC — AVANT “POURQUOI”
+   REGISTRE PUBLIC
    ========================================================= */
 function RegistryShowcase() {
   const href = useLocaleHref()
+  const { t } = useT()
   const items: Array<{ styleId: PreviewStyle; ts: string; owner: string; title?: string }> = [
     { styleId: 'romantic', ts: '2018-07-19', owner: 'Clara & Sam', title: 'Premier baiser' },
     { styleId: 'birth', ts: '2023-03-02', owner: 'Nora & Mehdi', title: 'Bienvenue, Aïcha' },
@@ -677,11 +686,10 @@ function RegistryShowcase() {
   return (
     <section id="registry" aria-labelledby="registry-title" style={{ borderBottom: '1px solid var(--color-border)' }}>
       <Container>
-        <SectionEyebrow>Registre public</SectionEyebrow>
-        <H2 id="registry-title">Une galerie participative d’archives personnelles</H2>
+        <SectionEyebrow>{t('registry.eyebrow')}</SectionEyebrow>
+        <H2 id="registry-title">{t('registry.title')}</H2>
         <p style={{ margin: '6px 0 16px', color: 'var(--color-text)', opacity: 0.92, maxWidth: 760 }}>
-          Des propriétaires choisissent d’exposer leur certificat (date, titre, extrait, photo). Vous contrôlez la visibilité depuis votre compte.
-          C’est une démarche <strong>symbolique et artistique</strong>.
+          {t('registry.paragraph')}
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
@@ -693,13 +701,12 @@ function RegistryShowcase() {
         </div>
 
         <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems:'center', flexWrap:'wrap' }}>
-          <Button href={href('/explore')} variant="secondary" ariaLabel="Voir le Registre public">
-            Voir le Registre public →
+          <Button href={href('/explore')} variant="secondary" ariaLabel={t('registry.cta')}>
+            {t('registry.cta')} →
           </Button>
-          <Pill tone="success">Modération des contenus publics</Pill>
-          <Pill>Contrôle total de la visibilité</Pill>
+          <Pill tone="success">{t('registry.moderation')}</Pill>
+          <Pill>{t('registry.visibility')}</Pill>
         </div>
-
       </Container>
     </section>
   )
@@ -709,42 +716,27 @@ function RegistryShowcase() {
    FEATURE BAND — POURQUOI / VALEUR
    ========================================================= */
 function FeatureBand() {
-  const bullets = [
-    { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code vers votre page souvenir.' },
-    { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, quasi instantané par e-mail.' },
-    { icon: '✨', title: 'Édition unique', text: 'Chaque date n’est vendue qu’une seule fois.' },
-    { icon: '💎', title: 'Collector', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
-  ]
+  const { t } = useT()
+  const href = useLocaleHref()
   return (
     <section>
-      <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
+      <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16, alignItems:'start' }}>
         <div style={{ gridColumn: 'span 4' }}>
-          <SectionEyebrow>Pourquoi maintenant ?</SectionEyebrow>
-          <H2>Possédez le jour qui compte</H2>
+          <SectionEyebrow>{t('feature.eyebrow')}</SectionEyebrow>
+          <H2>{t('feature.title')}</H2>
           <p style={{ margin: 0, color: 'var(--color-text)', opacity: 0.92 }}>
-            Les photos s’accumulent, les instants s’effacent. Avec Parcels of Time, transformez une date en objet unique, authentifié et partageable.
+            {t('feature.text')}
           </p>
+          <ul style={{ margin: '12px 0 0', paddingLeft: 18, lineHeight: '26px', color:'var(--color-text)', opacity:.9 }}>
+            <li>🔒 {t('trust.stripe')}</li>
+            <li>🧾 {t('trust.sha')}</li>
+            <li>✨ {t('hero.unique')}</li>
+          </ul>
         </div>
-        <div style={{ gridColumn: 'span 8', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
-          {bullets.map((b, i) => (
-            <div
-              key={i}
-              style={{
-                gridColumn: 'span 6',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-lg)',
-                padding: 14,
-                height: '100%',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span aria-hidden style={{ fontSize: 18 }}>{b.icon}</span>
-                <strong>{b.title}</strong>
-              </div>
-              <div style={{ opacity: 0.92 }}>{b.text}</div>
-            </div>
-          ))}
+
+        {/* À la place de la grille de bullets : le carrousel de rareté */}
+        <div style={{ gridColumn: 'span 8' }}>
+          <UsagesCarousel href={href} />
         </div>
       </Container>
     </section>
@@ -756,11 +748,12 @@ function FeatureBand() {
    ========================================================= */
 function ReceiveShowcase() {
   const href = useLocaleHref()
+  const { t } = useT()
   return (
     <section>
       <Container>
-        <SectionEyebrow>Ce que vous recevez</SectionEyebrow>
-        <H2>Certificat HD + page dédiée</H2>
+        <SectionEyebrow>{t('receive.eyebrow')}</SectionEyebrow>
+        <H2>{t('receive.title')}</H2>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
           <div style={{ gridColumn: 'span 4' }}>
@@ -794,6 +787,7 @@ function ReceiveShowcase() {
             />
           </div>
         </div>
+
         <div
           style={{
             marginTop: 18,
@@ -804,12 +798,12 @@ function ReceiveShowcase() {
           }}
         >
           <ul style={{ margin: 0, paddingLeft: 18, lineHeight: '28px' }}>
-            <li>Fichiers PDF/JPG HD prêts à imprimer (A4 recommandé)</li>
-            <li>QR code scannable menant à votre page souvenir</li>
-            <li>Visibilité publique/privée au choix</li>
+            <li>{t('receive.list1')}</li>
+            <li>{t('receive.list2')}</li>
+            <li>{t('receive.list3')}</li>
           </ul>
           <div style={{ marginTop: 10, fontSize: 14, color: 'var(--color-muted)' }}>
-            Paiements & revente sécurisés par Stripe • Commission marketplace : 15% (min 1 €) lors de la revente.
+            {t('receive.note')}
           </div>
         </div>
       </Container>
@@ -821,16 +815,26 @@ function ReceiveShowcase() {
    HOW IT WORKS / TESTIMONIALS / FAQ
    ========================================================= */
 function HowItWorks() {
+  const pathname = usePathname() || '/'
+  const isFR = /^\/fr(\/|$)/.test(pathname)
+  const eyebrow = isFR ? 'Comment ça marche' : 'How it works'
+  const steps = isFR
+    ? [
+        ['①', 'Choisissez date & heure', ''],
+        ['②', 'Personnalisez', 'Propriétaire, message, style, photo.'],
+        ['③', 'Réservez & recevez', 'Certificat + QR immédiatement. ⏱ < 2 min.'],
+      ]
+    : [
+        ['①', 'Choose date & time', ''],
+        ['②', 'Personalize', 'Owner, message, style, photo.'],
+        ['③', 'Reserve & receive', 'Certificate + QR instantly. ⏱ < 2 min.'],
+      ]
   return (
     <section>
       <Container>
-        <SectionEyebrow>Comment ça marche</SectionEyebrow>
+        <SectionEyebrow>{eyebrow}</SectionEyebrow>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
-          {[
-            ['①', 'Choisissez date & heure', ''],
-            ['②', 'Personnalisez', 'Propriétaire, message, style, photo.'],
-            ['③', 'Réservez & recevez', 'Certificat + QR immédiatement. ⏱ < 2 min.'],
-          ].map(([n, t, d], i) => (
+          {steps.map(([n, t, d], i) => (
             <div key={i} style={{ gridColumn: 'span 4', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
               <div style={{ fontSize: 28 }}>{n}</div>
               <strong>{t}</strong>
@@ -844,15 +848,24 @@ function HowItWorks() {
 }
 
 function Testimonials() {
-  const items = [
-    { q: '“Nous avons revendiqué la journée de la naissance d’Aïcha… frissons à chaque fois !”', a: 'Camille' },
-    { q: '“Mon cadeau préféré : la journée de notre rencontre.”', a: 'Thomas' },
-    { q: '“La journée du diplôme de ma sœur. Simple, mémorable, classe.”', a: 'Mina' },
-  ]
+  const pathname = usePathname() || '/'
+  const isFR = /^\/fr(\/|$)/.test(pathname)
+  const eyebrow = isFR ? 'Témoignages' : 'Testimonials'
+  const items = isFR
+    ? [
+        { q: '“Nous avons revendiqué la journée de la naissance d’Aïcha… frissons à chaque fois !”', a: 'Camille' },
+        { q: '“Mon cadeau préféré : la journée de notre rencontre.”', a: 'Thomas' },
+        { q: '“La journée du diplôme de ma sœur. Simple, mémorable, classe.”', a: 'Mina' },
+      ]
+    : [
+        { q: '“We claimed the day our daughter Aïcha was born… chills every time!”', a: 'Camille' },
+        { q: '“My favorite gift: the day of our first date.”', a: 'Thomas' },
+        { q: '“My sister’s graduation day. Simple, memorable, classy.”', a: 'Mina' },
+      ]
   return (
     <section>
       <Container>
-        <SectionEyebrow>Témoignages</SectionEyebrow>
+        <SectionEyebrow>{eyebrow}</SectionEyebrow>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
           {items.map((t, i) => (
             <blockquote key={i} style={{ gridColumn: 'span 4', margin: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
@@ -960,7 +973,7 @@ For resales, collection and payouts go through Stripe Connect.`,
   return (
     <section id="faq">
       <Container>
-        <SectionEyebrow>FAQ</SectionEyebrow>
+        <SectionEyebrow>{isFR ? 'FAQ' : 'FAQ'}</SectionEyebrow>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
           {rows.map((r, i) => (
             <details key={i} style={{ gridColumn: 'span 6', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: 14 }}>
@@ -993,6 +1006,7 @@ For resales, collection and payouts go through Stripe Connect.`,
    FINAL CTA
    ========================================================= */
 function FinalCTA() {
+  const { t } = useT()
   const href = useLocaleHref()
   return (
     <section
@@ -1002,18 +1016,18 @@ function FinalCTA() {
       }}
     >
       <Container style={{ textAlign: 'center' }}>
-        <H2>Transformez un instant en héritage.</H2>
-        <p style={{ margin: '0 0 16px' }}>Réservez le jour qui compte — aujourd’hui.</p>
+        <H2>{t('final.title')}</H2>
+        <p style={{ margin: '0 0 16px' }}>{t('final.subtitle')}</p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Button href={href('/claim')} variant="primary">
-            Réserver mon jour
+            {t('cta.claim')}
           </Button>
           <Button href={href('/claim?gift=1')} variant="secondary">
-            🎁 Offrir un jour
+            🎁 {t('cta.gift')}
           </Button>
         </div>
         <div style={{ marginTop: 12, fontSize: 12, color: 'var(--color-muted)' }}>
-          Paiement sécurisé Stripe • Certificat HD • Revente C2C possible • Une seule vente par date
+          {t('final.badge')}
         </div>
       </Container>
     </section>
@@ -1021,20 +1035,37 @@ function FinalCTA() {
 }
 
 /* =========================================================
-   BARRE FLOTTANTE (CTA persistant)
+   BARRE FLOTTANTE (CTA persistant) — avec offset automatique
    ========================================================= */
 function FloatingCTA() {
   const href = useLocaleHref()
+  const { t } = useT()
   const [visible, setVisible] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  // Affiche après scroll ; met à jour l’offset dynamique pour libérer le bas de page
   useEffect(() => {
-    const onScroll = () => setVisible(window.scrollY > 420)
+    const onScroll = () => setVisible(!dismissed && window.scrollY > 420)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [dismissed])
+
+  useEffect(() => {
+    const setOffset = () => {
+      const h = ref.current?.offsetHeight ?? 0
+      document.documentElement.style.setProperty('--floating-cta-offset', visible ? `${h + 12}px` : '0px')
+    }
+    setOffset()
+    window.addEventListener('resize', setOffset)
+    return () => window.removeEventListener('resize', setOffset)
+  }, [visible])
+
   if (!visible) return null
   return (
     <div
+      ref={ref}
       aria-live="polite"
       style={{
         position: 'fixed',
@@ -1056,12 +1087,19 @@ function FloatingCTA() {
     >
       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
         <span>⏳</span>
-        <strong>Une seule vente par date.</strong>
-        <span style={{ color:'var(--color-muted)' }}>Certaines dates iconiques partent très vite.</span>
+        <strong>{t('floating.title')}</strong>
+        <span style={{ color:'var(--color-muted)' }}>{t('floating.caption')}</span>
       </div>
-      <div style={{ display:'flex', gap:8 }}>
-        <Button href={href('/explore')} variant="ghost">Voir le registre</Button>
-        <Button href={href('/claim')} variant="primary">Réserver maintenant</Button>
+      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+        <Button href={href('/explore')} variant="ghost">{t('floating.explore')}</Button>
+        <Button href={href('/claim')} variant="primary">{t('floating.reserve')}</Button>
+        <button
+          aria-label="Close"
+          onClick={() => { setDismissed(true); document.documentElement.style.setProperty('--floating-cta-offset','0px') }}
+          style={{ marginLeft: 6, border: '1px solid var(--color-border)', borderRadius: 8, background: 'transparent', color:'var(--color-text)', padding:'6px 8px', cursor:'pointer' }}
+        >
+          ✕
+        </button>
       </div>
     </div>
   )
@@ -1071,6 +1109,8 @@ function FloatingCTA() {
    FOOTER
    ========================================================= */
 function Footer() {
+  const pathname = usePathname() || '/'
+  const isFR = /^\/fr(\/|$)/.test(pathname)
   return (
     <footer style={{ borderTop: '1px solid var(--color-border)' }}>
       <Container style={{ paddingTop: 16, paddingBottom: 16 }}>
@@ -1080,19 +1120,38 @@ function Footer() {
             <span style={{ fontWeight: 700 }}>Parcels of Time</span>
             <span style={{ color: 'var(--color-muted)' }}>© {new Date().getFullYear()}</span>
           </div>
+
           <nav aria-label="Footer" style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--color-muted)' }}>Légal:</span>
-            <Link href="/fr/legal/legal-notice" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Mentions légales</Link>
-            <Link href="/fr/legal/terms" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>CGU/CGV</Link>
-            <Link href="/fr/legal/seller" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Conditions Vendeur</Link>
-            <Link href="/fr/legal/refund" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Remboursement</Link>
+            <span style={{ color: 'var(--color-muted)' }}>{isFR ? 'Légal:' : 'Legal:'}</span>
+            <Link href="/fr/legal/legal-notice" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              {isFR ? 'Mentions légales' : 'Legal notice'}
+            </Link>
+            <Link href="/fr/legal/terms" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              {isFR ? 'CGU/CGV' : 'Terms & Conditions'}
+            </Link>
+            <Link href="/fr/legal/seller" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              {isFR ? 'Conditions Vendeur' : 'Seller Terms'}
+            </Link>
+            <Link href="/fr/legal/refund" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              {isFR ? 'Remboursement' : 'Refunds'}
+            </Link>
             <span style={{ color: 'var(--color-muted)', marginLeft: 8 }}>•</span>
-            <Link href="/fr/legal/privacy" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Confidentialité</Link>
-            <Link href="/fr/legal/cookies" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Cookies</Link>
+            <Link href="/fr/legal/privacy" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              {isFR ? 'Confidentialité' : 'Privacy'}
+            </Link>
+            <Link href="/fr/legal/cookies" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              {isFR ? 'Cookies' : 'Cookies'}
+            </Link>
             <span style={{ color: 'var(--color-muted)', marginLeft: 8 }}>•</span>
-            <Link href="/fr/company" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>À propos</Link>
-            <Link href="/fr/support" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Règles du registre</Link>
-            <a href="mailto:hello@parcelsoftime.com" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>B2B</a>
+            <Link href="/fr/company" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              {isFR ? 'À propos' : 'About'}
+            </Link>
+            <Link href="/fr/support" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              {isFR ? 'Règles du registre' : 'Registry rules'}
+            </Link>
+            <a href="mailto:hello@parcelsoftime.com" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
+              B2B
+            </a>
           </nav>
         </div>
       </Container>
@@ -1143,23 +1202,23 @@ export default function Landing() {
   }, [theme])
 
   return (
-    <main style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+    <main style={{ background: 'var(--color-bg)', color: 'var(--color-text)', paddingBottom: 'calc(var(--floating-cta-offset, 0px) + env(safe-area-inset-bottom))' }}>
       <CookieBanner />
       <Header onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} href={href} />
 
-      {/* Barre flottante persistante */}
+      {/* Barre flottante persistante (avec offset pour ne pas masquer le footer) */}
       <FloatingCTA />
 
       {/* 1. Hero */}
       <Hero href={href} />
 
-      {/* 2. Bande valeur / Pourquoi */}
+      {/* 2. Bande valeur / Pourquoi (avec carrousel des dates convoitées) */}
       <FeatureBand />
 
       {/* 3. Démos / Ce que vous recevez */}
       <ReceiveShowcase />
 
-      {/* 4. Registre public (en avant) */}
+      {/* 4. Registre public */}
       <RegistryShowcase />
 
       {/* 5. Process + Témoignages + FAQ */}

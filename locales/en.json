@@ -1,43 +1,60 @@
 {
   "brand": "Parcels of Time",
   "nav": {
+    "public_registry": "Public Registry",
+    "account": "My Account",
+    "recover": "Redeem",
+    "theme": "Toggle theme",
     "faq": "FAQ"
   },
   "hero": {
     "h1": "Own the day that matters.",
-    "subtitle": "Reserve a unique day, receive an HD certificate and, if you wish, resell the date on our Stripe-secured marketplace.",
-    "rarity": "Real rarity: each date is offered only once."
+    "subtitle": "Photos pile up, moments fade away. With Parcels of Time, turn a date into a unique, authenticated, and shareable object.",
+    "unique": "Each date is offered only once."
+  },
+  "trust": {
+    "stripe": "Stripe • Secure payment",
+    "sha": "SHA-256 • Integrity fingerprint"
   },
   "cta": {
     "claim": "Reserve my date",
     "gift": "Gift a date"
   },
+  "registry": {
+    "eyebrow": "Public registry",
+    "title": "A participatory gallery of personal archives",
+    "paragraph": "Some owners choose to display their certificate (date, title, excerpt, photo). You control visibility from your account. It’s a symbolic and artistic approach.",
+    "cta": "See the Public Registry",
+    "moderation": "Public content is moderated",
+    "visibility": "Full visibility control"
+  },
+  "feature": {
+    "eyebrow": "Why now?",
+    "title": "Own the day that matters",
+    "text": "Photos pile up, moments fade away. With Parcels of Time, you turn a date into a unique, authenticated and shareable object."
+  },
   "receive": {
-    "title": "What you receive",
-    "points": [
-      "Signed high-definition certificate",
-      "Instant delivery email",
-      "Public page for your day (participatory art)"
-    ]
+    "eyebrow": "What you receive",
+    "title": "HD certificate + dedicated page",
+    "list1": "HD PDF/JPG files ready to print (A4 recommended)",
+    "list2": "Scannable QR leading to your memory page",
+    "list3": "Public or private visibility — your choice",
+    "note": "Payments & resale secured by Stripe • Marketplace fee: 15% (min €1) on resale."
   },
-  "claim": {
-    "title": "Reserve your date",
-    "step1": "STEP 1 — DETAILS",
-    "email": "Your email (receipt & certificate)",
-    "display_name": "Recipient’s name (public on the certificate)",
-    "message": "Message (optional)",
-    "link": "Link",
-    "moderation": "Content is moderated. Be kind ❤️",
-    "step2": "STEP 2 — YOUR DAY",
-    "utc_input": "Desired date",
-    "style": "Certificate style",
-    "pay": "Pay & reserve this day"
+  "carousel": {
+    "explore": "Explore",
+    "reserve": "Reserve a rare date",
+    "disclaimer": "Illustrative examples. Availability varies; each date is sold once."
   },
-  "certificate": {
-    "title": "Claim Certificate",
-    "owned_by": "In the name of",
-    "message": "Message",
-    "certificate_id": "Certificate ID",
-    "integrity": "Integrity (SHA-256)"
+  "final": {
+    "title": "Turn a moment into an heirloom.",
+    "subtitle": "Reserve the day that matters — today.",
+    "badge": "Secure Stripe payment • HD certificate • C2C resale possible • One sale per date"
+  },
+  "floating": {
+    "title": "One sale per date.",
+    "caption": "Iconic dates can go fast.",
+    "explore": "View registry",
+    "reserve": "Reserve now"
   }
 }
