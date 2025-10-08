@@ -597,11 +597,21 @@ function Hero({ href }: { href: (p: string) => string }) {
 }
 
 /* -------------------- Carrousel 1 — Émotions & souvenirs -------------------- */
-function EmotionalThemesCarousel({ href }: { href: (p: string) => string }) {
+function EmotionalThemesCarousel() {
   const pathname = usePathname() || '/'
   const isFR = /^\/fr(\/|$)/.test(pathname)
 
-  type Item = { icon: string; titleFR: string; titleEN: string; textFR: string; textEN: string; badgeFR: string; badgeEN: string; tone: 'success'|'warning'|'danger' }
+  type Item = {
+    icon: string
+    titleFR: string
+    titleEN: string
+    textFR: string
+    textEN: string
+    badgeFR: string
+    badgeEN: string
+    tone: 'success'|'warning'|'danger'
+  }
+
   const items: Item[] = [
     {
       icon: '💛',
@@ -615,15 +625,15 @@ function EmotionalThemesCarousel({ href }: { href: (p: string) => string }) {
       icon: '🎂',
       titleFR: 'Anniversaires & traditions',
       titleEN: 'Birthdays & traditions',
-      textFR: 'Bougies soufflées, rituels partagés, ces pages qui reviennent et nous rassemblent.',
-      textEN: 'Blown candles, shared rituals — recurring pages that bring us together.',
+      textFR: 'Bougies soufflées, rituels partagés — ces pages qui reviennent et nous rassemblent.',
+      textEN: 'Blown candles, shared rituals — returning pages that bring us together.',
       badgeFR: 'Chaleur', badgeEN: 'Warmth', tone: 'warning',
     },
     {
       icon: '🏆',
       titleFR: 'Réussites & tournants',
       titleEN: 'Milestones & turning points',
-      textFR: 'Diplôme, premier contrat, première vente, ce déclic qui change une trajectoire.',
+      textFR: 'Diplôme, premier contrat, première vente — ce déclic qui change une trajectoire.',
       textEN: 'Graduation, first job, first sale — that spark that shifts a life.',
       badgeFR: 'Inoubliable', badgeEN: 'Unforgettable', tone: 'success',
     },
@@ -639,8 +649,8 @@ function EmotionalThemesCarousel({ href }: { href: (p: string) => string }) {
       icon: '🎁',
       titleFR: 'À offrir',
       titleEN: 'To gift',
-      textFR: 'Une journée à offrir, personnelle, instantanée, qui dit “je me souviens de nous”.',
-      textEN: 'A day to gift — personal, instant — saying “I remember us.”',
+      textFR: 'Une journée à offrir, personnelle et instantanée, qui dit “je me souviens de nous”.',
+      textEN: 'A day to gift — personal and instant — saying “I remember us.”',
       badgeFR: 'Coup de cœur', badgeEN: 'Heartfelt', tone: 'success',
     },
   ]
@@ -653,8 +663,19 @@ function EmotionalThemesCarousel({ href }: { href: (p: string) => string }) {
   })
 
   return (
-    <div role="region" aria-roledescription="carousel" aria-label={isFR ? 'Émotions & souvenirs' : 'Emotions & memories'}
-         style={{ border:'1px solid var(--color-border)', background:'var(--color-surface)', borderRadius:'var(--radius-lg)', padding:16, boxShadow:'var(--shadow-1)', height:'100%' }}>
+    <div
+      role="region"
+      aria-roledescription="carousel"
+      aria-label={isFR ? 'Émotions & souvenirs' : 'Emotions & memories'}
+      style={{
+        border:'1px solid var(--color-border)',
+        background:'var(--color-surface)',
+        borderRadius:'var(--radius-lg)',
+        padding:16,
+        boxShadow:'var(--shadow-1)',
+        height:'100%',
+      }}
+    >
       <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
         <div style={{display:'flex', alignItems:'center', gap:10, minWidth:0}}>
           <span aria-hidden style={{fontSize:22}}>{it.icon}</span>
@@ -664,22 +685,21 @@ function EmotionalThemesCarousel({ href }: { href: (p: string) => string }) {
         </div>
         <Pill tone={it.tone}>{isFR ? it.badgeFR : it.badgeEN}</Pill>
       </div>
-      <p style={{margin:'8px 0 6px', color:'var(--color-text)', opacity:.9}}>
+
+      <p style={{margin:'8px 0 10px', color:'var(--color-text)', opacity:.9}}>
         {isFR ? it.textFR : it.textEN}
       </p>
-      <div style={{ display:'flex', gap:8, marginTop:8, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
-        <div style={{ display:'flex', gap:6 }}>
-          {items.map((_, idx)=>(
-            <span key={idx} aria-label={idx===i ? (isFR?'élément actif':'active item') : (isFR?'élément':'item')}
-                  style={{width:6, height:6, borderRadius:99, background: idx===i ? toneToColor[it.tone] : 'var(--color-border)'}} />
-          ))}
-        </div>
-        <div style={{display:'flex', gap:8}}>
-          <Button href={href('/explore')} variant="ghost">{isFR ? 'Explorer' : 'Explore'}</Button>
-          <Button href={href('/claim')} variant="primary">{isFR ? 'Réserver une date' : 'Reserve a date'}</Button>
-        </div>
+
+      {/* Indicateurs centrés pour alléger la ligne et rester parfaitement aligné avec la variante du dessous */}
+      <div style={{ display:'flex', justifyContent:'center', gap:6, marginTop:4, marginBottom:4 }}>
+        {items.map((_, idx)=>(
+          <span key={idx}
+                aria-label={idx===i ? (isFR?'élément actif':'active item') : (isFR?'élément':'item')}
+                style={{width:6, height:6, borderRadius:99, background: idx===i ? toneToColor[it.tone] : 'var(--color-border)'}} />
+        ))}
       </div>
-      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)'}}>
+
+      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)', textAlign:'center'}}>
         {isFR ? 'Inspirez-vous. Chaque date n’est vendue qu’une fois.' : 'Get inspired. Each date is sold only once.'}
       </div>
     </div>
@@ -687,11 +707,21 @@ function EmotionalThemesCarousel({ href }: { href: (p: string) => string }) {
 }
 
 /* -------------------- Carrousel 2 — Collection & Histoire -------------------- */
-function CollectorThemesCarousel({ href }: { href: (p: string) => string }) {
+function CollectorThemesCarousel() {
   const pathname = usePathname() || '/'
   const isFR = /^\/fr(\/|$)/.test(pathname)
 
-  type Item = { icon: string; titleFR: string; titleEN: string; textFR: string; textEN: string; badgeFR: string; badgeEN: string; tone: 'success'|'warning'|'danger' }
+  type Item = {
+    icon: string
+    titleFR: string
+    titleEN: string
+    textFR: string
+    textEN: string
+    badgeFR: string
+    badgeEN: string
+    tone: 'success'|'warning'|'danger'
+  }
+
   const items: Item[] = [
     {
       icon: '🚀',
@@ -705,7 +735,7 @@ function CollectorThemesCarousel({ href }: { href: (p: string) => string }) {
       icon: '🏆',
       titleFR: 'Grandes finales',
       titleEN: 'Great finals',
-      textFR: 'Coupe du monde, JO, moments gravés dans la mémoire collective.',
+      textFR: 'Coupe du monde, JO — moments gravés dans la mémoire collective.',
       textEN: 'World cups, Olympics — moments etched in collective memory.',
       badgeFR: 'Très convoité', badgeEN: 'Highly coveted', tone: 'warning',
     },
@@ -743,8 +773,19 @@ function CollectorThemesCarousel({ href }: { href: (p: string) => string }) {
   })
 
   return (
-    <div role="region" aria-roledescription="carousel" aria-label={isFR ? 'Thèmes pour collectionneurs' : 'Collector themes'}
-         style={{ border:'1px solid var(--color-border)', background:'var(--color-surface)', borderRadius:'var(--radius-lg)', padding:16, boxShadow:'var(--shadow-1)', height:'100%' }}>
+    <div
+      role="region"
+      aria-roledescription="carousel"
+      aria-label={isFR ? 'Thèmes pour collectionneurs' : 'Collector themes'}
+      style={{
+        border:'1px solid var(--color-border)',
+        background:'var(--color-surface)',
+        borderRadius:'var(--radius-lg)',
+        padding:16,
+        boxShadow:'var(--shadow-1)',
+        height:'100%',
+      }}
+    >
       <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
         <div style={{display:'flex', alignItems:'center', gap:10, minWidth:0}}>
           <span aria-hidden style={{fontSize:22}}>{it.icon}</span>
@@ -754,22 +795,21 @@ function CollectorThemesCarousel({ href }: { href: (p: string) => string }) {
         </div>
         <Pill tone={it.tone}>{isFR ? it.badgeFR : it.badgeEN}</Pill>
       </div>
-      <p style={{margin:'8px 0 6px', color:'var(--color-text)', opacity:.9}}>
+
+      <p style={{margin:'8px 0 10px', color:'var(--color-text)', opacity:.9}}>
         {isFR ? it.textFR : it.textEN}
       </p>
-      <div style={{ display:'flex', gap:8, marginTop:8, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
-        <div style={{ display:'flex', gap:6 }}>
-          {items.map((_, idx)=>(
-            <span key={idx} aria-label={idx===i ? (isFR?'élément actif':'active item') : (isFR?'élément':'item')}
-                  style={{width:6, height:6, borderRadius:99, background: idx===i ? toneToColor[it.tone] : 'var(--color-border)'}} />
-          ))}
-        </div>
-        <div style={{display:'flex', gap:8}}>
-          <Button href={href('/explore')} variant="ghost">{isFR ? 'Voir le registre' : 'View registry'}</Button>
-          <Button href={href('/claim')} variant="primary">{isFR ? 'Réserver une date rare' : 'Reserve a rare date'}</Button>
-        </div>
+
+      {/* Indicateurs centrés pour cohérence visuelle avec le carrousel du dessus */}
+      <div style={{ display:'flex', justifyContent:'center', gap:6, marginTop:4, marginBottom:4 }}>
+        {items.map((_, idx)=>(
+          <span key={idx}
+                aria-label={idx===i ? (isFR?'élément actif':'active item') : (isFR?'élément':'item')}
+                style={{width:6, height:6, borderRadius:99, background: idx===i ? toneToColor[it.tone] : 'var(--color-border)'}} />
+        ))}
       </div>
-      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)'}}>
+
+      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)', textAlign:'center'}}>
         {isFR ? 'Idées pour passionnés et collectionneurs. Une seule vente par date.' : 'Inspiration for enthusiasts & collectors. One sale per date.'}
       </div>
     </div>
@@ -777,12 +817,11 @@ function CollectorThemesCarousel({ href }: { href: (p: string) => string }) {
 }
 
 /* =========================================================
-   FEATURE BAND — 2 carrousels alignés + 4 bullets
+   FEATURE BAND — 2 carrousels alignés + 4 bullets (sans boutons)
    ========================================================= */
 function FeatureBand() {
   const pathname = usePathname() || '/'
   const isFR = /^\/fr(\/|$)/.test(pathname)
-  const href = useLocaleHref()
   const [isNarrow, setIsNarrow] = useState(false)
 
   useEffect(() => {
@@ -812,7 +851,6 @@ function FeatureBand() {
         { icon: '💎', title: 'Collectible', text: 'A rare object you can resell on our marketplace (Stripe Connect).' },
       ]) as Array<{ icon: string; title: string; text: string }>
 
-  // Utilitaires de styles pour cartes bullet (hauteurs identiques & alignement parfait)
   const BulletCard = ({ icon, title, text }: { icon: string; title: string; text: string }) => (
     <div
       style={{
@@ -833,7 +871,6 @@ function FeatureBand() {
     </div>
   )
 
-  // Spans responsive (7/5 desktop, 12 mobile)
   const leftSpan = isNarrow ? 'span 12' : 'span 7'
   const rightSpan = isNarrow ? 'span 12' : 'span 5'
 
@@ -847,7 +884,7 @@ function FeatureBand() {
 
         {/* Row 1 : Carrousel émotions + bullets Authentique / Cadeau */}
         <div style={{ gridColumn: leftSpan, gridRow: '2' }}>
-          <EmotionalThemesCarousel href={href} />
+          <EmotionalThemesCarousel />
         </div>
         <div style={{ gridColumn: rightSpan, gridRow: '2', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
           <div style={{ gridColumn: 'span 6' }}>
@@ -860,7 +897,7 @@ function FeatureBand() {
 
         {/* Row 2 : Carrousel collectionneurs + bullets Unique / Collector */}
         <div style={{ gridColumn: leftSpan, gridRow: '3' }}>
-          <CollectorThemesCarousel href={href} />
+          <CollectorThemesCarousel />
         </div>
         <div style={{ gridColumn: rightSpan, gridRow: '3', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
           <div style={{ gridColumn: 'span 6' }}>
@@ -874,6 +911,7 @@ function FeatureBand() {
     </section>
   )
 }
+
 
 
 /* =========================================================
