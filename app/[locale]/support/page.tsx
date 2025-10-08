@@ -140,17 +140,7 @@ export default async function Page({
                   ? 'Les textes inclus sur le certificat : titre, message, mention “Offert par”, nom si visible.'
                   : 'Texts included on the certificate: title, message, “Gifted by”, name if visible.'}
               </li>
-              <li>
-                {fr
-                  ? 'Une référence technique (ID/horodatage) et un QR de consultation (lecture seule).'
-                  : 'A technical reference (ID/timestamp) and a QR for view-only access.'}
-              </li>
             </ul>
-            <p style={muted()}>
-              {fr
-                ? 'Nous retirons les métadonnées EXIF des images que vous importez pour limiter la fuite d’informations.'
-                : 'We strip EXIF metadata from uploaded images to limit information leakage.'}
-            </p>
           </section>
 
           {/* 3. Your choices */}
@@ -167,11 +157,6 @@ export default async function Page({
                   ? 'La désactivation retire l’élément de la galerie. Des copies résiduelles (caches, sauvegardes) peuvent persister pendant une courte période.'
                   : 'Unpublishing removes the item from the gallery. Residual copies (caches, backups) may persist for a short period.'}
               </li>
-              <li>
-                {fr
-                  ? 'Vous pouvez modifier à tout moment le titre, le message, la couleur et l’image personnalisée.'
-                  : 'You may edit title, message, color and custom image at any time.'}
-              </li>
             </ul>
           </section>
 
@@ -183,7 +168,6 @@ export default async function Page({
             <ul style={ul()}>
               <li>{fr ? 'Messages personnels, commémorations, créations artistiques.' : 'Personal notes, commemorations, artistic creations.'}</li>
               <li>{fr ? 'Tonalité respectueuse, non-conflictuelle.' : 'Respectful, non-confrontational tone.'}</li>
-              <li>{fr ? 'Liens sobres vers des pages personnelles non commerciales.' : 'Simple links to non-commercial personal pages.'}</li>
             </ul>
 
             <h3 style={h3()}>{fr ? '4.2 — Interdits' : '4.2 — Not allowed'}</h3>
@@ -200,8 +184,8 @@ export default async function Page({
               </li>
               <li>
                 {fr
-                  ? 'Nudité explicite, pornographie ou contenu sexuel ; tout contenu impliquant des mineurs.'
-                  : 'Explicit nudity, pornography or sexual content; any content involving minors.'}
+                  ? 'Nudité explicite, pornographie ou contenu sexuel ;'
+                  : 'Explicit nudity, pornography or sexual content;'}
               </li>
               <li>
                 {fr
@@ -234,18 +218,13 @@ export default async function Page({
             <ul style={ul()}>
               <li>
                 {fr
-                  ? 'Évitez d’exposer des visages de mineurs ; nous pouvons flouter ou refuser l’image.'
-                  : 'Avoid displaying faces of minors; we may blur or reject such images.'}
+                  ? 'Évitez tout contenu impliquant des mineurs'
+                  : 'Avoid any content involving minors.'}
               </li>
               <li>
                 {fr
                   ? 'Images générées par IA autorisées si vous détenez les droits et si elles ne portent pas atteinte à autrui (deepfakes interdits).'
                   : 'AI-generated images are allowed if you hold rights and they do not harm others (no deepfakes).'}
-              </li>
-              <li>
-                {fr
-                  ? 'Nous pouvons redimensionner, recomprimer, recadrer légèrement pour cohérence visuelle.'
-                  : 'We may resize, recompress, or lightly crop for visual consistency.'}
               </li>
             </ul>
           </section>
@@ -256,18 +235,18 @@ export default async function Page({
             <ul style={ul()}>
               <li>
                 {fr
-                  ? 'La galerie est en consultation seule. Nous combinons un contrôle automatisé et des vérifications humaines.'
+                  ? 'La galerie est en consultation seule. Nous faisons des vérifications humaines.'
                   : 'The gallery is view-only. We combine automated checks with human review.'}
               </li>
               <li>
                 {fr
-                  ? 'Nous pouvons retirer, masquer, recadrer, flouter ou refuser un contenu à notre discrétion.'
-                  : 'We may remove, hide, crop, blur or refuse content at our discretion.'}
+                  ? 'Nous pouvons retirer un contenu du registre public s’il enfreint nos règles.'
+                  : 'We may remove content from the public registry if it violates our rules.'}
               </li>
               <li>
                 {fr
-                  ? 'En cas de manquements répétés : suspension de la publication, voire bannissement du registre.'
-                  : 'For repeated violations: suspension of publishing, or a ban from the register.'}
+                  ? 'En cas de manquements répétés : supression du certificat, date remise en vente libre'
+                  : 'In case of repeated breaches: revocation of the certificate, date of return to free sale'}
               </li>
               <li>
                 {fr
@@ -336,8 +315,8 @@ export default async function Page({
               </li>
               <li>
                 {fr
-                  ? 'Le contenu publié reste sous votre responsabilité ; {COMPANY_NAME} n’en garantit ni l’exactitude ni la légalité.'
-                  : 'You are responsible for your content; {COMPANY_NAME} does not guarantee its accuracy or legality.'}
+                  ? 'Le contenu publié reste sous votre responsabilité ; Parcels of Time n’en garantit ni l’exactitude ni la légalité.'
+                  : 'You are responsible for your content; Parcels of Time does not guarantee its accuracy or legality.'}
               </li>
             </ul>
           </section>
