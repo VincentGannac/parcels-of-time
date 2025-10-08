@@ -1277,16 +1277,14 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                       {days.map(d=>{
                         const unavailable = setRed.has(d)
                         const onSale = setYellow.has(d)
-                        const listing = saleLookup[d]
-                        const priceStr = listing ? `${(listing.price_cents/100).toFixed(0)} €` : ''
                         const labelBase = d.toString().padStart(2,'0')
-                        const suffix = unavailable ? ' — indisponible' : onSale ? ` — en vente • ${priceStr}` : ''
+                        const suffix = unavailable ? ' — indisponible' : onSale ? ' — en vente' : ' — disponible'
                         const label = labelBase + suffix
                         return (
                           <option
                             key={d}
                             value={d}
-                            disabled={unavailable}            // ✅ un jaune n’est plus “unavailable”
+                            disabled={unavailable}
                             aria-disabled={unavailable}
                             style={{ color: unavailable ? '#ff4d4d' : onSale ? '#e0a800' : '#000' }}
                           >
@@ -1308,26 +1306,51 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                 Parcels of Time prélève une <strong>commission de 15%</strong> côté vendeur.
               </div>
             </div>
+
             {/* Prix courant */}
             {(() => {
               const currentListing = saleLookup[D]
+              const isUnavailable = unavailableDays.includes(D)
+              const isOnSale = !!currentListing
+
               return (
                 <div
+                  aria-live="polite"
                   style={{
                     marginTop:12,
-                    padding:'10px 12px',
-                    borderRadius:10,
-                    background:'rgba(255,209,71,.08)',
-                    border:'1px solid var(--color-border)'
+                    padding:'14px 16px',
+                    borderRadius:16,
+                    background:'linear-gradient(180deg, rgba(255,209,71,.10), rgba(255,209,71,.06))',
+                    border:'1px solid var(--color-border)',
+                    boxShadow:'var(--shadow-elev1)'
                   }}
                 >
-                  {currentListing ? (
-                    <div>
-                      Prix marketplace : <strong>{(currentListing.price_cents/100).toFixed(0)} €</strong>
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6}}>
+                    <div style={{fontSize:12, letterSpacing:1, textTransform:'uppercase', color:'var(--color-muted)'}}>
+                      Prix courant
+                    </div>
+                    <div
+                      style={{
+                        fontSize:11, padding:'4px 8px', borderRadius:999,
+                        background: isUnavailable ? 'rgba(255,122,122,.12)' : isOnSale ? 'rgba(255,209,71,.18)' : 'rgba(11,216,122,.14)',
+                        border: `1px solid ${isUnavailable ? '#ff7a7a' : isOnSale ? 'var(--color-primary)' : '#0BBF6A'}`,
+                        color:  isUnavailable ? '#ffb2b2' : isOnSale ? 'var(--color-primary)' : '#0BBF6A'
+                      }}
+                    >
+                      {isUnavailable ? 'Indisponible' : isOnSale ? 'Marketplace' : 'Disponible'}
+                    </div>
+                  </div>
+
+                  {isOnSale ? (
+                    <div style={{display:'flex', alignItems:'baseline', gap:10}}>
+                      <div style={{fontSize:26, fontWeight:900}}>
+                        {(currentListing.price_cents/100).toFixed(0)} €
+                      </div>
+                      <div style={{fontSize:12, opacity:.85}}>prix fixé par le vendeur</div>
                     </div>
                   ) : (
-                    <div>
-                      Prix : <strong>29&nbsp;€</strong> <span style={{opacity:.75}}>(date classique — style “Neutral”)</span>
+                    <div style={{display:'flex', alignItems:'baseline', gap:10}}>
+                      <div style={{fontSize:26, fontWeight:900}}>29 €</div>
                     </div>
                   )}
                 </div>
@@ -1601,23 +1624,117 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
             </div>
 
             {/* Publication dans le registre — PDF complet */}
-            <div style={{marginBottom:10, padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:12}}>
-              <label htmlFor="publish-registry" style={{display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer'}}>
-                <input
-                  id="publish-registry"
-                  type="checkbox"
-                  checked={form.public_registry}
-                  onChange={e=>setForm(f=>({...f, public_registry: e.target.checked}))}
-                  style={{marginTop:2}}
-                />
-                <div>
-                  <div><strong>Publier ce certificat (PDF complet) dans le registre public</strong></div>
-                  <div style={{fontSize:12, color:'var(--color-muted)'}}>
-                    Vous pourrez publier/supprimer plus tard depuis votre QR Code
+            {(() => {
+              const loc = (window.location.pathname.split('/')[1] || 'en').slice(0,2) || 'en'
+              const t = isFR
+                ? {
+                    eyebrow: 'Registre public (optionnel)',
+                    title: 'Publier ce certificat (PDF complet) dans la galerie',
+                    sub: 'Partagez votre œuvre, inspirez - vous pourrez retirer la publication à tout moment.',
+                    bullets: [
+                      '🖼️ Visibilité : votre certificat apparaît dans la galerie publique',
+                      '🎨 Œuvre participative : un geste artistique et symbolique - vous contribuez à une galerie vivante',
+                      '🔒 Contrôle : publication/suppression possibles via votre QR ou votre compte',
+                    ],
+                    more: 'En savoir plus',
+                    moreBody:
+                      'Le registre est une exposition participative. Publier peut révéler des données personnelles (nom, titre, extrait, photo). ' +
+                      'Évitez les informations sensibles et les visages de mineurs. Les contenus publics sont modérés et consultables uniquement (pas de téléchargement). ' +
+                      'Vous pourrez changer d’avis à tout moment.',
+                    links: {
+                      explore: 'Voir le registre',
+                      terms: 'CGU/CGV',
+                      privacy: 'Confidentialité',
+                    },
+                    ctaLabel: 'Activer la publication',
+                  }
+                : {
+                    eyebrow: 'Public Registry (optional)',
+                    title: 'Publish this certificate (full PDF) to the gallery',
+                    sub: 'Share your piece and inspire others - you can unpublish anytime.',
+                    bullets: [
+                      '🖼️ Visibility: your certificate appears in the public gallery',
+                      '🎨 Participatory art: a symbolic gesture - contribute to a living, collective gallery',
+                      '🔒 Control: publish/unpublish via your QR or account',
+                    ],
+                    more: 'Learn more',
+                    moreBody:
+                      'The registry is a participatory exhibition. Publishing may reveal personal data (name, title, excerpt, photo). ' +
+                      'Avoid sensitive information and minors’ faces. Public content is moderated and view-only (no downloads). ' +
+                      'You can change your mind anytime.',
+                    links: {
+                      explore: 'Open the registry',
+                      terms: 'Terms',
+                      privacy: 'Privacy',
+                    },
+                    ctaLabel: 'Enable publishing',
+                  }
+
+              const link = (p:string) => `/${loc}${p}`
+
+              return (
+                <section
+                  aria-labelledby="registry-opt-title"
+                  style={{
+                    marginBottom: 10,
+                    padding: '14px 16px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 16,
+                    background: 'linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0))',
+                  }}
+                >
+                  {/* Header + switch */}
+                  <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12}}>
+                    <div>
+                      <div style={{fontSize:12, letterSpacing:1, textTransform:'uppercase', color:'var(--color-muted)'}}>
+                        {t.eyebrow}
+                      </div>
+                      <h3 id="registry-opt-title" style={{margin:'6px 0 4px', fontSize:16, lineHeight:'22px'}}>
+                        {t.title}
+                      </h3>
+                      <p style={{margin:0, fontSize:12, color:'var(--color-muted)'}}>
+                        {t.sub}
+                      </p>
+                    </div>
+
+                    <label
+                      htmlFor="publish-registry"
+                      style={{display:'inline-flex', alignItems:'center', gap:10, cursor:'pointer', userSelect:'none'}}
+                      role="switch"
+                      aria-checked={form.public_registry}
+                      title={t.ctaLabel}
+                    >
+                      <input
+                        id="publish-registry"
+                        type="checkbox"
+                        checked={form.public_registry}
+                        onChange={e=>setForm(f=>({...f, public_registry: e.target.checked}))}
+                        style={{margin:0}}
+                      />
+                    </label>
                   </div>
-                </div>
-              </label>
-            </div>
+
+                  {/* 3 bénéfices (courts) */}
+                  <ul style={{margin:'10px 0 0', paddingLeft:18, lineHeight:'22px', fontSize:13}}>
+                    {t.bullets.map((b, i) => <li key={i}>{b}</li>)}
+                  </ul>
+
+                  {/* Détails pliables pour ne pas surcharger */}
+                  <details style={{marginTop:10}}>
+                    <summary style={{cursor:'pointer', fontSize:12}}>{t.more}</summary>
+                    <div style={{marginTop:8, fontSize:12, color:'var(--color-muted)'}}>
+                      <p style={{margin:'0 0 8px'}}>{t.moreBody}</p>
+                      <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
+                        <a href={link('/explore')} style={{color:'var(--color-text)'}}>{t.links.explore} →</a>
+                        <a href={link('/legal/terms')} style={{color:'var(--color-text)'}}>{t.links.terms}</a>
+                        <a href={link('/legal/privacy')} style={{color:'var(--color-text)'}}>{t.links.privacy}</a>
+                      </div>
+                    </div>
+                  </details>
+                </section>
+              )
+            })()}
+
 
             {/* Conformité & consentements */}
             <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
