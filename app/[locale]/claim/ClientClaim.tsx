@@ -180,7 +180,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     if (m !== M) setM(m)
     if (d !== D) setD(d)
   }, [Y, M, MAX_Y, MAX_M, MAX_D, D])
-
+  
   // Langue (pour quelques libellés)
   const isFR = useMemo(()=>{
     try { return (navigator.language || '').toLowerCase().startsWith('fr') } catch { return false }
@@ -252,12 +252,100 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   const [isLoadingClaim, setIsLoadingClaim] = useState(false)
 
+  const autoPickDoneRef = useRef(false)
+
+  useEffect(() => {
+    // Si un ts explicite est fourni, on respecte la volonté de l’URL
+    if (autoPickDoneRef.current || prefillTs) { 
+      autoPickDoneRef.current = true
+      return
+    }
+    if (isLoadingDays) return // attendre le 1er mois
+
+    ;(async () => {
+      const nearest = await findNearestWhiteDate()
+      if (nearest) {
+        setY(nearest.y); setM(nearest.m); setD(nearest.d)
+      }
+      autoPickDoneRef.current = true
+    })()
+  }, [isLoadingDays, prefillTs, todayUtc, maxDateUtc])
+
     // Cache par mois (YYYY-MM) : on mémorise rouges + jaunes + lookup
   type MonthCache = {
     red: number[]
     yellow: number[]
     lookup: Record<number, { id:string; price_cents:number; currency:string }>
   }
+
+  const monthKey = (y:number,m:number) => `${y}-${String(m).padStart(2,'0')}`
+
+async function getMonthData(y:number, m:number): Promise<MonthCache> {
+  const ym = monthKey(y,m)
+  const cached = monthCacheRef.current.get(ym)
+  if (cached) return cached
+
+  // Si c'est le mois actuellement affiché et déjà chargé, réutilise l'état local
+  if (y === Y && m === M && !isLoadingDays) {
+    const mc: MonthCache = { red: unavailableDays, yellow: forSaleDays, lookup: saleLookup }
+    monthCacheRef.current.set(ym, mc)
+    return mc
+  }
+
+  // Sinon, on fetch une fois puis on met en cache
+  try {
+    const res = await fetch(`/api/unavailable?ym=${ym}`)
+    if (!res.ok) throw new Error('fetch failed')
+    const data = await res.json()
+    const red = Array.isArray(data?.unavailable) ? data.unavailable : []
+    const yellow = Array.isArray(data?.for_sale) ? data.for_sale : []
+    const listingList = Array.isArray(data?.listings) ? data.listings : []
+    const lookup: Record<number, { id:string; price_cents:number; currency:string }> = {}
+    for (const it of listingList) {
+      if (typeof it?.d === 'number') {
+        lookup[it.d] = { id: String(it.id), price_cents: it.price_cents, currency: it.currency || 'EUR' }
+      }
+    }
+    const mc: MonthCache = { red, yellow, lookup }
+    monthCacheRef.current.set(ym, mc)
+    return mc
+  } catch {
+    const empty: MonthCache = { red: [], yellow: [], lookup: {} }
+    monthCacheRef.current.set(ym, empty)
+    return empty
+  }
+}
+
+  async function isWhiteDay(date: Date): Promise<boolean> {
+    if (date.getTime() > maxDateUtc.getTime()) return false
+    const y = date.getUTCFullYear(), m = date.getUTCMonth()+1, d = date.getUTCDate()
+    const dim = daysInMonth(y, m)
+    const maxDayThisMonth = (y === MAX_Y && m === MAX_M) ? Math.min(dim, MAX_D) : dim
+    if (d > maxDayThisMonth) return false
+    const month = await getMonthData(y, m)
+    return !month.red.includes(d) && !month.yellow.includes(d)
+  }
+
+  async function findNearestWhiteDate(): Promise<{y:number; m:number; d:number} | null> {
+    const forwardLimit = Math.ceil((maxDateUtc.getTime() - todayUtc.getTime()) / (24*3600*1000))
+    const backwardLimit = 365 // on borne à 1 an en arrière pour éviter de tourner trop
+    const limit = Math.max(forwardLimit, backwardLimit)
+
+    for (let delta = 0; delta <= limit; delta++) {
+      const offsets = delta === 0 ? [0] : [delta, -delta] // futur prioritaire
+      for (const off of offsets) {
+        const cand = new Date(todayUtc)
+        cand.setUTCDate(cand.getUTCDate() + off)
+        if (await isWhiteDay(cand)) {
+          return { y: cand.getUTCFullYear(), m: cand.getUTCMonth()+1, d: cand.getUTCDate() }
+        }
+      }
+    }
+    return null
+  }
+
+
+
 
   const monthCacheRef = useRef<Map<string, MonthCache>>(new Map())
   // Pour annuler les requêtes précédentes si on change Y/M rapidement
