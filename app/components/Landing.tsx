@@ -596,136 +596,285 @@ function Hero({ href }: { href: (p: string) => string }) {
   )
 }
 
-/* -------------------- RareThemesCarousel (thèmes) -------------------- */
-function RareThemesCarousel({ href }: { href: (p: string) => string }) {
+/* -------------------- Carrousel 1 — Émotions & souvenirs -------------------- */
+function EmotionalThemesCarousel({ href }: { href: (p: string) => string }) {
   const pathname = usePathname() || '/'
   const isFR = /^\/fr(\/|$)/.test(pathname)
 
-  type Theme = {
-    titleFR: string
-    titleEN: string
-    textFR: string
-    textEN: string
-    badgeFR: string
-    badgeEN: string
-    tone: 'success' | 'warning' | 'danger'
-  }
-
-  const items: Theme[] = [
+  type Item = { icon: string; titleFR: string; titleEN: string; textFR: string; textEN: string; badgeFR: string; badgeEN: string; tone: 'success'|'warning'|'danger' }
+  const items: Item[] = [
     {
-      titleFR: 'Grands exploits spatiaux',
-      titleEN: 'Space milestones',
-      textFR: 'Apollo 11 (1969-07-20), 1er vol navette (1981-04-12), Curiosity (2012-08-06)…',
-      textEN: 'Apollo 11 (1969-07-20), first shuttle flight (1981-04-12), Curiosity landing (2012-08-06)…',
-      badgeFR: 'Historique',
-      badgeEN: 'Historic',
-      tone: 'success',
+      icon: '💛',
+      titleFR: 'Amour & famille',
+      titleEN: 'Love & family',
+      textFR: 'Rencontre, fiançailles, mariage, naissance, premier mot… ces instants qui nous fondent.',
+      textEN: 'First date, engagement, wedding, birth, first word… the moments that make us.',
+      badgeFR: 'Émotion', badgeEN: 'Emotion', tone: 'success',
     },
     {
-      titleFR: 'Finales & records mondiaux',
-      titleEN: 'Global finals & records',
-      textFR: 'Coupes du Monde (1998-07-12, 2018-07-15), JO, grands records…',
-      textEN: 'World Cups (1998-07-12, 2018-07-15), Olympics, major records…',
-      badgeFR: 'Très convoité',
-      badgeEN: 'Highly coveted',
-      tone: 'warning',
+      icon: '🎂',
+      titleFR: 'Anniversaires & traditions',
+      titleEN: 'Birthdays & traditions',
+      textFR: 'Bougies soufflées, rituels partagés, ces pages qui reviennent et nous rassemblent.',
+      textEN: 'Blown candles, shared rituals — recurring pages that bring us together.',
+      badgeFR: 'Chaleur', badgeEN: 'Warmth', tone: 'warning',
     },
     {
-      titleFR: 'Basculements d’époque',
-      titleEN: 'Epochal shifts',
-      textFR: 'Chute du mur (1989-11-09), passage à l’an 2000 (2000-01-01)…',
-      textEN: 'Berlin Wall (1989-11-09), Y2K (2000-01-01)…',
-      badgeFR: 'Iconique',
-      badgeEN: 'Iconic',
-      tone: 'warning',
+      icon: '🏆',
+      titleFR: 'Réussites & tournants',
+      titleEN: 'Milestones & turning points',
+      textFR: 'Diplôme, premier contrat, première vente, ce déclic qui change une trajectoire.',
+      textEN: 'Graduation, first job, first sale — that spark that shifts a life.',
+      badgeFR: 'Inoubliable', badgeEN: 'Unforgettable', tone: 'success',
     },
     {
-      titleFR: 'Icônes culturelles',
-      titleEN: 'Cultural icons',
-      textFR: 'Woodstock (1969-08-15), 1er iPhone (2007-01-09)…',
-      textEN: 'Woodstock (1969-08-15), first iPhone reveal (2007-01-09)…',
-      badgeFR: 'Collector',
-      badgeEN: 'Collectible',
-      tone: 'success',
+      icon: '🧭',
+      titleFR: 'Voyages & retrouvailles',
+      titleEN: 'Journeys & reunions',
+      textFR: 'Décollage, arrivée, lever de soleil — la boussole vers ailleurs ou vers chez soi.',
+      textEN: 'Takeoff, arrival, sunrise — the compass pointing outward or home.',
+      badgeFR: 'Souvenir', badgeEN: 'Memory', tone: 'warning',
     },
     {
-      titleFR: 'Explorations & sommets',
-      titleEN: 'Exploration & summits',
-      textFR: 'Everest (1953-05-29), grandes traversées…',
-      textEN: 'Everest (1953-05-29), major crossings…',
-      badgeFR: 'Rare',
-      badgeEN: 'Rare',
-      tone: 'danger',
+      icon: '🎁',
+      titleFR: 'À offrir',
+      titleEN: 'To gift',
+      textFR: 'Une journée à offrir, personnelle, instantanée, qui dit “je me souviens de nous”.',
+      textEN: 'A day to gift — personal, instant — saying “I remember us.”',
+      badgeFR: 'Coup de cœur', badgeEN: 'Heartfelt', tone: 'success',
     },
   ]
 
   const [i, setI] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => setI((v) => (v + 1) % items.length), 3600)
-    return () => clearInterval(t)
-  }, [])
+  useEffect(() => { const t = setInterval(() => setI(v => (v+1)%items.length), 3400); return () => clearInterval(t) }, [])
   const it = items[i]
-
-  const toneToColor: Record<'success' | 'warning' | 'danger', string> = {
-    success: 'var(--color-success)',
-    warning: 'var(--color-warning)',
-    danger: 'var(--color-danger)',
-  }
+  const toneToColor: Record<'success'|'warning'|'danger', string> = ({
+    success: 'var(--color-success)', warning: 'var(--color-warning)', danger: 'var(--color-danger)'
+  })
 
   return (
-    <div
-      role="region"
-      aria-roledescription="carousel"
-      aria-label={isFR ? 'Dates convoitées — thèmes' : 'Sought-after themes'}
-      style={{
-        border: '1px solid var(--color-border)',
-        background: 'var(--color-surface)',
-        borderRadius: 'var(--radius-lg)',
-        padding: 16,
-        boxShadow: 'var(--shadow-1)',
-      }}
-    >
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <span aria-hidden style={{ fontSize: 22 }}>⏳</span>
-          <strong style={{ fontSize: 18, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+    <div role="region" aria-roledescription="carousel" aria-label={isFR ? 'Émotions & souvenirs' : 'Emotions & memories'}
+         style={{ border:'1px solid var(--color-border)', background:'var(--color-surface)', borderRadius:'var(--radius-lg)', padding:16, boxShadow:'var(--shadow-1)', height:'100%' }}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
+        <div style={{display:'flex', alignItems:'center', gap:10, minWidth:0}}>
+          <span aria-hidden style={{fontSize:22}}>{it.icon}</span>
+          <strong style={{fontSize:18, whiteSpace:'nowrap', textOverflow:'ellipsis', overflow:'hidden'}}>
             {isFR ? it.titleFR : it.titleEN}
           </strong>
         </div>
         <Pill tone={it.tone}>{isFR ? it.badgeFR : it.badgeEN}</Pill>
       </div>
-
-      {/* Copy */}
-      <p style={{ margin: '8px 0 6px', color: 'var(--color-text)', opacity: .9 }}>
+      <p style={{margin:'8px 0 6px', color:'var(--color-text)', opacity:.9}}>
         {isFR ? it.textFR : it.textEN}
       </p>
-
-      {/* Dots + CTAs */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {items.map((_, idx) => (
-            <span
-              key={idx}
-              aria-label={idx === i ? (isFR ? 'élément actif' : 'active item') : (isFR ? 'élément' : 'item')}
-              style={{ width: 6, height: 6, borderRadius: 99, background: idx === i ? toneToColor[it.tone] : 'var(--color-border)' }}
-            />
+      <div style={{ display:'flex', gap:8, marginTop:8, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:6 }}>
+          {items.map((_, idx)=>(
+            <span key={idx} aria-label={idx===i ? (isFR?'élément actif':'active item') : (isFR?'élément':'item')}
+                  style={{width:6, height:6, borderRadius:99, background: idx===i ? toneToColor[it.tone] : 'var(--color-border)'}} />
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{display:'flex', gap:8}}>
           <Button href={href('/explore')} variant="ghost">{isFR ? 'Explorer' : 'Explore'}</Button>
-          <Button href={href('/claim')} variant="primary">{isFR ? 'Réserver une date rare' : 'Reserve a rare date'}</Button>
+          <Button href={href('/claim')} variant="primary">{isFR ? 'Réserver une date' : 'Reserve a date'}</Button>
         </div>
       </div>
-
-      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-muted)' }}>
-        {isFR
-          ? 'Exemples illustratifs regroupés par thèmes. Disponibilités variables, une seule vente par date.'
-          : 'Illustrative examples grouped by themes. Availability varies; each date is sold once.'}
+      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)'}}>
+        {isFR ? 'Inspirez-vous. Chaque date n’est vendue qu’une fois.' : 'Get inspired. Each date is sold only once.'}
       </div>
     </div>
   )
 }
+
+/* -------------------- Carrousel 2 — Collection & Histoire -------------------- */
+function CollectorThemesCarousel({ href }: { href: (p: string) => string }) {
+  const pathname = usePathname() || '/'
+  const isFR = /^\/fr(\/|$)/.test(pathname)
+
+  type Item = { icon: string; titleFR: string; titleEN: string; textFR: string; textEN: string; badgeFR: string; badgeEN: string; tone: 'success'|'warning'|'danger' }
+  const items: Item[] = [
+    {
+      icon: '🚀',
+      titleFR: 'Exploration spatiale',
+      titleEN: 'Space exploration',
+      textFR: 'Décollages, alunissages, rovers — jalons qui élargissent notre horizon.',
+      textEN: 'Launches, moonwalks, rovers — milestones expanding our horizon.',
+      badgeFR: 'Iconique', badgeEN: 'Iconic', tone: 'success',
+    },
+    {
+      icon: '🏆',
+      titleFR: 'Grandes finales',
+      titleEN: 'Great finals',
+      textFR: 'Coupe du monde, JO, moments gravés dans la mémoire collective.',
+      textEN: 'World cups, Olympics — moments etched in collective memory.',
+      badgeFR: 'Très convoité', badgeEN: 'Highly coveted', tone: 'warning',
+    },
+    {
+      icon: '🏛️',
+      titleFR: 'Basculements d’époque',
+      titleEN: 'Epochal shifts',
+      textFR: 'Pages qui se tournent : frontières, innovations, sociétés qui changent.',
+      textEN: 'Pages turning: borders, breakthroughs, societies shifting.',
+      badgeFR: 'Historique', badgeEN: 'Historic', tone: 'warning',
+    },
+    {
+      icon: '🎨',
+      titleFR: 'Icônes culturelles',
+      titleEN: 'Cultural icons',
+      textFR: 'Concerts, sorties majeures, annonces qui ont bousculé l’art et la tech.',
+      textEN: 'Concerts, major releases, announcements that moved art & tech.',
+      badgeFR: 'Collector', badgeEN: 'Collectible', tone: 'success',
+    },
+    {
+      icon: '🧗',
+      titleFR: 'Explorations & sommets',
+      titleEN: 'Exploration & summits',
+      textFR: 'Ascensions, traversées, premières — l’esprit d’aventure.',
+      textEN: 'Ascents, crossings, firsts — the spirit of adventure.',
+      badgeFR: 'Rare', badgeEN: 'Rare', tone: 'danger',
+    },
+  ]
+
+  const [i, setI] = useState(0)
+  useEffect(() => { const t = setInterval(() => setI(v => (v+1)%items.length), 3600); return () => clearInterval(t) }, [])
+  const it = items[i]
+  const toneToColor: Record<'success'|'warning'|'danger', string> = ({
+    success: 'var(--color-success)', warning: 'var(--color-warning)', danger: 'var(--color-danger)'
+  })
+
+  return (
+    <div role="region" aria-roledescription="carousel" aria-label={isFR ? 'Thèmes pour collectionneurs' : 'Collector themes'}
+         style={{ border:'1px solid var(--color-border)', background:'var(--color-surface)', borderRadius:'var(--radius-lg)', padding:16, boxShadow:'var(--shadow-1)', height:'100%' }}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
+        <div style={{display:'flex', alignItems:'center', gap:10, minWidth:0}}>
+          <span aria-hidden style={{fontSize:22}}>{it.icon}</span>
+          <strong style={{fontSize:18, whiteSpace:'nowrap', textOverflow:'ellipsis', overflow:'hidden'}}>
+            {isFR ? it.titleFR : it.titleEN}
+          </strong>
+        </div>
+        <Pill tone={it.tone}>{isFR ? it.badgeFR : it.badgeEN}</Pill>
+      </div>
+      <p style={{margin:'8px 0 6px', color:'var(--color-text)', opacity:.9}}>
+        {isFR ? it.textFR : it.textEN}
+      </p>
+      <div style={{ display:'flex', gap:8, marginTop:8, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:6 }}>
+          {items.map((_, idx)=>(
+            <span key={idx} aria-label={idx===i ? (isFR?'élément actif':'active item') : (isFR?'élément':'item')}
+                  style={{width:6, height:6, borderRadius:99, background: idx===i ? toneToColor[it.tone] : 'var(--color-border)'}} />
+          ))}
+        </div>
+        <div style={{display:'flex', gap:8}}>
+          <Button href={href('/explore')} variant="ghost">{isFR ? 'Voir le registre' : 'View registry'}</Button>
+          <Button href={href('/claim')} variant="primary">{isFR ? 'Réserver une date rare' : 'Reserve a rare date'}</Button>
+        </div>
+      </div>
+      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)'}}>
+        {isFR ? 'Idées pour passionnés et collectionneurs. Une seule vente par date.' : 'Inspiration for enthusiasts & collectors. One sale per date.'}
+      </div>
+    </div>
+  )
+}
+
+/* =========================================================
+   FEATURE BAND — 2 carrousels alignés + 4 bullets
+   ========================================================= */
+function FeatureBand() {
+  const pathname = usePathname() || '/'
+  const isFR = /^\/fr(\/|$)/.test(pathname)
+  const href = useLocaleHref()
+  const [isNarrow, setIsNarrow] = useState(false)
+
+  useEffect(() => {
+    const onResize = () => setIsNarrow(typeof window !== 'undefined' && window.innerWidth < 980)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const bulletsTop = (isFR
+    ? [
+        { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code scannable menant à votre page souvenir.' },
+        { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, instantané.' },
+      ]
+    : [
+        { icon: '🔒', title: 'Authentic', text: 'Integrity fingerprint (SHA-256) + scannable QR to your memory page.' },
+        { icon: '🎁', title: 'Perfect gift', text: 'Original, customizable, near-instant delivery.' },
+      ]) as Array<{ icon: string; title: string; text: string }>
+
+  const bulletsBottom = (isFR
+    ? [
+        { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois.' },
+        { icon: '💎', title: 'Collector', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
+      ]
+    : [
+        { icon: '✨', title: 'One-of-a-kind', text: 'Each date is sold only once.' },
+        { icon: '💎', title: 'Collectible', text: 'A rare object you can resell on our marketplace (Stripe Connect).' },
+      ]) as Array<{ icon: string; title: string; text: string }>
+
+  // Utilitaires de styles pour cartes bullet (hauteurs identiques & alignement parfait)
+  const BulletCard = ({ icon, title, text }: { icon: string; title: string; text: string }) => (
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-lg)',
+        padding: 14,
+        minHeight: 112,
+        boxShadow: 'var(--shadow-1)',
+        height: '100%',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span aria-hidden style={{ fontSize: 18 }}>{icon}</span>
+        <strong style={{ lineHeight: 1.2 }}>{title}</strong>
+      </div>
+      <div style={{ opacity: 0.92 }}>{text}</div>
+    </div>
+  )
+
+  // Spans responsive (7/5 desktop, 12 mobile)
+  const leftSpan = isNarrow ? 'span 12' : 'span 7'
+  const rightSpan = isNarrow ? 'span 12' : 'span 5'
+
+  return (
+    <section>
+      <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16, alignItems: 'stretch' }}>
+        {/* Eyebrow sur toute la largeur */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <SectionEyebrow>{isFR ? 'Dates convoitées' : 'Sought-after dates'}</SectionEyebrow>
+        </div>
+
+        {/* Row 1 : Carrousel émotions + bullets Authentique / Cadeau */}
+        <div style={{ gridColumn: leftSpan, gridRow: '2' }}>
+          <EmotionalThemesCarousel href={href} />
+        </div>
+        <div style={{ gridColumn: rightSpan, gridRow: '2', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
+          <div style={{ gridColumn: 'span 6' }}>
+            <BulletCard {...bulletsTop[0]} />
+          </div>
+          <div style={{ gridColumn: 'span 6' }}>
+            <BulletCard {...bulletsTop[1]} />
+          </div>
+        </div>
+
+        {/* Row 2 : Carrousel collectionneurs + bullets Unique / Collector */}
+        <div style={{ gridColumn: leftSpan, gridRow: '3' }}>
+          <CollectorThemesCarousel href={href} />
+        </div>
+        <div style={{ gridColumn: rightSpan, gridRow: '3', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
+          <div style={{ gridColumn: 'span 6' }}>
+            <BulletCard {...bulletsBottom[0]} />
+          </div>
+          <div style={{ gridColumn: 'span 6' }}>
+            <BulletCard {...bulletsBottom[1]} />
+          </div>
+        </div>
+      </Container>
+    </section>
+  )
+}
+
 
 /* =========================================================
    REGISTRE PUBLIC
@@ -769,73 +918,6 @@ function RegistryShowcase() {
   )
 }
 
-/* =========================================================
-   FEATURE BAND — DATES CONVOITÉES + AVANTAGES
-   ========================================================= */
-   function FeatureBand() {
-    const pathname = usePathname() || '/'
-    const isFR = /^\/fr(\/|$)/.test(pathname)
-    const href = useLocaleHref()
-  
-    // Bullets FR/EN
-    const bullets = (isFR
-      ? [
-          { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code scannable menant à votre page souvenir.' },
-          { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, instantané.' },
-          { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois.' },
-          { icon: '💎', title: 'Collector', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
-        ]
-      : [
-          { icon: '🔒', title: 'Authentic', text: 'Integrity fingerprint (SHA-256) + scannable QR to your memory page.' },
-          { icon: '🎁', title: 'Perfect gift', text: 'Original, customizable, near-instant delivery.' },
-          { icon: '✨', title: 'One-of-a-kind', text: 'Each date is sold only once.' },
-          { icon: '💎', title: 'Collectible', text: 'A rare object you can resell on our marketplace (Stripe Connect).' },
-        ]) as Array<{ icon: string; title: string; text: string }>
-  
-    return (
-      <section>
-        <Container
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(12,1fr)',
-            gap: 16,
-            alignItems: 'start'
-          }}
-        >
-          {/* Colonne gauche : carrousel des dates convoitées */}
-          <div style={{ gridColumn: 'span 7' }}>
-            <SectionEyebrow>{isFR ? 'Dates convoitées' : 'Sought-after themes'}</SectionEyebrow>
-            <RareThemesCarousel href={href} />
-          </div>
-  
-          {/* Colonne droite : avantages (bullets) */}
-          <div style={{ gridColumn: 'span 5', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
-            {bullets.map((b, i) => (
-              <div
-                key={i}
-                style={{
-                  gridColumn: 'span 6',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: 14,
-                  minHeight: 110,
-                  boxShadow: 'var(--shadow-1)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span aria-hidden style={{ fontSize: 18 }}>{b.icon}</span>
-                  <strong style={{ lineHeight: 1.2 }}>{b.title}</strong>
-                </div>
-                <div style={{ opacity: 0.92 }}>{b.text}</div>
-              </div>
-            ))}
-          </div>
-        </Container>
-      </section>
-    )
-  }
-  
 
 /* =========================================================
    WHAT YOU RECEIVE – DÉMOS
