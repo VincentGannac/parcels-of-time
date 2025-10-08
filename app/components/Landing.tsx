@@ -11,32 +11,42 @@ import { usePathname } from 'next/navigation'
 /* ======================= THEME TOKENS ======================= */
 const TOKENS_DARK = {
   '--color-bg': '#0B0E14',
-  '--color-surface': '#111726',
+  '--color-surface': '#101521',
   '--color-elev': '#0E1525',
-  '--color-text': '#E6EAF2',
-  '--color-muted': '#A7B0C0',
-  '--color-primary': '#E4B73D',
+  '--color-text': '#E8ECF5',
+  '--color-muted': '#9FA9BC',
+  '--color-primary': '#E5B53B',
   '--color-on-primary': '#0B0E14',
   '--color-accent': '#8CD6FF',
-  '--color-border': '#1E2A3C',
-  '--ring': '0 0 0 4px rgba(228,183,61,.22)',
-  '--shadow-1': '0 8px 18px rgba(0,0,0,.22)',
-  '--shadow-2': '0 16px 36px rgba(0,0,0,.36)',
+  '--color-border': '#1B2435',
+  '--color-success': '#19C37D',
+  '--color-warning': '#F0B429',
+  '--color-danger': '#FF5D5D',
+  '--ring': '0 0 0 4px rgba(229,181,59,.22)',
+  '--shadow-1': '0 10px 24px rgba(0,0,0,.18)',
+  '--shadow-2': '0 18px 40px rgba(0,0,0,.34)',
+  '--radius': '12px',
+  '--radius-lg': '16px',
 } as const
 
 const TOKENS_LIGHT = {
   '--color-bg': '#FAFAF7',
   '--color-surface': '#FFFFFF',
   '--color-elev': '#F4F6FB',
-  '--color-text': '#1D2433',
-  '--color-muted': '#4B5565',
-  '--color-primary': '#1C2B6B',
+  '--color-text': '#141A26',
+  '--color-muted': '#536179',
+  '--color-primary': '#1B2B6B',
   '--color-on-primary': '#FFFFFF',
   '--color-accent': '#D4AF37',
-  '--color-border': '#E6E6EA',
-  '--ring': '0 0 0 4px rgba(28,43,107,.18)',
-  '--shadow-1': '0 8px 18px rgba(10,14,30,.10)',
-  '--shadow-2': '0 16px 36px rgba(10,14,30,.16)',
+  '--color-border': '#E6E8EF',
+  '--color-success': '#0E9E6E',
+  '--color-warning': '#B7791F',
+  '--color-danger': '#E03131',
+  '--ring': '0 0 0 4px rgba(27,43,107,.18)',
+  '--shadow-1': '0 10px 24px rgba(10,14,30,.10)',
+  '--shadow-2': '0 18px 40px rgba(10,14,30,.16)',
+  '--radius': '12px',
+  '--radius-lg': '16px',
 } as const
 
 function applyTheme(vars: Record<string, string>) {
@@ -80,23 +90,23 @@ function Button({
   const base: React.CSSProperties = {
     textDecoration: 'none',
     fontWeight: 700,
-    borderRadius: 12,
+    borderRadius: 'var(--radius)',
     padding: '14px 18px',
     display: 'inline-flex',
     alignItems: 'center',
     gap: 10,
     border: '1px solid var(--color-border)',
-    transition: 'transform .12s ease, box-shadow .12s ease, background .12s ease',
-    /** ↓ Harmonisation des tailles */
+    transition: 'transform .12s ease, box-shadow .12s ease, background .12s ease, opacity .12s ease',
     fontSize: 14,
     lineHeight: '20px',
     minHeight: 46,
+    willChange: 'transform',
   }
 
   const styles: Record<'primary' | 'secondary' | 'ghost', React.CSSProperties> = {
     primary: { ...base, background: 'var(--color-primary)', color: 'var(--color-on-primary)', borderColor: 'transparent' },
     secondary: { ...base, background: 'var(--color-surface)', color: 'var(--color-text)' },
-    ghost: { ...base, background: 'transparent', color: 'var(--color-text)' },
+    ghost: { ...base, background: 'transparent', color: 'var(--color-text)', opacity: .9 },
   }
   return (
     <Link
@@ -113,8 +123,6 @@ function Button({
   )
 }
 
-/* ======= NavPill : pour Registre public & Mon Compte (visibilité accrue) ======= */
-/* ======= NavPill : pour Registre public & Mon Compte (visibilité accrue) ======= */
 function NavPill({
   href,
   children,
@@ -128,8 +136,7 @@ function NavPill({
 }) {
   const base: React.CSSProperties = {
     textDecoration: 'none',
-    borderRadius: 12,
-    /** ↓ Harmonisé avec Button */
+    borderRadius: 'var(--radius)',
     padding: '14px 18px',
     display: 'inline-flex',
     alignItems: 'center',
@@ -190,7 +197,7 @@ function CookieBanner() {
         bottom: 16,
         background: 'var(--color-surface)',
         border: '1px solid var(--color-border)',
-        borderRadius: 14,
+        borderRadius: 'var(--radius-lg)',
         padding: 14,
         boxShadow: 'var(--shadow-2)',
       }}
@@ -223,7 +230,22 @@ function CookieBanner() {
   )
 }
 
-function Pill({ children }: { children: React.ReactNode }) {
+type PillTone = 'default' | 'success' | 'warning' | 'danger'
+
+function Pill({
+  children,
+  tone = 'default',
+}: {
+  children: React.ReactNode
+  tone?: PillTone
+}) {
+  const tones: Record<PillTone, React.CSSProperties> = {
+    default: { borderColor: 'var(--color-border)' },
+    success: { borderColor: 'color-mix(in srgb, var(--color-success) 50%, var(--color-border))', color: 'var(--color-success)' },
+    warning: { borderColor: 'color-mix(in srgb, var(--color-warning) 55%, var(--color-border))', color: 'var(--color-warning)' },
+    danger:  { borderColor: 'color-mix(in srgb, var(--color-danger) 55%, var(--color-border))',  color: 'var(--color-danger)' },
+  }
+
   return (
     <span
       style={{
@@ -233,9 +255,10 @@ function Pill({ children }: { children: React.ReactNode }) {
         padding: '8px 12px',
         fontSize: 12,
         borderRadius: 999,
-        border: '1px solid var(--color-border)',
+        border: '1px solid',
         background: 'var(--color-surface)',
         color: 'var(--color-text)',
+        ...tones[tone],
       }}
     >
       {children}
@@ -244,7 +267,7 @@ function Pill({ children }: { children: React.ReactNode }) {
 }
 
 
-/* ======================= HEADER (refonte) ======================= */
+/* ======================= HEADER ======================= */
 function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: string) => string }) {
   const { t } = useT()
   const [isSmall, setIsSmall] = useState(false)
@@ -257,7 +280,6 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // accessible close on route change or esc
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
     window.addEventListener('keydown', onKey)
@@ -277,15 +299,12 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
     >
       <Container style={{ paddingTop: 12, paddingBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          {/* Logo */}
           <Link href={href('/')} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--color-text)' }}>
             <img src="/logo.svg" alt="Parcels of Time" width={28} height={28} />
             <strong style={{ fontFamily: 'Fraunces, serif' }}>Parcels of Time</strong>
           </Link>
 
-          {/* Desktop */}
           {!isSmall && (
-            /** ↓ Alignement harmonisé (mêmes hauteurs) */
             <div style={{ display: 'flex', alignItems: 'stretch', gap: 12 }}>
               <NavPill href={href('/explore')} emphasis="accent" ariaLabel="Registre public">
                 🖼️ <span>Registre public</span>
@@ -294,10 +313,8 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
                 👤 <span>Mon Compte</span>
               </NavPill>
               <Button href={href('/gift/recover')} variant="secondary" ariaLabel="Récupérer un cadeau">
-              🎫 { /* FR */ } Récupérer
+                🎫 Récupérer
               </Button>
-
-              {/* Actions */}
               <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>
                 🎁 {t('cta.gift')}
               </Button>
@@ -308,11 +325,10 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
               <button
                 aria-label="Changer de thème"
                 onClick={onToggleTheme}
-                /** ↓ Même hauteur visuelle que les autres éléments */
                 style={{
                   height: 46,
                   padding: '0 14px',
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius)',
                   border: '1px solid var(--color-border)',
                   background: 'var(--color-surface)',
                   color: 'var(--color-text)',
@@ -324,7 +340,6 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
             </div>
           )}
 
-          {/* Mobile */}
           {isSmall && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>
@@ -350,7 +365,6 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
         </div>
       </Container>
 
-      {/* Mobile sheet */}
       {isSmall && menuOpen && (
         <div
           id="mobile-menu"
@@ -369,8 +383,8 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
               👤 Mon Compte
             </NavPill>
             <Button href={href('/gift/recover')} variant="secondary">
-            🎫 Récupérer
-          </Button>
+              🎫 Récupérer
+            </Button>
             <Button href={href('/claim?gift=1')} variant="secondary">
               🎁 {t('cta.gift')}
             </Button>
@@ -388,7 +402,7 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
 }
 
 /* =========================================================
-   CERTIFICATE PREVIEW (réutilisé pour démos & teaser)
+   CERTIFICATE PREVIEW
    ========================================================= */
 type PreviewStyle = 'romantic' | 'birth' | 'wedding' | 'birthday' | 'christmas' | 'newyear' | 'graduation' | 'neutral'
 
@@ -439,7 +453,7 @@ function CertificatePreview({
           margin: 0,
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
-          borderRadius: 16,
+          borderRadius: 'var(--radius-lg)',
           overflow: 'hidden',
           boxShadow: 'var(--shadow-1)',
         }}
@@ -454,8 +468,6 @@ function CertificatePreview({
             decoding="async"
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
-
-          {/* Overlay */}
           <div aria-hidden style={{ position: 'absolute', inset: 0, color: previewTextColor }}>
             <div
               style={{
@@ -534,7 +546,7 @@ function CertificatePreview({
 }
 
 /* =========================================================
-   HERO — ALIGNEMENT + TRUST BAR
+   HERO + RARE DATES CAROUSEL
    ========================================================= */
 function Hero({ href }: { href: (p: string) => string }) {
   const { t } = useT()
@@ -560,10 +572,15 @@ function Hero({ href }: { href: (p: string) => string }) {
 
           <div style={{ marginTop: 12, fontSize: 14, color: 'var(--color-muted)' }}>Chaque date n’est proposée qu’une seule fois.</div>
 
-          {/* TRUST BAR alignée */}
+          {/* TRUST BAR */}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 16, fontSize: 12, color: 'var(--color-muted)' }}>
             <span>🔒 Stripe • Paiement sécurisé</span>
             <span>🧾 SHA-256 • Empreinte d’intégrité</span>
+          </div>
+
+          {/* ↓ Carrousel rareté, reforme d’UsagesCarousel */}
+          <div style={{ marginTop: 16 }}>
+            <UsagesCarousel href={href} />
           </div>
         </div>
 
@@ -583,8 +600,70 @@ function Hero({ href }: { href: (p: string) => string }) {
   )
 }
 
+/* -------------------- Usages Carousel (réformé) -------------------- */
+function UsagesCarousel({ href }: { href: (p: string) => string }) {
+  // Exemples illustratifs pour créer l’envie / la rareté (disponibilités simulées)
+  const items = [
+    { title:'Passage à l’an 2000', date:'2000-01-01', text:'La minute de bascule du millénaire.', badge:'Très recherché', tone:'warning' as const },
+    { title:'Finale Coupe du Monde', date:'2018-07-15', text:'Une finale qui a marqué des millions de vies.', badge:'Peut déjà être prise', tone:'danger' as const },
+    { title:'Chute du mur de Berlin', date:'1989-11-09', text:'Un jour qui a changé une époque.', badge:'Iconique', tone:'success' as const },
+    { title:'Premier pas sur la Lune', date:'1969-07-20', text:'Un petit pas… une date immense.', badge:'Collector', tone:'success' as const },
+    { title:'Nouvel An', date:'2025-01-01', text:'Chaque 01/01 à minuit : ultra convoité.', badge:'Part au minute près', tone:'warning' as const },
+  ]
+  const [i, setI] = useState(0)
+  useEffect(()=>{ const t = setInterval(()=>setI(v=>(v+1)%items.length), 3600); return ()=>clearInterval(t) },[])
+  const it = items[i]
+  const toneToColor: Record<'success'|'warning'|'danger', string> = {
+    success: 'var(--color-success)',
+    warning: 'var(--color-warning)',
+    danger: 'var(--color-danger)',
+  }
+  return (
+    <div
+      role="region"
+      aria-roledescription="carousel"
+      aria-label="Dates convoitées — dépêchez-vous"
+      style={{
+        border:'1px solid var(--color-border)',
+        background:'var(--color-surface)',
+        borderRadius:'var(--radius-lg)',
+        padding:16,
+        boxShadow:'var(--shadow-1)',
+      }}
+    >
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
+        <div style={{fontSize:18, display:'flex', alignItems:'center', gap:10}}>
+          <span style={{fontSize:22}}>⏳</span>
+          <strong>{it.title}</strong>
+        </div>
+        <Pill tone={it.tone as any}>{it.badge}</Pill>
+      </div>
+      <p style={{margin:'8px 0 6px', color:'var(--color-text)', opacity:.9}}>
+        {it.text} <span style={{opacity:.8}}>— {it.date} UTC</span>
+      </p>
+      <div style={{ display:'flex', gap:8, marginTop:8, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:6 }}>
+          {items.map((_, idx)=>(
+            <span key={idx} aria-label={idx===i?'élément actif':'élément'}
+                  style={{width:6, height:6, borderRadius:99, background: idx===i ? toneToColor[it.tone] : 'var(--color-border)'}} />
+          ))}
+        </div>
+        <div style={{display:'flex', gap:8}}>
+          <Button href={href('/explore')} variant="ghost" ariaLabel="Voir le registre">
+            Explorer
+          </Button>
+          <Button href={href('/claim')} variant="primary" ariaLabel="Réserver une date rare">
+            Réserver une date rare
+          </Button>
+        </div>
+      </div>
+      <div style={{marginTop:8, fontSize:11, color:'var(--color-muted)'}}>Exemples illustratifs. Disponibilités variables, une seule vente par date.</div>
+    </div>
+  )
+}
+
 /* =========================================================
-   REGISTRE PUBLIC — SECTION AVANT “POURQUOI”
+   REGISTRE PUBLIC — AVANT “POURQUOI”
    ========================================================= */
 function RegistryShowcase() {
   const href = useLocaleHref()
@@ -605,7 +684,6 @@ function RegistryShowcase() {
           C’est une démarche <strong>symbolique et artistique</strong>.
         </p>
 
-        {/* Teaser visuel harmonisé */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
           {items.map((it, i) => (
             <div key={i} style={{ gridColumn: 'span 3' }}>
@@ -614,12 +692,12 @@ function RegistryShowcase() {
           ))}
         </div>
 
-        {/* CTA aligné à gauche */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems:'center', flexWrap:'wrap' }}>
           <Button href={href('/explore')} variant="secondary" ariaLabel="Voir le Registre public">
             Voir le Registre public →
           </Button>
-          <Pill>Modération des contenus publics</Pill>
+          <Pill tone="success">Modération des contenus publics</Pill>
+          <Pill>Contrôle total de la visibilité</Pill>
         </div>
 
       </Container>
@@ -627,17 +705,16 @@ function RegistryShowcase() {
   )
 }
 
-  /* =========================================================
+/* =========================================================
    FEATURE BAND — POURQUOI / VALEUR
    ========================================================= */
-   function FeatureBand() {
-    /** ↓ Nouveau wording + bullets mis à jour */
-    const bullets = [
-      { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code scannable menant à votre page souvenir' },
-      { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, instantané.' },
-      { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois.' },
-      { icon: '💎', title: 'Collector', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
-    ]
+function FeatureBand() {
+  const bullets = [
+    { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code vers votre page souvenir.' },
+    { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, quasi instantané par e-mail.' },
+    { icon: '✨', title: 'Édition unique', text: 'Chaque date n’est vendue qu’une seule fois.' },
+    { icon: '💎', title: 'Collector', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
+  ]
   return (
     <section>
       <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
@@ -645,7 +722,7 @@ function RegistryShowcase() {
           <SectionEyebrow>Pourquoi maintenant ?</SectionEyebrow>
           <H2>Possédez le jour qui compte</H2>
           <p style={{ margin: 0, color: 'var(--color-text)', opacity: 0.92 }}>
-          Les photos s’accumulent, les instants s’effacent. Avec Parcels of Time transforme une date en objet unique, authentifiée et partageable.
+            Les photos s’accumulent, les instants s’effacent. Avec Parcels of Time, transformez une date en objet unique, authentifié et partageable.
           </p>
         </div>
         <div style={{ gridColumn: 'span 8', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
@@ -656,15 +733,13 @@ function RegistryShowcase() {
                 gridColumn: 'span 6',
                 background: 'var(--color-surface)',
                 border: '1px solid var(--color-border)',
-                borderRadius: 14,
+                borderRadius: 'var(--radius-lg)',
                 padding: 14,
                 height: '100%',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span aria-hidden style={{ fontSize: 18 }}>
-                  {b.icon}
-                </span>
+                <span aria-hidden style={{ fontSize: 18 }}>{b.icon}</span>
                 <strong>{b.title}</strong>
               </div>
               <div style={{ opacity: 0.92 }}>{b.text}</div>
@@ -698,7 +773,6 @@ function ReceiveShowcase() {
               href={href('/claim?style=romantic')}
             />
           </div>
-
           <div style={{ gridColumn: 'span 4' }}>
             <CertificatePreview
               styleId="birth"
@@ -709,7 +783,6 @@ function ReceiveShowcase() {
               href={href('/claim?style=birth')}
             />
           </div>
-
           <div style={{ gridColumn: 'span 4' }}>
             <CertificatePreview
               styleId="wedding"
@@ -726,7 +799,7 @@ function ReceiveShowcase() {
             marginTop: 18,
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
-            borderRadius: 14,
+            borderRadius: 'var(--radius-lg)',
             padding: 16,
           }}
         >
@@ -758,7 +831,7 @@ function HowItWorks() {
             ['②', 'Personnalisez', 'Propriétaire, message, style, photo.'],
             ['③', 'Réservez & recevez', 'Certificat + QR immédiatement. ⏱ < 2 min.'],
           ].map(([n, t, d], i) => (
-            <div key={i} style={{ gridColumn: 'span 4', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 14, padding: 16 }}>
+            <div key={i} style={{ gridColumn: 'span 4', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
               <div style={{ fontSize: 28 }}>{n}</div>
               <strong>{t}</strong>
               {d && <p style={{ margin: '6px 0 0' }}>{d}</p>}
@@ -782,7 +855,7 @@ function Testimonials() {
         <SectionEyebrow>Témoignages</SectionEyebrow>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
           {items.map((t, i) => (
-            <blockquote key={i} style={{ gridColumn: 'span 4', margin: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 14, padding: 16 }}>
+            <blockquote key={i} style={{ gridColumn: 'span 4', margin: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
               <p style={{ margin: '0 0 8px', fontStyle: 'italic' }}>{t.q}</p>
               <footer style={{ opacity: 0.8 }}>— {t.a}</footer>
             </blockquote>
@@ -890,7 +963,7 @@ For resales, collection and payouts go through Stripe Connect.`,
         <SectionEyebrow>FAQ</SectionEyebrow>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
           {rows.map((r, i) => (
-            <details key={i} style={{ gridColumn: 'span 6', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: 14 }}>
+            <details key={i} style={{ gridColumn: 'span 6', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: 14 }}>
               <summary style={{ cursor: 'pointer', fontWeight: 700, lineHeight: 1.2 }}>{r.q}</summary>
               <p style={{ margin: '10px 0 0', whiteSpace: 'pre-wrap' }}>{r.a}</p>
             </details>
@@ -915,9 +988,6 @@ For resales, collection and payouts go through Stripe Connect.`,
     </section>
   )
 }
-
-
-  
 
 /* =========================================================
    FINAL CTA
@@ -951,7 +1021,54 @@ function FinalCTA() {
 }
 
 /* =========================================================
-   FOOTER — COMPACT, EN LIGNE
+   BARRE FLOTTANTE (CTA persistant)
+   ========================================================= */
+function FloatingCTA() {
+  const href = useLocaleHref()
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 420)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  if (!visible) return null
+  return (
+    <div
+      aria-live="polite"
+      style={{
+        position: 'fixed',
+        left: 12,
+        right: 12,
+        bottom: 12,
+        zIndex: 40,
+        background: 'color-mix(in srgb, var(--color-surface) 92%, transparent)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-lg)',
+        padding: 10,
+        boxShadow: 'var(--shadow-2)',
+        display: 'flex',
+        gap: 10,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <span>⏳</span>
+        <strong>Une seule vente par date.</strong>
+        <span style={{ color:'var(--color-muted)' }}>Certaines dates iconiques partent très vite.</span>
+      </div>
+      <div style={{ display:'flex', gap:8 }}>
+        <Button href={href('/explore')} variant="ghost">Voir le registre</Button>
+        <Button href={href('/claim')} variant="primary">Réserver maintenant</Button>
+      </div>
+    </div>
+  )
+}
+
+/* =========================================================
+   FOOTER
    ========================================================= */
 function Footer() {
   return (
@@ -963,39 +1080,19 @@ function Footer() {
             <span style={{ fontWeight: 700 }}>Parcels of Time</span>
             <span style={{ color: 'var(--color-muted)' }}>© {new Date().getFullYear()}</span>
           </div>
-
-          {/* Menus en LIGNE (non empilés) */}
           <nav aria-label="Footer" style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <span style={{ color: 'var(--color-muted)' }}>Légal:</span>
-            <Link href="/fr/legal/legal-notice" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              Mentions légales
-            </Link>
-            <Link href="/fr/legal/terms" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              CGU/CGV
-            </Link>
-            <Link href="/fr/legal/seller" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              Conditions Vendeur
-            </Link>
-            <Link href="/fr/legal/refund" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              Remboursement
-            </Link>
+            <Link href="/fr/legal/legal-notice" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Mentions légales</Link>
+            <Link href="/fr/legal/terms" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>CGU/CGV</Link>
+            <Link href="/fr/legal/seller" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Conditions Vendeur</Link>
+            <Link href="/fr/legal/refund" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Remboursement</Link>
             <span style={{ color: 'var(--color-muted)', marginLeft: 8 }}>•</span>
-            <Link href="/fr/legal/privacy" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              Confidentialité
-            </Link>
-            <Link href="/fr/legal/cookies" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              Cookies
-            </Link>
+            <Link href="/fr/legal/privacy" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Confidentialité</Link>
+            <Link href="/fr/legal/cookies" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Cookies</Link>
             <span style={{ color: 'var(--color-muted)', marginLeft: 8 }}>•</span>
-            <Link href="/fr/company" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              À propos
-            </Link>
-            <Link href="/fr/support" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              Règles du registre
-            </Link>
-            <a href="mailto:hello@parcelsoftime.com" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              B2B
-            </a>
+            <Link href="/fr/company" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>À propos</Link>
+            <Link href="/fr/support" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>Règles du registre</Link>
+            <a href="mailto:hello@parcelsoftime.com" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>B2B</a>
           </nav>
         </div>
       </Container>
@@ -1006,36 +1103,34 @@ function Footer() {
 /* =========================================================
    JSON-LD (Product + CreativeWork)
    ========================================================= */
-   function JsonLd() {
-    const data = {
-      '@context': 'https://schema.org',
-      '@graph': [
-        {
-          '@type': 'Product',
-          name: 'Parcels of Time — Certificate of Claim',
-          brand: { '@type': 'Brand', name: 'Parcels of Time' },
-          /** ↓ Description optimisée : cadeau original et personnalisable */
-          description:
-            'Transform a meaningful date into a unique, verifiable keepsake. High-definition digital certificate (PDF/JPG) with QR and integrity hash — an original, fully customizable gift.',
-          offers: {
-            '@type': 'Offer',
-            availability: 'https://schema.org/InStock',
-            url: 'https://parcelsoftime.com/claim',
-            priceCurrency: 'EUR',
-            /** ↓ Prix affiché */
-            price: '29.00',
-          },
+function JsonLd() {
+  const data = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Product',
+        name: 'Parcels of Time — Certificate of Claim',
+        brand: { '@type': 'Brand', name: 'Parcels of Time' },
+        description:
+          'Transform a meaningful date into a unique, verifiable keepsake. High-definition digital certificate (PDF/JPG) with QR and integrity hash — an original, fully customizable gift.',
+        offers: {
+          '@type': 'Offer',
+          availability: 'https://schema.org/InStock',
+          url: 'https://parcelsoftime.com/claim',
+          priceCurrency: 'EUR',
+          price: '29.00',
         },
-        {
-          '@type': 'CreativeWork',
-          name: 'Day Certificate',
-          creator: { '@type': 'Organization', name: 'Parcels of Time' },
-          about: 'A participatory art piece turning dates into unique, verifiable, and shareable keepsakes — perfect as an original and customizable gift.',
-        },
-      ],
-    }
-    return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
+      },
+      {
+        '@type': 'CreativeWork',
+        name: 'Day Certificate',
+        creator: { '@type': 'Organization', name: 'Parcels of Time' },
+        about: 'A participatory art piece turning dates into unique, verifiable, and shareable keepsakes — perfect as an original and customizable gift.',
+      },
+    ],
   }
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />
+}
 
 /* =========================================================
    PAGE
@@ -1051,6 +1146,9 @@ export default function Landing() {
     <main style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}>
       <CookieBanner />
       <Header onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} href={href} />
+
+      {/* Barre flottante persistante */}
+      <FloatingCTA />
 
       {/* 1. Hero */}
       <Hero href={href} />
@@ -1069,7 +1167,7 @@ export default function Landing() {
       <Testimonials />
       <FAQ />
 
-      {/* 6. CTA final + Footer compact */}
+      {/* 6. CTA final + Footer */}
       <FinalCTA />
       <Footer />
 
