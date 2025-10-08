@@ -309,18 +309,16 @@ export async function GET(req: Request, ctx: { params?: { id?: string } } | any)
       text(locale === 'fr' ? 'À propos — Parcels of Time' : 'About — Parcels of Time', { size: 14, font: bold })
 
       const aboutFR = [
-        'Cette date vous a été offerte. Elle est désormais la vôtre — vous en êtes l’unique détenteur symbolique.',
-        'Votre certificat a déjà été personnalisé pour raconter cette histoire (titre, message, visuel). Il est prêt à être affiché, partagé ou imprimé.',
-        'Le QR ouvre votre page dédiée pour l’ajouter à votre compte. Laissez-la privée ou rendez-la visible au public quand vous le souhaitez.',
+        'Cette date vous a été offerte. Elle est désormais la vôtre, vous en êtes l’unique détenteur symbolique.',
+        'Votre certificat a déjà été personnalisé pour raconter votre histoire.',
         'L’empreinte d’intégrité SHA-256 imprimée ci-dessus permet de vérifier à tout moment l’authenticité de ce document.',
         'Conservez-le comme on garde un faire-part précieux : une trace officielle du jour qui marque votre histoire.'
       ]
       const aboutEN = [
-        'This date was gifted to you. It is now yours — you are the unique symbolic holder.',
-        'Your certificate is already personalized to tell this story (title, message, visual). It’s ready to display, share, or print.',
-        'The QR opens your dedicated page so you can add it to your account. Keep it private or make it public whenever you wish.',
-        'The printed SHA-256 integrity fingerprint lets anyone verify the document’s authenticity at any time.',
-        'Keep it like a cherished announcement: an official trace of the day that marks your story.'
+        'This date was given to you. It is now yours, you are its sole symbolic holder.',
+        'Your certificate has already been personalized to tell your story.',
+        'The SHA-256 integrity fingerprint printed above allows you to verify the authenticity of this document at any time.',
+        'Keep it as one keeps a precious announcement card: an official record of the day that marks your story.'
       ]
       const paras = locale === 'fr' ? aboutFR : aboutEN
       const pMax = width - 2*margin

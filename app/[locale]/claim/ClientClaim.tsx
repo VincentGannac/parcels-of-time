@@ -454,6 +454,9 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     }))
   }, [D, forSaleDays, isGift])
 
+  // --- consentement image custom
+  const [acceptCustomImageRules, setAcceptCustomImageRules] = useState(false)
+  useEffect(() => { if (form.cert_style !== 'custom') setAcceptCustomImageRules(false) }, [form.cert_style])
 
   // Date choisie
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
@@ -821,17 +824,20 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   /** Styles globaux */
   const containerStyle: React.CSSProperties = {
-    ['--color-bg' as any]: '#0B0E14',
-    ['--color-surface' as any]: '#111726',
-    ['--color-text' as any]: '#E6EAF2',
-    ['--color-muted' as any]: '#A7B0C0',
-    ['--color-primary' as any]: '#E4B73D',
-    ['--color-on-primary' as any]: '#0B0E14',
-    ['--color-border' as any]: '#1E2A3C',
-    ['--shadow-elev1' as any]: '0 6px 20px rgba(0,0,0,.35)',
-    ['--shadow-elev2' as any]: '0 12px 36px rgba(0,0,0,.45)',
-    background:'var(--color-bg)', color:'var(--color-text)', minHeight:'100vh'
+    ['--color-bg' as any]:        '#0A1224',   // fond plus profond (bleu nuit)
+    ['--color-surface' as any]:   '#101B36',   // cartes/nav
+    ['--color-text' as any]:      '#F4F8FF',   // texte principal
+    ['--color-muted' as any]:     '#B7C3E0',   // texte secondaire
+    ['--color-primary' as any]:   '#FFD147',   // accent vif (ambre)
+    ['--color-on-primary' as any]:'#0A0F1C',   // texte sur accent
+    ['--color-border' as any]:    '#233459',   // bordure plus lisible
+    ['--shadow-elev1' as any]:    '0 8px 22px rgba(0,0,0,.45)',
+    ['--shadow-elev2' as any]:    '0 16px 44px rgba(0,0,0,.55)',
+    background:'var(--color-bg)',
+    color:'var(--color-text)',
+    minHeight:'100vh'
   }
+  
 
   // palette
   const SWATCHES = [
@@ -1294,15 +1300,6 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                 </label>
 
               </div>
-
-              <div style={{display:'flex', gap:14, flexWrap:'wrap', marginTop:12, fontSize:14}}>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
-                  <strong>Affichage&nbsp;:</strong> {chosenDateStr || '—'}
-                </div>
-                <div style={{padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:8}}>
-                  <strong>Édition&nbsp;:</strong> {edition ? (edition === 'premium' ? 'Premium' : 'Standard') : '—'}
-                </div>
-              </div>
               <div style={{marginTop:8, fontSize:12, color:'#ff8a8a'}}>
                 Les jours en rouge sont indisponibles.
               </div>
@@ -1311,6 +1308,31 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                 Parcels of Time prélève une <strong>commission de 15%</strong> côté vendeur.
               </div>
             </div>
+            {/* Prix courant */}
+            {(() => {
+              const currentListing = saleLookup[D]
+              return (
+                <div
+                  style={{
+                    marginTop:12,
+                    padding:'10px 12px',
+                    borderRadius:10,
+                    background:'rgba(255,209,71,.08)',
+                    border:'1px solid var(--color-border)'
+                  }}
+                >
+                  {currentListing ? (
+                    <div>
+                      Prix marketplace : <strong>{(currentListing.price_cents/100).toFixed(0)} €</strong>
+                    </div>
+                  ) : (
+                    <div>
+                      Prix : <strong>29&nbsp;€</strong> <span style={{opacity:.75}}>(date classique — style “Neutral”)</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Step 2 — Infos */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
@@ -1576,10 +1598,6 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                   )
                 })}
               </div>
-
-              <p style={{margin:'10px 2px 0', fontSize:12, opacity:.7}}>
-                Les vignettes utilisent <code>/public/cert_bg/&lt;style&gt;_thumb.jpg</code> (fallback <code>&lt;style&gt;.png</code>).
-              </p>
             </div>
 
             {/* Publication dans le registre — PDF complet */}
@@ -1610,22 +1628,9 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                 <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                   <input type="checkbox" required name="accept_terms" />
                   <span>
-                    J’accepte les <a href={`/${(window.location.pathname.split('/')[1] || 'en').slice(0,2)}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et j’ai lu la 
+                    J’accepte et j’ai lu les <a href={`/${(window.location.pathname.split('/')[1] || 'en').slice(0,2)}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et la
                     <a href={`/${(window.location.pathname.split('/')[1] || 'en').slice(0,2)}/legal/privacy`} style={{color:'var(--color-text)'}}> Politique de confidentialité</a>.
                   </span>
-                </label>
-
-                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                  <input type="checkbox" required name="withdrawal_waiver" />
-                  <span>
-                    Je demande l’<strong>exécution immédiate</strong> de la prestation numérique et
-                    <strong> renonce expressément</strong> à mon droit de rétractation (Directive UE 2011/83/UE).
-                  </span>
-                </label>
-
-                <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                  <input type="checkbox" required name="confirm_age" />
-                  <span>Je confirme avoir 18 ans révolus (ou une autorisation parentale).</span>
                 </label>
 
                 <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
@@ -1633,10 +1638,19 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                   <span>Je comprends que mes données (email, montant, pays) sont partagées avec <strong>Stripe</strong> pour le paiement sécurisé.</span>
                 </label>
 
+                {form.cert_style === 'custom' && customBg && (
                 <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                  <input type="checkbox" name="marketing_optin" />
-                  <span>J’accepte de recevoir occasionnellement des emails (désinscription possible à tout moment).</span>
+                  <input
+                    type="checkbox"
+                    required
+                    checked={acceptCustomImageRules}
+                    onChange={e=>setAcceptCustomImageRules(e.target.checked)}
+                  />
+                  <span>
+                    J’atteste disposer des droits nécessaires (ou d’une licence) pour l’image importée et, en cas de publication dans le registre public, qu’elle respecte notre charte de modération.
+                  </span>
                 </label>
+              )}
 
                 <small style={{opacity:.75}}>
                   Le récapitulatif complet (prix, taxes le cas échéant) est affiché sur la page Stripe avant paiement.
@@ -1648,7 +1662,10 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
 
             {/* Submit */}
             <div>
-              <button disabled={status==='loading'} type="submit"
+              <button disabled={
+                  status === 'loading' ||
+                  (form.cert_style === 'custom' && !!customBg && !acceptCustomImageRules)
+                } type="submit"
                 style={{background:'var(--color-primary)', color:'var(--color-on-primary)', padding:'14px 18px', borderRadius:12, fontWeight:800, border:'none', boxShadow: status==='loading' ? '0 0 0 6px rgba(228,183,61,.12)' : 'none', cursor: status==='loading' ? 'progress' : 'pointer'}}>
                 {status==='loading' ? 'Redirection…' : (isGift ? 'Offrir cette journée' : 'Payer & réserver cette journée')}
               </button>
