@@ -412,7 +412,7 @@ export default async function Page({
                     <div style={{display:'grid', gap:6, fontSize:12}}>
                       <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                         <input type="checkbox" name="seller_terms" required />
-                        <span>J’accepte les <a href={`/${locale}/legal/seller`} style={{color:'var(--color-text)'}}>Conditions Vendeur</a> (commission 10% min 1 €) et les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a>.</span>
+                        <span>J’accepte les <a href={`/${locale}/legal/seller`} style={{color:'var(--color-text)'}}>Conditions Vendeur</a> (commission 15% min 1 €) et les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a>.</span>
                       </label>
                       <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                         <input type="checkbox" name="seller_rights" required />

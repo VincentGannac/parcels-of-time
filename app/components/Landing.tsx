@@ -991,7 +991,7 @@ function Footer() {
               À propos
             </Link>
             <Link href="/fr/support" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
-              Support
+              Règles du registre
             </Link>
             <a href="mailto:hello@parcelsoftime.com" style={{ textDecoration: 'none', color: 'var(--color-text)' }}>
               B2B
