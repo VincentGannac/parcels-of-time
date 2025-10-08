@@ -1430,7 +1430,6 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </div>
               <div style={{marginTop:8, fontSize:12, color:'#e0a800'}}>
                 Les jours en jaune sont <strong>revendus</strong> par un autre utilisateur (marketplace).
-                Parcels of Time prélève une <strong>commission de 15%</strong> côté vendeur.
               </div>
             </div>
 
@@ -1446,12 +1445,10 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                   background:bg, border:`1px solid ${bd}`, color:fg
                 }}>{txt}</span>
               )
-
               return (
                 <div
                   aria-live="polite"
                   style={{
-                    marginTop:10,
                     padding:'10px 12px',
                     borderRadius:12,
                     background:'var(--color-surface)',   // ✅ même fond
