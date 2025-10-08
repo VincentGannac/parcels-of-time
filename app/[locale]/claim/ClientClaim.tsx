@@ -839,15 +839,35 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   }
   
 
-  // palette
-  const SWATCHES = [
-    '#000000','#111111','#1A1F2A','#222831','#2E3440','#37474F','#3E3E3E','#4B5563',
-    '#5E452A','#6D4C41','#795548','#8D6E63',
-    '#0B3D2E','#1B5E20','#2E7D32','#004D40','#0D47A1','#1A237E','#283593',
-    '#880E4F','#6A1B9A','#AD1457','#C2185B','#9C27B0',
-    '#102A43','#0F2A2E','#14213D',
-    '#FFFFFF','#E6EAF2',
-  ]
+  // palette flashy
+const SWATCHES = [
+  '#000000', '#FFFFFF',
+
+  // 🔴 rouges
+  '#FF1744', '#FF5252', '#FF3D00',
+
+  // 🟡 jaunes / ambre
+  '#FFEA00', '#FFD600', '#FFC107', '#FFE082',
+
+  // 🩷 roses / magenta
+  '#FF69B4', '#FF007F', '#F50057', '#FF4081', '#D500F9',
+
+  // 🟣 violets électriques
+  '#651FFF', '#7C4DFF', '#B388FF',
+
+  // 🔵 bleus “néon”
+  '#2979FF', '#00B0FF', '#18FFFF',
+
+  // 🟢 verts acides
+  '#76FF03', '#00E676', '#64FFDA', '#C6FF00',
+
+  // 🟠 oranges vifs
+  '#FF6D00', '#FF8F00', '#FF5722',
+
+  // bonus “candy”
+  '#FF00AA', '#FFB300',
+]
+
 
   /** ====== PREVIEW (mêmes calculs que le PDF) ====== */
   const previewWrapRef = useRef<HTMLDivElement|null>(null)
@@ -1307,55 +1327,51 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </div>
             </div>
 
-            {/* Prix courant */}
+            {/* Prix courant — version compacte & discrète */}
             {(() => {
               const currentListing = saleLookup[D]
               const isUnavailable = unavailableDays.includes(D)
               const isOnSale = !!currentListing
 
+              const pill = (txt:string, bg:string, bd:string, fg:string) => (
+                <span style={{
+                  fontSize:11, padding:'4px 8px', borderRadius:999,
+                  background:bg, border:`1px solid ${bd}`, color:fg
+                }}>{txt}</span>
+              )
+
               return (
                 <div
                   aria-live="polite"
                   style={{
-                    marginTop:12,
-                    padding:'14px 16px',
-                    borderRadius:16,
-                    background:'linear-gradient(180deg, rgba(255,209,71,.10), rgba(255,209,71,.06))',
+                    marginTop:10,
+                    padding:'10px 12px',
+                    borderRadius:12,
+                    background:'var(--color-surface)',   // ✅ même fond
                     border:'1px solid var(--color-border)',
-                    boxShadow:'var(--shadow-elev1)'
                   }}
                 >
-                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6}}>
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                     <div style={{fontSize:12, letterSpacing:1, textTransform:'uppercase', color:'var(--color-muted)'}}>
-                      Prix courant
+                      Prix
                     </div>
-                    <div
-                      style={{
-                        fontSize:11, padding:'4px 8px', borderRadius:999,
-                        background: isUnavailable ? 'rgba(255,122,122,.12)' : isOnSale ? 'rgba(255,209,71,.18)' : 'rgba(11,216,122,.14)',
-                        border: `1px solid ${isUnavailable ? '#ff7a7a' : isOnSale ? 'var(--color-primary)' : '#0BBF6A'}`,
-                        color:  isUnavailable ? '#ffb2b2' : isOnSale ? 'var(--color-primary)' : '#0BBF6A'
-                      }}
-                    >
-                      {isUnavailable ? 'Indisponible' : isOnSale ? 'Marketplace' : 'Disponible'}
-                    </div>
+                    {isUnavailable
+                      ? pill('Indisponible','rgba(255,122,122,.10)','#ff7a7a','#ffb2b2')
+                      : isOnSale
+                        ? pill('Marketplace','rgba(255,209,71,.12)','#E4B73D','var(--color-primary)')
+                        : pill('Disponible','rgba(11,216,122,.10)','#0BBF6A','#0BBF6A')}
                   </div>
 
-                  {isOnSale ? (
-                    <div style={{display:'flex', alignItems:'baseline', gap:10}}>
-                      <div style={{fontSize:26, fontWeight:900}}>
-                        {(currentListing.price_cents/100).toFixed(0)} €
-                      </div>
-                      <div style={{fontSize:12, opacity:.85}}>prix fixé par le vendeur</div>
+                  <div style={{display:'flex', alignItems:'baseline', gap:8, marginTop:4}}>
+                    <div style={{fontSize:18, fontWeight:900}}>
+                      {isOnSale ? (currentListing.price_cents/100).toFixed(0) : 29} €
                     </div>
-                  ) : (
-                    <div style={{display:'flex', alignItems:'baseline', gap:10}}>
-                      <div style={{fontSize:26, fontWeight:900}}>29 €</div>
-                    </div>
-                  )}
+                    {isOnSale && <div style={{fontSize:12, opacity:.75}}>fixé par le vendeur</div>}
+                  </div>
                 </div>
               )
             })()}
+
 
             {/* Step 2 — Infos */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
@@ -1623,117 +1639,110 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </div>
             </div>
 
-            {/* Publication dans le registre — PDF complet */}
+            {/* Publication dans le registre — CTA visible */}
             {(() => {
               const loc = (window.location.pathname.split('/')[1] || 'en').slice(0,2) || 'en'
-              const t = isFR
-                ? {
-                    eyebrow: 'Registre public (optionnel)',
-                    title: 'Publier ce certificat (PDF complet) dans la galerie',
-                    sub: 'Partagez votre œuvre, inspirez - vous pourrez retirer la publication à tout moment.',
-                    bullets: [
-                      '🖼️ Visibilité : votre certificat apparaît dans la galerie publique',
-                      '🎨 Œuvre participative : un geste artistique et symbolique - vous contribuez à une galerie vivante',
-                      '🔒 Contrôle : publication/suppression possibles via votre QR ou votre compte',
-                    ],
-                    more: 'En savoir plus',
-                    moreBody:
-                      'Le registre est une exposition participative. Publier peut révéler des données personnelles (nom, titre, extrait, photo). ' +
-                      'Évitez les informations sensibles et les visages de mineurs. Les contenus publics sont modérés et consultables uniquement (pas de téléchargement). ' +
-                      'Vous pourrez changer d’avis à tout moment.',
-                    links: {
-                      explore: 'Voir le registre',
-                      terms: 'CGU/CGV',
-                      privacy: 'Confidentialité',
-                    },
-                    ctaLabel: 'Activer la publication',
-                  }
-                : {
-                    eyebrow: 'Public Registry (optional)',
-                    title: 'Publish this certificate (full PDF) to the gallery',
-                    sub: 'Share your piece and inspire others - you can unpublish anytime.',
-                    bullets: [
-                      '🖼️ Visibility: your certificate appears in the public gallery',
-                      '🎨 Participatory art: a symbolic gesture - contribute to a living, collective gallery',
-                      '🔒 Control: publish/unpublish via your QR or account',
-                    ],
-                    more: 'Learn more',
-                    moreBody:
-                      'The registry is a participatory exhibition. Publishing may reveal personal data (name, title, excerpt, photo). ' +
-                      'Avoid sensitive information and minors’ faces. Public content is moderated and view-only (no downloads). ' +
-                      'You can change your mind anytime.',
-                    links: {
-                      explore: 'Open the registry',
-                      terms: 'Terms',
-                      privacy: 'Privacy',
-                    },
-                    ctaLabel: 'Enable publishing',
-                  }
+              const isFRloc = loc === 'fr'
+              const t = isFRloc ? {
+                eyebrow:'Registre public (optionnel)',
+                title:'Exposer votre certificat dans la galerie',
+                sub:'Un geste symbolique et artistique — vous contribuez à une œuvre participative.',
+                bullets:[
+                  '🖼️ Visibilité : votre certificat apparaît dans la galerie publique',
+                  '🎨 Œuvre participative : vous enrichissez une galerie vivante',
+                  '🔒 Contrôle : publier/retirer à tout moment (QR ou Compte)',
+                ],
+                more:'En savoir plus',
+                moreBody:
+                  'Publier peut révéler des données personnelles (nom, titre, extrait, photo). ' +
+                  'Évitez les informations sensibles et les visages de mineurs. Contenus modérés, consultation seule.',
+                btnOn:'✓ Publication activée — Retirer',
+                btnOff:'Publier ce certificat (PDF complet) dans la galerie',
+                explore:'Voir le registre',
+              } : {
+                eyebrow:'Public Registry (optional)',
+                title:'Show your certificate in the public gallery',
+                sub:'A symbolic, artistic gesture — contribute to participatory art.',
+                bullets:[
+                  '🖼️ Visibility: appears in the public gallery',
+                  '🎨 Participatory art: enrich a living collective piece',
+                  '🔒 Control: publish/unpublish anytime (QR or Account)',
+                ],
+                more:'Learn more',
+                moreBody:
+                  'Publishing may reveal personal data (name, title, excerpt, photo). Avoid sensitive info and minors’ faces. Moderated, view-only.',
+                btnOn:'✓ Publishing enabled — Unpublish',
+                btnOff:'Publish this certificate (full PDF) to the gallery',
+                explore:'Open the registry',
+              }
 
-              const link = (p:string) => `/${loc}${p}`
+              const baseBtn: React.CSSProperties = {
+                display:'inline-flex', alignItems:'center', gap:10,
+                padding:'14px 18px', borderRadius:12, fontWeight:900,
+                cursor:'pointer', transition:'transform .12s ease, box-shadow .12s ease',
+              }
+              const btnOn: React.CSSProperties = {
+                ...baseBtn,
+                background:'linear-gradient(180deg, #FFE259 0%, #FFA751 100%)',
+                color:'#0B0E14',
+                border:'1px solid rgba(0,0,0,.18)',
+                boxShadow:'0 12px 34px rgba(255,193,7,.35), 0 0 0 6px rgba(255,193,7,.18)',
+              }
+              const btnOff: React.CSSProperties = {
+                ...baseBtn,
+                background:'linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0))',
+                color:'var(--color-text)',
+                border:'1px solid var(--color-border)',
+              }
 
               return (
                 <section
                   aria-labelledby="registry-opt-title"
                   style={{
-                    marginBottom: 10,
-                    padding: '14px 16px',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 16,
-                    background: 'linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0))',
+                    marginBottom:10,
+                    padding:'14px 16px',
+                    border:'1px solid var(--color-border)',
+                    borderRadius:16,
+                    background:'linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0))',
                   }}
                 >
-                  {/* Header + switch */}
-                  <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12}}>
-                    <div>
-                      <div style={{fontSize:12, letterSpacing:1, textTransform:'uppercase', color:'var(--color-muted)'}}>
-                        {t.eyebrow}
-                      </div>
-                      <h3 id="registry-opt-title" style={{margin:'6px 0 4px', fontSize:16, lineHeight:'22px'}}>
-                        {t.title}
-                      </h3>
-                      <p style={{margin:0, fontSize:12, color:'var(--color-muted)'}}>
-                        {t.sub}
-                      </p>
+                  <div style={{display:'grid', gap:6}}>
+                    <div style={{fontSize:12, letterSpacing:1, textTransform:'uppercase', color:'var(--color-muted)'}}>
+                      {t.eyebrow}
                     </div>
+                    <h3 id="registry-opt-title" style={{margin:0, fontSize:16, lineHeight:'22px'}}>{t.title}</h3>
+                    <p style={{margin:0, fontSize:12, color:'var(--color-muted)'}}>{t.sub}</p>
 
-                    <label
-                      htmlFor="publish-registry"
-                      style={{display:'inline-flex', alignItems:'center', gap:10, cursor:'pointer', userSelect:'none'}}
-                      role="switch"
-                      aria-checked={form.public_registry}
-                      title={t.ctaLabel}
+                    {/* 👇 CTA très visible */}
+                    <button
+                      type="button"
+                      onClick={()=>setForm(f=>({ ...f, public_registry: !f.public_registry }))}
+                      aria-pressed={form.public_registry}
+                      style={form.public_registry ? btnOn : btnOff}
+                      onMouseDown={e=>(e.currentTarget.style.transform='translateY(1px)')}
+                      onMouseUp={e=>(e.currentTarget.style.transform='translateY(0)')}
                     >
-                      <input
-                        id="publish-registry"
-                        type="checkbox"
-                        checked={form.public_registry}
-                        onChange={e=>setForm(f=>({...f, public_registry: e.target.checked}))}
-                        style={{margin:0}}
-                      />
-                    </label>
-                  </div>
+                      {form.public_registry ? t.btnOn : t.btnOff}
+                    </button>
 
-                  {/* 3 bénéfices (courts) */}
-                  <ul style={{margin:'10px 0 0', paddingLeft:18, lineHeight:'22px', fontSize:13}}>
-                    {t.bullets.map((b, i) => <li key={i}>{b}</li>)}
-                  </ul>
+                    {/* Bullets ultra courts */}
+                    <ul style={{margin:'6px 0 0', paddingLeft:18, lineHeight:'22px', fontSize:13}}>
+                      {t.bullets.map((b,i)=><li key={i}>{b}</li>)}
+                    </ul>
 
-                  {/* Détails pliables pour ne pas surcharger */}
-                  <details style={{marginTop:10}}>
-                    <summary style={{cursor:'pointer', fontSize:12}}>{t.more}</summary>
-                    <div style={{marginTop:8, fontSize:12, color:'var(--color-muted)'}}>
-                      <p style={{margin:'0 0 8px'}}>{t.moreBody}</p>
-                      <div style={{display:'flex', gap:12, flexWrap:'wrap'}}>
-                        <a href={link('/explore')} style={{color:'var(--color-text)'}}>{t.links.explore} →</a>
-                        <a href={link('/legal/terms')} style={{color:'var(--color-text)'}}>{t.links.terms}</a>
-                        <a href={link('/legal/privacy')} style={{color:'var(--color-text)'}}>{t.links.privacy}</a>
+                    {/* Détails pliables */}
+                    <details style={{marginTop:6}}>
+                      <summary style={{cursor:'pointer', fontSize:12}}>{t.more}</summary>
+                      <p style={{margin:'8px 0 0', fontSize:12, color:'var(--color-muted)'}}>{t.moreBody}</p>
+                      <div style={{marginTop:6}}>
+                        <a href={`/${loc}/explore`} style={{color:'var(--color-text)'}}>{t.explore} →</a>
                       </div>
-                    </div>
-                  </details>
+                    </details>
+                  </div>
                 </section>
               )
             })()}
+
 
 
             {/* Conformité & consentements */}
