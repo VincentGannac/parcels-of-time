@@ -209,6 +209,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const titleLabel = L.titleLabel
   const messageLabel = L.message
 
+
   /** Form principal */
   const [form, setForm] = useState({
     email: prefillEmail || '',
@@ -454,10 +455,6 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     }))
   }, [D, forSaleDays, isGift])
 
-  // --- consentement image custom
-  const [acceptCustomImageRules, setAcceptCustomImageRules] = useState(false)
-  useEffect(() => { if (form.cert_style !== 'custom') setAcceptCustomImageRules(false) }, [form.cert_style])
-
   // Date choisie
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
   const chosenDateStr = parsedDate ? ymdUTC(parsedDate) : L.placeholders.dateYMD
@@ -475,6 +472,19 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     setForm(f => ({ ...f, cert_style: id }))
     if (id === 'custom') openFileDialog()
   }
+
+  // ✅ Consentement requis si publication activée OU si image custom utilisée
+  const needsPublicationConsent = useMemo(
+    () => form.public_registry || (form.cert_style === 'custom' && !!customBg),
+    [form.public_registry, form.cert_style, customBg]
+  )
+
+   // --- consentement publication / image
+   const [acceptCustomImageRules, setAcceptCustomImageRules] = useState(false)
+   useEffect(() => {
+     // Si ni publication ni image custom, on réinitialise la case
+     if (!needsPublicationConsent) setAcceptCustomImageRules(false)
+   }, [needsPublicationConsent])
 
   async function heicToPngIfNeeded(original: File): Promise<{file: File, wasHeic:boolean}> {
     const type = (original.type || '').toLowerCase()
@@ -1057,6 +1067,8 @@ const SWATCHES = [
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [LINES_FOR_USER, scale, form.cert_style, show, isGift, chosenDateStr])
   
+  
+
   
   // Helpers: convertir baseline PDF -> CSS top px
   const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
@@ -1764,16 +1776,16 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
                   <span>Je comprends que mes données (email, montant, pays) sont partagées avec <strong>Stripe</strong> pour le paiement sécurisé.</span>
                 </label>
 
-                {form.cert_style === 'custom' && customBg && (
+                {needsPublicationConsent && (
                 <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                   <input
                     type="checkbox"
-                    required
+                    required={needsPublicationConsent}
                     checked={acceptCustomImageRules}
                     onChange={e=>setAcceptCustomImageRules(e.target.checked)}
                   />
                   <span>
-                    J’atteste disposer des droits nécessaires (ou d’une licence) pour l’image importée et, en cas de publication dans le registre public, qu’elle respecte notre charte de modération.
+                    En cas de publication dans le registre public, j’atteste disposer des droits nécessaires (ou d’une licence) pour l’image importée et qu’elle respecte notre charte de modération.
                   </span>
                 </label>
               )}
@@ -1784,14 +1796,12 @@ const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
               </div>
             </section>
 
-
-
             {/* Submit */}
             <div>
               <button disabled={
-                  status === 'loading' ||
-                  (form.cert_style === 'custom' && !!customBg && !acceptCustomImageRules)
-                } type="submit"
+                status === 'loading' ||
+                (needsPublicationConsent && !acceptCustomImageRules)}
+                type="submit"
                 style={{background:'var(--color-primary)', color:'var(--color-on-primary)', padding:'14px 18px', borderRadius:12, fontWeight:800, border:'none', boxShadow: status==='loading' ? '0 0 0 6px rgba(228,183,61,.12)' : 'none', cursor: status==='loading' ? 'progress' : 'pointer'}}>
                 {status==='loading' ? 'Redirection…' : (isGift ? 'Offrir cette journée' : 'Payer & réserver cette journée')}
               </button>
