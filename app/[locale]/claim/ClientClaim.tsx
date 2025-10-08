@@ -254,13 +254,14 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   const autoPickDoneRef = useRef(false)
 
+  // 🔁 remplace l’effet auto-pick
   useEffect(() => {
-    // Si un ts explicite est fourni, on respecte la volonté de l’URL
-    if (autoPickDoneRef.current || prefillTs) { 
+    if (autoPickDoneRef.current || prefillTs) {
       autoPickDoneRef.current = true
       return
     }
-    if (isLoadingDays) return // attendre le 1er mois
+    // ⏳ attendre que le mois courant soit hydraté au moins une fois
+    if (!hasHydrated(Y, M)) return
 
     ;(async () => {
       const nearest = await findNearestWhiteDate()
@@ -269,52 +270,49 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       }
       autoPickDoneRef.current = true
     })()
-  }, [isLoadingDays, prefillTs, todayUtc, maxDateUtc])
+  }, [prefillTs, Y, M, isLoadingDays]) // (les deps font re-tester hasHydrated)
 
     // Cache par mois (YYYY-MM) : on mémorise rouges + jaunes + lookup
+
   type MonthCache = {
     red: number[]
     yellow: number[]
     lookup: Record<number, { id:string; price_cents:number; currency:string }>
+    hydrated: boolean
   }
 
+  const monthCacheRef = useRef<Map<string, MonthCache>>(new Map())
   const monthKey = (y:number,m:number) => `${y}-${String(m).padStart(2,'0')}`
+  const hasHydrated = (y:number, m:number) => !!monthCacheRef.current.get(monthKey(y,m))?.hydrated
 
-async function getMonthData(y:number, m:number): Promise<MonthCache> {
-  const ym = monthKey(y,m)
-  const cached = monthCacheRef.current.get(ym)
-  if (cached) return cached
 
-  // Si c'est le mois actuellement affiché et déjà chargé, réutilise l'état local
-  if (y === Y && m === M && !isLoadingDays) {
-    const mc: MonthCache = { red: unavailableDays, yellow: forSaleDays, lookup: saleLookup }
-    monthCacheRef.current.set(ym, mc)
-    return mc
-  }
+  // 🔁 remplace entièrement getMonthData
+  async function getMonthData(y:number, m:number): Promise<MonthCache> {
+    const ym = monthKey(y,m)
+    const cached = monthCacheRef.current.get(ym)
+    if (cached?.hydrated) return cached  // ✅ seulement si hydraté
 
-  // Sinon, on fetch une fois puis on met en cache
-  try {
-    const res = await fetch(`/api/unavailable?ym=${ym}`)
-    if (!res.ok) throw new Error('fetch failed')
-    const data = await res.json()
-    const red = Array.isArray(data?.unavailable) ? data.unavailable : []
-    const yellow = Array.isArray(data?.for_sale) ? data.for_sale : []
-    const listingList = Array.isArray(data?.listings) ? data.listings : []
-    const lookup: Record<number, { id:string; price_cents:number; currency:string }> = {}
-    for (const it of listingList) {
-      if (typeof it?.d === 'number') {
-        lookup[it.d] = { id: String(it.id), price_cents: it.price_cents, currency: it.currency || 'EUR' }
+    try {
+      const res = await fetch(`/api/unavailable?ym=${ym}`)
+      if (!res.ok) throw new Error('fetch failed')
+      const data = await res.json()
+      const red = Array.isArray(data?.unavailable) ? data.unavailable : []
+      const yellow = Array.isArray(data?.for_sale) ? data.for_sale : []
+      const listingList = Array.isArray(data?.listings) ? data.listings : []
+      const lookup: Record<number, { id:string; price_cents:number; currency:string }> = {}
+      for (const it of listingList) {
+        if (typeof it?.d === 'number') {
+          lookup[it.d] = { id: String(it.id), price_cents: it.price_cents, currency: it.currency || 'EUR' }
+        }
       }
+      const mc: MonthCache = { red, yellow, lookup, hydrated:true }
+      monthCacheRef.current.set(ym, mc)
+      return mc
+    } catch {
+      // ❌ pas de mise en cache vide : on retentera plus tard
+      return { red:[], yellow:[], lookup:{}, hydrated:false }
     }
-    const mc: MonthCache = { red, yellow, lookup }
-    monthCacheRef.current.set(ym, mc)
-    return mc
-  } catch {
-    const empty: MonthCache = { red: [], yellow: [], lookup: {} }
-    monthCacheRef.current.set(ym, empty)
-    return empty
   }
-}
 
   async function isWhiteDay(date: Date): Promise<boolean> {
     if (date.getTime() > maxDateUtc.getTime()) return false
@@ -345,9 +343,6 @@ async function getMonthData(y:number, m:number): Promise<MonthCache> {
   }
 
 
-
-
-  const monthCacheRef = useRef<Map<string, MonthCache>>(new Map())
   // Pour annuler les requêtes précédentes si on change Y/M rapidement
   const daysReqAbortRef = useRef<AbortController | null>(null)
 
@@ -359,16 +354,14 @@ async function getMonthData(y:number, m:number): Promise<MonthCache> {
       try { daysReqAbortRef.current.abort() } catch {}
       daysReqAbortRef.current = null
     }
-  
-    // 2) Reset optimiste
+    
     setIsLoadingDays(true)
     setUnavailableDays([])
     setForSaleDays([])
     setSaleLookup({})
   
-    // 3) Cache complet (rouges + jaunes + lookup)
     const cached = monthCacheRef.current.get(ym)
-    if (cached) {
+    if (cached?.hydrated) {
       setUnavailableDays(cached.red)
       setForSaleDays(cached.yellow)
       setSaleLookup(cached.lookup)
@@ -376,14 +369,13 @@ async function getMonthData(y:number, m:number): Promise<MonthCache> {
       return
     }
   
-    // 4) Fetch avec AbortController
     const ctrl = new AbortController()
     daysReqAbortRef.current = ctrl
   
     ;(async () => {
       try {
         const res = await fetch(`/api/unavailable?ym=${ym}`, { signal: ctrl.signal })
-        if (!res.ok) { setUnavailableDays([]); return }
+        if (!res.ok) throw new Error('bad status')
   
         const data = await res.json()
         const red = Array.isArray(data?.unavailable) ? data.unavailable : []
@@ -401,30 +393,29 @@ async function getMonthData(y:number, m:number): Promise<MonthCache> {
         }
         setSaleLookup(map)
   
-        // ➕ on mémorise tout dans le cache
-        monthCacheRef.current.set(ym, { red, yellow, lookup: map })
-      } catch (e: any) {
+        // ✅ on cache en hydraté
+        monthCacheRef.current.set(ym, { red, yellow, lookup: map, hydrated:true })
+      } catch (e:any) {
         if (e?.name !== 'AbortError') {
+          // pas d’hydratation → permettra un retry plus tard
           setUnavailableDays([])
           setForSaleDays([])
           setSaleLookup({})
         }
       } finally {
-        if (daysReqAbortRef.current === ctrl) {
-          daysReqAbortRef.current = null
-        }
+        if (daysReqAbortRef.current === ctrl) daysReqAbortRef.current = null
         setIsLoadingDays(false)
       }
     })()
   
-    // ✅ cleanup enregistré par useEffect (unmount ou changement Y/M)
     return () => {
       if (daysReqAbortRef.current === ctrl) {
-        try { daysReqAbortRef.current.abort() } catch {}
+        try { ctrl.abort() } catch {}
         daysReqAbortRef.current = null
       }
     }
   }, [Y, M])
+    
   
   
 
