@@ -613,6 +613,40 @@ function EmotionalThemesCarousel() {
   }
 
   const items: Item[] = [
+   
+    {
+      icon: '🎂',
+      titleFR: 'Anniversaires',
+      titleEN: 'Birthdays',
+      textFR: 'Célébrez leur histoire avec leur date de naissance, personnalisée par vos soins.',
+      textEN: 'Celebrate their story with their birth date, personalized by you.',
+      badgeFR: 'Chaleur', badgeEN: 'Warmth', tone: 'warning',
+    },
+    {
+      icon: '🏆',
+      titleFR: 'Réussites & tournants',
+      titleEN: 'Milestones & turning points',
+      textFR: 'Diplôme, premier contrat, première vente, ces journées qui change une vie.',
+      textEN: 'Graduation, first job, first sale, that day that shifts a life.',
+      badgeFR: 'Inoubliable', badgeEN: 'Unforgettable', tone: 'success',
+    },
+    {
+      icon: '🧭',
+      titleFR: 'Voyages & retrouvailles',
+      titleEN: 'Journeys & reunions',
+      textFR: 'Gravez pour toujours l’émotion de cet instant.',
+      textEN: 'Capture the emotion of this moment forever.',
+      badgeFR: 'Souvenir', badgeEN: 'Memory', tone: 'warning',
+    },
+    {
+      icon: '🎁',
+      titleFR: 'À offrir',
+      titleEN: 'To gift',
+      textFR: 'Plus qu’un cadeau : une émotion.',
+      textEN: 'More than a gift: an emotion.',
+      badgeFR: 'Coup de cœur', badgeEN: 'Heartfelt', tone: 'success',
+    },
+
     {
       icon: '💛',
       titleFR: 'Amour & famille',
@@ -620,38 +654,6 @@ function EmotionalThemesCarousel() {
       textFR: 'Rencontre, fiançailles, mariage, naissance, premier mot… ces instants qui nous fondent.',
       textEN: 'First date, engagement, wedding, birth, first word… the moments that make us.',
       badgeFR: 'Émotion', badgeEN: 'Emotion', tone: 'success',
-    },
-    {
-      icon: '🎂',
-      titleFR: 'Anniversaires & traditions',
-      titleEN: 'Birthdays & traditions',
-      textFR: 'Bougies soufflées, rituels partagés — ces pages qui reviennent et nous rassemblent.',
-      textEN: 'Blown candles, shared rituals — returning pages that bring us together.',
-      badgeFR: 'Chaleur', badgeEN: 'Warmth', tone: 'warning',
-    },
-    {
-      icon: '🏆',
-      titleFR: 'Réussites & tournants',
-      titleEN: 'Milestones & turning points',
-      textFR: 'Diplôme, premier contrat, première vente — ce déclic qui change une trajectoire.',
-      textEN: 'Graduation, first job, first sale — that spark that shifts a life.',
-      badgeFR: 'Inoubliable', badgeEN: 'Unforgettable', tone: 'success',
-    },
-    {
-      icon: '🧭',
-      titleFR: 'Voyages & retrouvailles',
-      titleEN: 'Journeys & reunions',
-      textFR: 'Décollage, arrivée, lever de soleil — la boussole vers ailleurs ou vers chez soi.',
-      textEN: 'Takeoff, arrival, sunrise — the compass pointing outward or home.',
-      badgeFR: 'Souvenir', badgeEN: 'Memory', tone: 'warning',
-    },
-    {
-      icon: '🎁',
-      titleFR: 'À offrir',
-      titleEN: 'To gift',
-      textFR: 'Une journée à offrir, personnelle et instantanée, qui dit “je me souviens de nous”.',
-      textEN: 'A day to gift — personal and instant — saying “I remember us.”',
-      badgeFR: 'Coup de cœur', badgeEN: 'Heartfelt', tone: 'success',
     },
   ]
 
@@ -727,15 +729,15 @@ function CollectorThemesCarousel() {
       icon: '🚀',
       titleFR: 'Exploration spatiale',
       titleEN: 'Space exploration',
-      textFR: 'Décollages, alunissages, rovers — jalons qui élargissent notre horizon.',
-      textEN: 'Launches, moonwalks, rovers — milestones expanding our horizon.',
+      textFR: 'Découvertes, alunissages, rovers, ces instants qui élargissent notre horizon.',
+      textEN: 'Discoveries, moon landings, rovers—moments that broaden our horizons',
       badgeFR: 'Iconique', badgeEN: 'Iconic', tone: 'success',
     },
     {
       icon: '🏆',
       titleFR: 'Grandes finales',
       titleEN: 'Great finals',
-      textFR: 'Coupe du monde, JO — moments gravés dans la mémoire collective.',
+      textFR: 'Coupe du monde, JO, ces moments gravés dans la mémoire collective.',
       textEN: 'World cups, Olympics — moments etched in collective memory.',
       badgeFR: 'Très convoité', badgeEN: 'Highly coveted', tone: 'warning',
     },
