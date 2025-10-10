@@ -34,16 +34,16 @@ const PT_PER_CM = 28.3465
 const SHIFT_UP_PT = Math.round(2 * PT_PER_CM) // 2cm
 
 function getSafeArea(style: CertStyle){
-  const base = { top: 120, right: 96, bottom: 130, left: 96 }
+  const base = { top: 120, right: 100, bottom: 130, left: 100 }
   switch (style) {
-    case 'romantic':   return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'birthday':   return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'birth':      return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'wedding':    return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'christmas':  return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'newyear':    return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'graduation': return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'custom':     return { top: 120, right: 96, bottom: 130, left: 96 }
+    case 'romantic':   return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'birthday':   return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'birth':      return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'wedding':    return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'christmas':  return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'newyear':    return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'graduation': return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'custom':     return { top: 120, right: 100, bottom: 130, left: 100 }
     default:           return base
   }
 }

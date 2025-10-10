@@ -69,16 +69,16 @@ const SHIFT_UP_PT = Math.round(2 * PT_PER_CM) // 2 cm
 const MIN_GAP_HEADER_PT = 28 // écart mini entre sous-titre et date
 
 function getSafeArea(style: CertStyle){
-  const base = { top: 120, right: 96, bottom: 130, left: 96 }
+  const base = { top: 120, right: 100, bottom: 130, left: 100 }
   switch (style) {
-    case 'romantic':   return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'birthday':   return { top: 120, right: 96, bottom: 130, left: 96}
-    case 'birth':      return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'wedding':    return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'christmas':  return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'newyear':    return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'graduation': return { top: 120, right: 96, bottom: 130, left: 96 }
-    case 'custom':     return { top: 120, right: 96, bottom: 130, left: 96 }
+    case 'romantic':   return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'birthday':   return { top: 120, right: 100, bottom: 130, left: 100}
+    case 'birth':      return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'wedding':    return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'christmas':  return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'newyear':    return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'graduation': return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'custom':     return { top: 120, right: 100, bottom: 130, left: 100 }
     default:           return base
   }
 }
@@ -177,7 +177,7 @@ export async function generateCertificatePDF(opts: {
         const img = bg.kind === 'png' ? await pdf.embedPng(bg.bytes) : await pdf.embedJpg(bg.bytes)
         drawBgPortraitAware(page, img)
       } else {
-        page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.99, 0.98, 0.96) })
+        page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.99, 0.98, 0.100) })
       }
     }
   } catch {

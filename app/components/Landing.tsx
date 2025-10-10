@@ -773,10 +773,10 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
   
           {!compact && (
             <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
-              {isFR
-                ? 'Aperçu non contractuel — le PDF final inclut un QR scannable et l’empreinte d’intégrité.'
-                : 'Non-contractual preview — final PDF includes a scannable QR and the integrity fingerprint.'}
-            </figcaption>
+            {isFR
+              ? 'Aperçu non contractuel — ces certificats sont des exemples. Le PDF final inclut un QR scannable et l’empreinte d’intégrité.'
+              : 'Non-contractual preview — these certificates are examples. The final PDF includes a scannable QR and the integrity fingerprint.'}
+          </figcaption>
           )}
         </figure>
       </a>
@@ -1188,10 +1188,10 @@ function RegistryShowcase() {
   )
 }
 
-
 /* =========================================================
-   WHAT YOU RECEIVE — Démos (version émotion)
+   WHAT YOU RECEIVE — Démos (version émotion) — UPDATED
    ========================================================= */
+   
    function ReceiveShowcase() {
     const href = useLocaleHref()
     const pathname = usePathname() || '/'
@@ -1209,22 +1209,30 @@ function RegistryShowcase() {
           cards: [
             {
               style: 'romantic',
-              owner: 'Clara & Sam',
+              owner: 'Clara', // un seul prénom
               title: 'Un premier baiser',
               ts: '2018-07-19',
               msg:
-                'Sous l’averse, à l’abri d’un porche, nos deux vies ont pivoté. ' +
-                'Ce 19/07/2018 n’est pas un simple souvenir : c’est notre point de départ.',
+                `La pluie tambourinait sur le porche, nos mains se sont cherchées, puis tout s’est mis au ralenti. 
+  Ce 19/07/2018 a changé la trajectoire de nos vies : un « nous » est né, simple et immense.
+  
+  Garder cette date, c’est conserver la lumière exacte de ce soir-là — le frisson intact de notre premier baiser.
+  
+  Offert par : Sam`,
               cta: '/claim?style=romantic',
             },
             {
               style: 'birth',
-              owner: 'Nora & Mehdi',
+              owner: 'Nora',
               title: 'Bienvenue, Aïcha',
               ts: '2023-03-02',
               msg:
-                '06:12 — un cri minuscule et le monde s’agrandit. ' +
-                'Graver cette date, c’est garder à jamais la première lumière.',
+                `06:12 — un cri minuscule fend la nuit, la chambre devient immensité. 
+  Première peau contre peau, odeur de lait tiède, et notre temps s’agrandit d’un prénom.
+  
+  Graver le 02/03/2023, c’est garder pour toujours la toute première lumière d’Aïcha, l’aube où nous sommes devenus trois.
+  
+  Offert par : Mehdi`,
               cta: '/claim?style=birth',
             },
             {
@@ -1233,8 +1241,12 @@ function RegistryShowcase() {
               title: '18 ans — lumière nouvelle',
               ts: '2006-09-15',
               msg:
-                'Le jour où l’enfance s’incline et laisse passer l’élan. ' +
-                'Posséder ce 15/09/2006, c’est tenir la clé de son histoire.',
+                `18 ans — un matin comme une porte qui s’ouvre grand. 
+  Des bougies, des rires, un vertige joyeux : le monde invite à partir, à tenter, à oser.
+  
+  Posséder le 15/09/2006, c’est garder la clé de ce courage — y revenir quand le cœur a besoin d’élan.
+  
+  Offert par : Léo`,
               cta: '/claim?style=birthday',
             },
           ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
@@ -1250,22 +1262,30 @@ function RegistryShowcase() {
           cards: [
             {
               style: 'romantic',
-              owner: 'Clara & Sam',
+              owner: 'Clara',
               title: 'A first kiss',
               ts: '2018-07-19',
               msg:
-                'Rain on the awning, a porch, and then—everything shifted. ' +
-                'This 2018-07-19 isn’t just a memory; it’s our beginning.',
+                `Rain hammered the awning; our hands found each other and time slowed. 
+  On 2018-07-19 our lives tilted — the exact moment a simple, vast “we” began.
+  
+  Keeping this date preserves that evening’s light, and the intact shiver of our first kiss.
+  
+  Gifted by: Sam`,
               cta: '/claim?style=romantic',
             },
             {
               style: 'birth',
-              owner: 'Nora & Mehdi',
+              owner: 'Nora',
               title: 'Welcome, Aïcha',
               ts: '2023-03-02',
               msg:
-                '06:12 — a tiny cry and the world expands. ' +
-                'Claiming this date is keeping the very first light.',
+                `06:12 — a tiny cry split the night and the room became vast. 
+  First skin-to-skin, warm milk on the air, and our time widened around one name.
+  
+  Marking 2023-03-02 keeps Aïcha’s very first light — the dawn we became three.
+  
+  Gifted by: Mehdi`,
               cta: '/claim?style=birth',
             },
             {
@@ -1274,8 +1294,12 @@ function RegistryShowcase() {
               title: '18th birthday — new light',
               ts: '2006-09-15',
               msg:
-                'The day childhood bows and momentum begins. ' +
-                'Owning 2006-09-15 means holding the key to her story.',
+                `Eighteen — a morning like a door flung open. 
+  Candles, laughter, that tremor of first departures and brave beginnings.
+  
+  Owning 2006-09-15 means holding the key to that courage — a touchstone you can return to.
+  
+  Gifted by: Leo`,
               cta: '/claim?style=birthday',
             },
           ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
@@ -1327,6 +1351,7 @@ function RegistryShowcase() {
       </section>
     )
   }
+  
   
   
 /* =========================================================
