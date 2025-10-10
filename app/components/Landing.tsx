@@ -409,7 +409,7 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
 
   const SAFE_INSETS_PCT: Record<PreviewStyle, { top: number; right: number; bottom: number; left: number }> = {
     neutral: { top: 120, right: 100, bottom: 130, left: 100 },
-    romantic: { top: 120, right: 120, bottom: 130, left: 120  },
+    romantic: { top: 120, right: 100, bottom: 130, left: 100  },
     birthday: { top: 120, right: 100, bottom: 130, left: 100  },
     birth: { top: 120, right: 100, bottom: 130, left: 100  },
     wedding: { top: 120, right: 100, bottom: 130, left: 100  },
@@ -462,7 +462,7 @@ function CertificatePreview({
   // ---------- Constantes A4 & layout (miroir ClientClaim/PDF) ----------
   const A4_W_PT = 595.28, A4_H_PT = 841.89
   const EDGE_PT = 16, QR_SIZE_PT = 120, META_H_PT = 76
-  const PT_PER_CM = 28.3465
+  const PT_PER_CM = 28.3465 
   const SHIFT_UP_PT = Math.round(2 * PT_PER_CM)         // ↑ 2 cm
   const MIN_GAP_HEADER_PT = 28                          // écart mini sous-titre → date
   const TEXT_MAIN_HEX = '#1A1F2A'
