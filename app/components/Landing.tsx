@@ -406,7 +406,6 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
    CERTIFICATE PREVIEW — v2 (aligné sur ClientClaim/cert.ts)
    ========================================================= */
 
-   type PreviewStyle = 'romantic' | 'birth' | 'wedding' | 'birthday' | 'christmas' | 'newyear' | 'graduation' | 'neutral'
 
   const SAFE_INSETS_PCT: Record<PreviewStyle, { top: number; right: number; bottom: number; left: number }> = {
     neutral: { top: 120, right: 100, bottom: 130, left: 100 },
@@ -418,370 +417,447 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
     newyear: { top: 120, right: 100, bottom: 130, left: 100  },
     graduation: { top: 120, right: 100, bottom: 130, left: 100  },
   }
-  const EDGE_PX = 12
 
 
-   function CertificatePreview({
-    styleId,
-    owner,
-    title,
-    message,
-    ts,
-    href,
-    compact = false,
-  }: {
-    styleId: PreviewStyle
-    owner: string
-    title?: string
-    message?: string
-    ts: string               // "YYYY-MM-DD" ou ISO
-    href: string
-    compact?: boolean
-  }) {
-    // --- Locale minimale (FR si navigateur fr-*)
-    const isFR = (() => {
-      try { return (navigator.language || '').toLowerCase().startsWith('fr') } catch { return false }
-    })()
-    const L = {
-      brand: 'Parcels of Time',
-      title: isFR ? 'Certificat d’acquisition' : 'Certificate of Claim',
-      ownedBy: isFR ? 'Au nom de' : 'Owned by',
-      attestationLabel: isFR ? 'Texte d’attestation' : 'Attestation text',
-      anon: isFR ? 'Anonyme' : 'Anonymous',
-      certId: isFR ? 'ID du certificat' : 'Certificate ID',
-      integrity: isFR ? 'Intégrité (SHA-256)' : 'Integrity (SHA-256)',
+ // --- REPLACE the whole CertificatePreview implementation with this one ---
+
+type PreviewStyle = 'romantic' | 'birth' | 'wedding' | 'birthday' | 'christmas' | 'newyear' | 'graduation' | 'neutral'
+
+const EDGE_PX = 12
+
+function CertificatePreview({
+  styleId,
+  owner,
+  title,
+  message,
+  ts,
+  href,
+  compact = false,
+}: {
+  styleId: PreviewStyle
+  owner: string
+  title?: string
+  message?: string
+  ts: string               // "YYYY-MM-DD" ou ISO
+  href: string
+  compact?: boolean
+}) {
+  // --- Locale minimale (FR si navigateur fr-*)
+  const isFR = (() => {
+    try { return (navigator.language || '').toLowerCase().startsWith('fr') } catch { return false }
+  })()
+  const L = {
+    brand: 'Parcels of Time',
+    title: isFR ? 'Certificat d’acquisition' : 'Certificate of Claim',
+    ownedBy: isFR ? 'Au nom de' : 'Owned by',
+    giftedBy: isFR ? 'Offert par' : 'Gifted by',
+    titleLabel: isFR ? 'Titre' : 'Title',
+    message: isFR ? 'Message' : 'Message',
+    attestationLabel: isFR ? 'Texte d’attestation' : 'Attestation text',
+    anon: isFR ? 'Anonyme' : 'Anonymous',
+    certId: isFR ? 'ID du certificat' : 'Certificate ID',
+    integrity: isFR ? 'Intégrité (SHA-256)' : 'Integrity (SHA-256)',
+  }
+
+  // ---------- Constantes A4 & layout (miroir ClientClaim/PDF) ----------
+  const A4_W_PT = 595.28, A4_H_PT = 841.89
+  const EDGE_PT = 16, QR_SIZE_PT = 120, META_H_PT = 76
+  const PT_PER_CM = 28.3465
+  const SHIFT_UP_PT = Math.round(2 * PT_PER_CM)         // ↑ 2 cm
+  const MIN_GAP_HEADER_PT = 28                          // écart mini sous-titre → date
+  const TEXT_MAIN_HEX = '#1A1F2A'
+  const CERT_BG_HEX = '#F4F1EC'
+
+  type Insets = { top: number; right: number; bottom: number; left: number }
+  function getSafeArea(_style: PreviewStyle): Insets {
+    // mêmes insets que le PDF pour tous les styles
+    return { top: 120, right: 100, bottom: 130, left: 100 }
+  }
+
+  // ---------- Utils ----------
+  function ymdUTC(d: Date) {
+    const c = new Date(d.getTime()); c.setUTCHours(0, 0, 0, 0)
+    return c.toISOString().slice(0, 10) // ⚠️ pas de "UTC" affiché
+  }
+  function parseToDateOrNull(input: string): Date | null {
+    const s = (input || '').trim(); if (!s) return null
+    const d = new Date(s); if (isNaN(d.getTime())) return null
+    d.setUTCHours(0,0,0,0); return d
+  }
+  function hexToRgb(hex:string){
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return {r:26,g:31,b:42}
+    const n = parseInt(m[1],16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 }
+  }
+  function mix(a:number,b:number,t:number){ return Math.round(a*(1-t)+b*t) }
+  function lightenTowardWhite(hex:string, t=0.45){
+    const {r,g,b} = hexToRgb(hex); return `rgba(${mix(r,255,t)}, ${mix(g,255,t)}, ${mix(b,255,t)}, 0.9)`
+  }
+  function isAttestationParagraph(p: string){
+    const s = (p||'').trim().toLowerCase()
+    return s.startsWith('ce certificat atteste que') || s.startsWith('this certificate attests that')
+  }
+
+  // Measurer (points → pixels via scale)
+  function makeMeasurer(scale:number){
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')!
+    const setFont = (sizePt:number, bold=false) => {
+      const px = sizePt * scale
+      ctx.font = `${bold ? '700 ' : ''}${px}px Helvetica, Arial, sans-serif`
     }
-  
-    // ---------- Constantes A4 & layout (miroir ClientClaim) ----------
-    const A4_W_PT = 595.28, A4_H_PT = 841.89
-    const EDGE_PT = 16, QR_SIZE_PT = 120, META_H_PT = 76
-    const PT_PER_CM = 28.3465
-    const SHIFT_UP_PT = Math.round(2 * PT_PER_CM)         // ↑ 2 cm
-    const MIN_GAP_HEADER_PT = 28                          // écart mini sous-titre → date
-    const TEXT_MAIN_HEX = '#1A1F2A'
-    const CERT_BG_HEX = '#F4F1EC'
-  
-    type Insets = { top: number; right: number; bottom: number; left: number }
-    function getSafeArea(style: PreviewStyle): Insets {
-      // même boîte que le PDF (tous styles identiques ici)
-      return { top: 120, right: 100, bottom: 130, left: 100 }
-    }
-  
-    // ---------- Utils ----------
-    function ymdUTC(d: Date) {
-      const c = new Date(d.getTime()); c.setUTCHours(0, 0, 0, 0)
-      return c.toISOString().slice(0, 10) // ⚠️ pas de "UTC" affiché
-    }
-    function parseToDateOrNull(input: string): Date | null {
-      const s = (input || '').trim(); if (!s) return null
-      const d = new Date(s); if (isNaN(d.getTime())) return null
-      d.setUTCHours(0,0,0,0); return d
-    }
-    function hexToRgb(hex:string){
-      const m = /^#?([0-9a-f]{6})$/i.exec(hex); if(!m) return {r:26,g:31,b:42}
-      const n = parseInt(m[1],16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 }
-    }
-    function mix(a:number,b:number,t:number){ return Math.round(a*(1-t)+b*t) }
-    function lightenTowardWhite(hex:string, t=0.45){
-      const {r,g,b} = hexToRgb(hex); return `rgba(${mix(r,255,t)}, ${mix(g,255,t)}, ${mix(b,255,t)}, 0.9)`
-    }
-  
-    // Measurer (points → pixels via scale)
-    function makeMeasurer(scale:number){
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')!
-      const setFont = (sizePt:number, bold=false) => {
-        const px = sizePt * scale
-        ctx.font = `${bold ? '700 ' : ''}${px}px Helvetica, Arial, sans-serif`
+    const widthPx = (text:string) => ctx.measureText(text).width
+    const wrap = (text:string, sizePt:number, maxWidthPt:number, bold=false) => {
+      const words = (String(text) || '').trim().split(/\s+/).filter(Boolean)
+      const lines:string[] = []
+      let line = ''
+      setFont(sizePt, bold)
+      const maxPx = maxWidthPt * scale
+      for (const w of words) {
+        const test = line ? (line + ' ' + w) : w
+        if (widthPx(test) <= maxPx) line = test
+        else { if (line) lines.push(line); line = w }
       }
-      const widthPx = (text:string) => ctx.measureText(text).width
-      const wrap = (text:string, sizePt:number, maxWidthPt:number, bold=false) => {
-        const words = (text || '').trim().split(/\s+/).filter(Boolean)
-        const lines:string[] = []
-        let line = ''
-        setFont(sizePt, bold)
-        const maxPx = maxWidthPt * scale
-        for (const w of words) {
-          const test = line ? (line + ' ' + w) : w
-          if (widthPx(test) <= maxPx) line = test
-          else { if (line) lines.push(line); line = w }
-        }
-        if (line) lines.push(line)
-        return lines
+      if (line) lines.push(line)
+      return lines
+    }
+    return { wrap }
+  }
+
+  // ---------- Data d’entrée ----------
+  const parsed = parseToDateOrNull(ts)
+  const mainDate = parsed ? ymdUTC(parsed) : ts
+  const displayName = (owner || '').trim() || L.anon
+  const mainColor = TEXT_MAIN_HEX
+  const subtleColor = lightenTowardWhite(mainColor, 0.45)
+  const SA = getSafeArea(styleId)
+
+  // ---------- Mesure & échelle ----------
+  const wrapRef = useRef<HTMLDivElement|null>(null)
+  const [scale, setScale] = useState(1) // px per pt
+  useLayoutEffect(()=>{
+    const el = wrapRef.current
+    if (!el) return
+    const ro = new ResizeObserver(()=>{
+      const w = el.clientWidth
+      const s = w / A4_W_PT
+      setScale(s || 1)
+    })
+    ro.observe(el)
+    return ()=>ro.disconnect()
+  }, [])
+
+  // ---------- Métriques (identiques PDF) ----------
+  const brandSize = 18, subSize = 12
+  const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5
+  const gapSection = 14, gapSmall = 8
+  const lineHMsg = 16
+
+  // Header (positions de base en points)
+  const TOP_Y = A4_H_PT - SA.top
+  let yHeader = TOP_Y - 40
+  const yBrand = yHeader; yHeader -= 18
+  const yCert  = yHeader
+
+  // Contenu (réservations bas)
+  const footerH = Math.max(QR_SIZE_PT, META_H_PT)
+  const contentTopMaxNatural = yHeader - 38 + SHIFT_UP_PT
+  const contentBottomMin     = SA.bottom + footerH + 8
+  const availH               = contentTopMaxNatural - contentBottomMin
+
+  const meas = useMemo(()=>makeMeasurer(scale), [scale])
+
+  // ---------- Parsing message (exact comme PDF) ----------
+  let giftedName = ''
+  let forceHideOwned = false
+  let userMessage = ''
+  let attestationText = ''
+
+  {
+    let raw = (message || '').trim()
+    if (raw) {
+      const paras = raw.split(/\r?\n/).map(l => l.trim())
+      const kept: string[] = []
+      for (const p of paras) {
+        if (!p) continue
+        if (/^\[\[\s*HIDE_OWNED_BY\s*\]\]$/i.test(p)) { forceHideOwned = true; continue }
+        const mg = /^(offert\s*par|gifted\s*by)\s*:\s*(.+)$/i.exec(p)
+        if (mg) { giftedName = mg[2].trim(); continue }
+        kept.push(p)
       }
-      return { wrap }
+      const finalParas: string[] = []
+      for (const p of kept) {
+        if (!attestationText && isAttestationParagraph(p)) attestationText = p
+        else finalParas.push(p)
+      }
+      userMessage = finalParas.join('\n').trim()
     }
-  
-    // ---------- Data d’entrée ----------
-    const parsed = parseToDateOrNull(ts)
-    const mainDate = parsed ? ymdUTC(parsed) : ts
-    const displayName = (owner || '').trim() || L.anon
-    const mainColor = TEXT_MAIN_HEX
-    const subtleColor = lightenTowardWhite(mainColor, 0.45)
-    const SA = getSafeArea(styleId)
-  
-    // ---------- Mesure & échelle ----------
-    const wrapRef = useRef<HTMLDivElement|null>(null)
-    const [scale, setScale] = useState(1) // px per pt
-    useLayoutEffect(()=>{
-      const el = wrapRef.current
-      if (!el) return
-      const ro = new ResizeObserver(()=>{
-        const w = el.clientWidth
-        const s = w / A4_W_PT
-        setScale(s || 1)
-      })
-      ro.observe(el)
-      return ()=>ro.disconnect()
-    }, [])
-  
-    // ---------- Métriques (identiques PDF) ----------
-    const brandSize = 18, subSize = 12
-    const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5
-    const gapSection = 14, gapSmall = 8
-    const lineHMsg = 16
-  
-    // Header (positions de base en points)
-    const TOP_Y = A4_H_PT - SA.top
-    let yHeader = TOP_Y - 40
-    const yBrand = yHeader;           yHeader -= 18
-    const yCert  = yHeader
-  
-    // Contenu (réservations bas)
-    const footerH = Math.max(QR_SIZE_PT, META_H_PT)
-    const contentTopMaxNatural = yHeader - 38 + SHIFT_UP_PT
-    const contentBottomMin     = SA.bottom + footerH + 8
-    const availH               = contentTopMaxNatural - contentBottomMin
-  
-    const meas = useMemo(()=>makeMeasurer(scale), [scale])
-  
-    // ---------- Wrap titre & message ----------
-    const titleText = (title || '').trim()
-    const titleLines = titleText ? meas.wrap(titleText, nameSize, (A4_W_PT - SA.left - SA.right), true).slice(0, 2) : []
-  
-    const msgText = (message || '').trim()
-    const msgLinesAll = msgText
-      ? msgText.split(/\n+/).flatMap((p, i, arr) => {
-          const lines = meas.wrap(p, msgSize, (A4_W_PT - SA.left - SA.right), false)
-          return i < arr.length - 1 ? [...lines, ''] : lines
-        })
-      : []
-  
-    // Attestation (mêmes mots que ClientClaim)
-    const attestation = isFR
-      ? `Ce certificat atteste que ${displayName} est reconnu(e) comme propriétaire symbolique de la journée du ${mainDate}. Le présent document confirme la validité et l'authenticité de cette acquisition.`
-      : `This certificate attests that ${displayName} is recognized as the symbolic owner of the day ${mainDate}. This document confirms the validity and authenticity of this acquisition.`
-    const attestLinesAll = meas.wrap(attestation, msgSize, (A4_W_PT - SA.left - SA.right), false)
-  
-    // Hauteurs et capacité — priorité au MESSAGE, puis attestation
-    const ownedBlockH = (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) // "Owned by" + nom
-    const fixedTop = (tsSize + 6) + ownedBlockH
-    const spaceAfterOwned = availH - fixedTop
-    const titleBlockNoGap = titleText ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
-    const beforeMsgConsumed = (titleBlockNoGap ? (gapSection + titleBlockNoGap) : 0)
-    const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
-    const TOTAL_TEXT_LINES = Math.max(0, Math.floor(afterTitleSpace / lineHMsg))
-  
-    const msgLines = msgLinesAll.slice(0, TOTAL_TEXT_LINES)
-    const remainingForAttest = Math.max(0, TOTAL_TEXT_LINES - msgLines.length)
-    const attestLines = attestLinesAll.slice(0, remainingForAttest)
-  
-    // Helpers: baseline→CSS top (px)
-    const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
-    const centerCss: React.CSSProperties = {
-      position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre', color: mainColor
-    }
-  
-    // ------ Placement avec anti-chevauchement sous-titre / date ------
-    const height = A4_H_PT
-    const topOf = (baseline:number, fontPt:number) => (height - baseline) - fontPt
-    const yDateNatural = contentTopMaxNatural - (tsSize + 6)
-    const topCertPx   = toTopPx(yCert, subSize)
-    const topDateNat  = toTopPx(yDateNatural, tsSize)
-    const minDateTopPx = topCertPx + (MIN_GAP_HEADER_PT * scale)
-    const contentOffsetPx = Math.max(0, minDateTopPx - topDateNat)
-  
-    // Calcul séquentiel des tops (comme ClientClaim)
-    let y = contentTopMaxNatural
-    y -= (tsSize + 6)
-    const topMainTime = toTopPx(y, tsSize) + contentOffsetPx
-  
-    // Owned by
+  }
+
+  // Wrap titre & textes
+  const titleText = (title || '').trim()
+  const titleLines = titleText ? meas.wrap(titleText, nameSize, (A4_W_PT - SA.left - SA.right), true).slice(0, 2) : []
+
+  // Message → lignes (en respectant les paragraphes vides)
+  const msgLinesAll: string[] = []
+  if (userMessage) {
+    const paras = userMessage.split(/\n+/)
+    paras.forEach((p, i) => {
+      const lines = meas.wrap(p, msgSize, (A4_W_PT - SA.left - SA.right), false)
+      msgLinesAll.push(...lines)
+      if (i < paras.length - 1) msgLinesAll.push('')
+    })
+  }
+  const attestLinesAll = attestationText ? meas.wrap(attestationText, msgSize, (A4_W_PT - SA.left - SA.right), false) : []
+
+  // Visibilité "Au nom de"
+  const hasName = !forceHideOwned && !!displayName
+
+  // Hauteurs de blocs (identiques PDF)
+  const ownedBlockH  = hasName    ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
+  const giftedBlockH = giftedName ? (gapSection + (labelSize + 2) + gapSmall + (nameSize + 4)) : 0
+
+  const fixedTop = (tsSize + 6) + ownedBlockH
+  const spaceAfterOwned = availH - fixedTop
+
+  const titleBlockNoGap = titleText ? ((labelSize + 2) + 6 + titleLines.length * (nameSize + 6)) : 0
+  const gapBeforeTitle = giftedName ? 8 : gapSection
+
+  const beforeMsgConsumed = giftedBlockH + (titleBlockNoGap ? (gapBeforeTitle + titleBlockNoGap) : 0)
+  const afterTitleSpace = spaceAfterOwned - beforeMsgConsumed
+  const TOTAL_TEXT_LINES = Math.max(0, Math.floor(afterTitleSpace / lineHMsg))
+
+  const msgLines = msgLinesAll.slice(0, TOTAL_TEXT_LINES)
+  const remainingForAttest = Math.max(0, TOTAL_TEXT_LINES - msgLines.length)
+  const attestLines = attestLinesAll.slice(0, remainingForAttest)
+
+  // Helpers: baseline→CSS top (px)
+  const toTopPx = (baselineY:number, fontSizePt:number) => (A4_H_PT - baselineY) * scale - (fontSizePt * scale)
+  const centerCss: React.CSSProperties = {
+    position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', whiteSpace:'pre', color: mainColor
+  }
+
+  // ------ Anti-chevauchement sous-titre / date (identique PDF) ------
+  const height = A4_H_PT
+  const topOf = (baseline:number, fontPt:number) => (height - baseline) - fontPt
+  const yDateNatural = contentTopMaxNatural - (tsSize + 6)
+  const topCertPx   = toTopPx(yCert, subSize)
+  const topDateNat  = toTopPx(yDateNatural, tsSize)
+  const minDateTopPx = topCertPx + (MIN_GAP_HEADER_PT * scale)
+  const contentOffsetPx = Math.max(0, minDateTopPx - topDateNat)
+
+  // Calcul séquentiel des tops (miroir PDF)
+  let y = contentTopMaxNatural
+  // Date
+  y -= (tsSize + 6)
+  const topMainTime = toTopPx(y, tsSize) + contentOffsetPx
+
+  // Owned by
+  let ownedLabelTop: number | null = null
+  let ownedNameTop: number | null = null
+  if (hasName) {
     y -= gapSection
-    const ownedLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
+    ownedLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
     y -= (labelSize + 2 + gapSmall)
-    const ownedNameTop  = toTopPx(y - (nameSize + 4) + 4, nameSize) + contentOffsetPx
+    ownedNameTop  = toTopPx(y - (nameSize + 4) + 4, nameSize) + contentOffsetPx
     y -= (nameSize + 4)
-  
-    // Title (si présent)
-    let titleLabelTop: number | null = null
-    const titleLineTops: number[] = []
-    if (titleText) {
-      y -= gapSection
-      titleLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
-      y -= (labelSize + 6)
-      for (const _ of titleLines) {
-        titleLineTops.push(toTopPx(y - (nameSize + 2), nameSize) + contentOffsetPx)
-        y -= (nameSize + 6)
-      }
+  }
+
+  // Gifted by
+  let giftedLabelTop: number | null = null
+  let giftedNameTop: number | null = null
+  if (giftedName) {
+    y -= gapSection
+    giftedLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
+    y -= (labelSize + 2 + gapSmall)
+    giftedNameTop  = toTopPx(y - (nameSize + 4) + 4, nameSize) + contentOffsetPx
+    y -= (nameSize + 4)
+  }
+
+  // Title — pas de gapSection supplémentaire (exact PDF)
+  let titleLabelTop: number | null = null
+  const titleLineTops: number[] = []
+  if (titleText) {
+    y -= (nameSize + 4)
+    y -= gapBeforeTitle
+    titleLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
+    y -= (labelSize + 6)
+    for (const _ of titleLines) {
+      titleLineTops.push(toTopPx(y - (nameSize + 2), nameSize) + contentOffsetPx)
+      y -= (nameSize + 6)
     }
-  
-    // Message
-    let msgLabelTop: number | null = null
-    const msgLineTops: number[] = []
-    if (msgLines.length) {
-      y -= gapSection
-      msgLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
-      y -= (labelSize + 6)
-      for (const _ of msgLines) {
-        msgLineTops.push(toTopPx(y - lineHMsg, msgSize) + contentOffsetPx)
-        y -= lineHMsg
-      }
+  }
+
+  // Message
+  let msgLabelTop: number | null = null
+  const msgLineTops: number[] = []
+  if (msgLines.length) {
+    y -= gapSection
+    msgLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
+    y -= (labelSize + 6)
+    for (const line of msgLines) {
+      msgLineTops.push(toTopPx(y - lineHMsg, msgSize) + contentOffsetPx)
+      y -= lineHMsg
     }
-  
-    // Attestation
-    let attestLabelTop: number | null = null
-    const attestLineTops: number[] = []
-    if (attestLines.length) {
-      y -= gapSection
-      attestLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
-      y -= (labelSize + 6)
-      for (const _ of attestLines) {
-        attestLineTops.push(toTopPx(y - lineHMsg, msgSize) + contentOffsetPx)
-        y -= lineHMsg
-      }
+  }
+
+  // Attestation
+  let attestLabelTop: number | null = null
+  const attestLineTops: number[] = []
+  if (attestLines.length) {
+    y -= gapSection
+    attestLabelTop = toTopPx(y - (labelSize + 2), labelSize) + contentOffsetPx
+    y -= (labelSize + 6)
+    for (const line of attestLines) {
+      attestLineTops.push(toTopPx(y - lineHMsg, msgSize) + contentOffsetPx)
+      y -= lineHMsg
     }
-  
-    // Header tops (pas d’offset)
-    const topBrand = toTopPx(yBrand, brandSize)
-    const topCert  = toTopPx(yCert,  subSize)
-  
-    // ---------- Rendu ----------
-    return (
-      <a href={href} aria-label={`Choose style ${styleId}`} style={{ textDecoration: 'none', color: 'var(--color-text)', display: 'block' }}>
-        <figure
-          style={{
-            margin: 0,
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg)',
-            overflow: 'hidden',
-            boxShadow: 'var(--shadow-1)',
-          }}
-        >
-          <div ref={wrapRef} style={{ position: 'relative', width: '100%', aspectRatio: compact ? '3 / 4' : `${A4_W_PT}/${A4_H_PT}`, background: '#0E1017' }}>
-            <img
-              src={`/cert_bg/${styleId}.png`}
-              alt={`Certificate style ${styleId}`}
-              width={595}
-              height={842}
-              loading="lazy"
-              decoding="async"
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: CERT_BG_HEX }}
-            />
-  
-            {/* Header */}
-            <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topBrand, fontWeight:800, fontSize: 18*scale, color: TEXT_MAIN_HEX }}>{L.brand}</div>
-            <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topCert,  fontWeight:400, fontSize: 12*scale, color: lightenTowardWhite(TEXT_MAIN_HEX) }}>{L.title}</div>
-  
-            {/* Date (AAAA-MM-JJ — pas de “UTC”) */}
-            <div style={{ ...centerCss, top: topMainTime, fontWeight:800, fontSize: tsSize*scale }}>
-              {mainDate}
-            </div>
-  
-            {/* Owned by */}
+  }
+
+  // Header tops (pas d’offset)
+  const topBrand = toTopPx(yBrand, brandSize)
+  const topCert  = toTopPx(yCert,  subSize)
+
+  // ---------- Rendu ----------
+  return (
+    <a href={href} aria-label={`Choose style ${styleId}`} style={{ textDecoration: 'none', color: 'var(--color-text)', display: 'block' }}>
+      <figure
+        style={{
+          margin: 0,
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)',
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-1)',
+        }}
+      >
+        <div ref={wrapRef} style={{ position: 'relative', width: '100%', aspectRatio: compact ? '3 / 4' : `${A4_W_PT}/${A4_H_PT}`, background: '#0E1017' }}>
+          <img
+            src={`/cert_bg/${styleId}.png`}
+            alt={`Certificate style ${styleId}`}
+            width={595}
+            height={842}
+            loading="lazy"
+            decoding="async"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', background: CERT_BG_HEX }}
+          />
+
+          {/* Header */}
+          <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topBrand, fontWeight:800, fontSize: 18*scale, color: TEXT_MAIN_HEX }}>{L.brand}</div>
+          <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topCert,  fontWeight:400, fontSize: 12*scale, color: lightenTowardWhite(TEXT_MAIN_HEX) }}>{L.title}</div>
+
+          {/* Date (AAAA-MM-JJ — pas de “UTC”) */}
+          <div style={{ ...centerCss, top: topMainTime, fontWeight:800, fontSize: tsSize*scale }}>
+            {mainDate}
+          </div>
+
+          {/* Owned by */}
+          {hasName && (
             <>
-              <div style={{ ...centerCss, top: ownedLabelTop, fontWeight:400, fontSize: 11*scale, color: lightenTowardWhite(TEXT_MAIN_HEX) }}>
+              <div style={{ ...centerCss, top: ownedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
                 {L.ownedBy}
               </div>
-              <div style={{ ...centerCss, top: ownedNameTop, fontWeight:800, fontSize: 15*scale }}>
+              <div style={{ ...centerCss, top: ownedNameTop!, fontWeight:800, fontSize: 15*scale }}>
                 {displayName}
               </div>
             </>
-  
-            {/* Title */}
-            {titleText && (
-              <>
-                <div style={{ ...centerCss, top: titleLabelTop!, fontWeight:400, fontSize: 11*scale, color: lightenTowardWhite(TEXT_MAIN_HEX) }}>
-                  {isFR ? 'Titre' : 'Title'}
+          )}
+
+          {/* Gifted by — ✅ au bon endroit, comme le PDF */}
+          {giftedName && (
+            <>
+              <div style={{ ...centerCss, top: giftedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                {L.giftedBy}
+              </div>
+              <div style={{ ...centerCss, top: giftedNameTop!, fontWeight:800, fontSize: 15*scale }}>
+                {giftedName}
+              </div>
+            </>
+          )}
+
+          {/* Title */}
+          {titleText && (
+            <>
+              <div style={{ ...centerCss, top: titleLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                {L.titleLabel}
+              </div>
+              {titleLineTops.map((top, i)=>(
+                <div key={i} style={{ ...centerCss, top, fontWeight:800, fontSize: 15*scale }}>
+                  {titleLines[i]}
                 </div>
-                {titleLineTops.map((top, i)=>(
-                  <div key={i} style={{ ...centerCss, top, fontWeight:800, fontSize: 15*scale }}>
-                    {titleLines[i]}
-                  </div>
-                ))}
-              </>
-            )}
-  
-            {/* Message */}
-            {msgLines.length>0 && (
-              <>
-                <div style={{ ...centerCss, top: msgLabelTop!, fontWeight:400, fontSize: 11*scale, color: lightenTowardWhite(TEXT_MAIN_HEX) }}>
-                  {isFR ? 'Message' : 'Message'}
+              ))}
+            </>
+          )}
+
+          {/* Message */}
+          {msgLines.length>0 && (
+            <>
+              <div style={{ ...centerCss, top: msgLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                {L.message}
+              </div>
+              {msgLineTops.map((top, i)=>(
+                <div key={i} style={{ ...centerCss, top, fontSize: 12.5*scale }}>
+                  {msgLines[i] === '' ? ' ' : msgLines[i]}
                 </div>
-                {msgLineTops.map((top, i)=>(
-                  <div key={i} style={{ ...centerCss, top, fontSize: 12.5*scale }}>
-                    {msgLines[i] === '' ? ' ' : msgLines[i]}
-                  </div>
-                ))}
-              </>
-            )}
-  
-            {/* Attestation */}
-            {attestLines.length>0 && (
-              <>
-                <div style={{ ...centerCss, top: attestLabelTop!, fontWeight:400, fontSize: 11*scale, color: lightenTowardWhite(TEXT_MAIN_HEX) }}>
-                  {L.attestationLabel}
+              ))}
+            </>
+          )}
+
+          {/* Attestation */}
+          {attestLines.length>0 && (
+            <>
+              <div style={{ ...centerCss, top: attestLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                {L.attestationLabel}
+              </div>
+              {attestLineTops.map((top, i)=>(
+                <div key={i} style={{ ...centerCss, top, fontSize: 12.5*scale }}>
+                  {attestLines[i] === '' ? ' ' : attestLines[i]}
                 </div>
-                {attestLineTops.map((top, i)=>(
-                  <div key={i} style={{ ...centerCss, top, fontSize: 12.5*scale }}>
-                    {attestLines[i] === '' ? ' ' : attestLines[i]}
-                  </div>
-                ))}
-              </>
-            )}
-  
-            {/* Footer: méta (gauche) + QR (droite) — placeholders */}
-            <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: lightenTowardWhite(TEXT_MAIN_HEX), fontSize: 11*scale, lineHeight: 1.2}}>
-              <div style={{opacity:.9}}>{L.certId}</div>
-              <div style={{marginTop:6, fontWeight:800, color: TEXT_MAIN_HEX, fontSize: 10.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
-              <div style={{marginTop:8, opacity:.9}}>{L.integrity}</div>
-              <div style={{marginTop:6, color: TEXT_MAIN_HEX, fontSize: 9.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
-              <div style={{marginTop:4, color: TEXT_MAIN_HEX, fontSize: 9.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
-            </div>
-  
-            <div
-              style={{
-                position:'absolute',
-                right: EDGE_PT*scale,
-                bottom: EDGE_PT*scale,
-                width: QR_SIZE_PT*scale,
-                height: QR_SIZE_PT*scale,
-                border:'1px dashed rgba(26,31,42,.45)',
-                borderRadius:8,
-                display:'grid',
-                placeItems:'center',
-                fontSize: 12*scale,
-                color: 'rgba(26,31,42,.85)',
-                background:'rgba(255,255,255,.08)'
-              }}
-              aria-label="QR placeholder"
-            >
-              QR
-            </div>
+              ))}
+            </>
+          )}
+
+          {/* Footer: méta (gauche) + QR (droite) — placeholders */}
+          <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: 11*scale, lineHeight: 1.2}}>
+            <div style={{opacity:.9}}>{L.certId}</div>
+            <div style={{marginTop:6, fontWeight:800, color: TEXT_MAIN_HEX, fontSize: 10.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
+            <div style={{marginTop:8, opacity:.9}}>{L.integrity}</div>
+            <div style={{marginTop:6, color: TEXT_MAIN_HEX, fontSize: 9.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
+            <div style={{marginTop:4, color: TEXT_MAIN_HEX, fontSize: 9.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
           </div>
-  
-          {!compact && (
-            <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
+
+          <div
+            style={{
+              position:'absolute',
+              right: EDGE_PT*scale,
+              bottom: EDGE_PT*scale,
+              width: QR_SIZE_PT*scale,
+              height: QR_SIZE_PT*scale,
+              border:'1px dashed rgba(26,31,42,.45)',
+              borderRadius:8,
+              display:'grid',
+              placeItems:'center',
+              fontSize: 12*scale,
+              color: 'rgba(26,31,42,.85)',
+              background:'rgba(255,255,255,.08)'
+            }}
+            aria-label="QR placeholder"
+          >
+            QR
+          </div>
+        </div>
+
+        {!compact && (
+          <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
             {isFR
               ? 'Aperçu non contractuel — ces certificats sont des exemples. Le PDF final inclut un QR scannable et l’empreinte d’intégrité.'
               : 'Non-contractual preview — these certificates are examples. The final PDF includes a scannable QR and the integrity fingerprint.'}
           </figcaption>
-          )}
-        </figure>
-      </a>
-    )
-  }
+        )}
+      </figure>
+    </a>
+  )
+}
+
   
 
 /* =========================================================
@@ -1197,7 +1273,7 @@ function RegistryShowcase() {
     const pathname = usePathname() || '/'
     const isFR = /^\/fr(\/|$)/.test(pathname)
   
-    // 🔁 même wording que ClientClaim
+    // 🔁 wording synchronisé avec le PDF et le preview
     const giftLabel = isFR ? 'Offert par' : 'Gifted by'
   
     const copy = isFR
@@ -1216,8 +1292,9 @@ function RegistryShowcase() {
               title: 'Notre premier baiser',
               ts: '2018-07-19',
               msg:
-                `Il pleuvait sous l’auvent. Nos mains se sont trouvées.
-  Ce 19/07/2018 a tout changé.
+  `Il pleuvait sous l’auvent de la boulangerie. Ton rire a tout éclairé.
+  Le 19/07/2018 est devenu notre point de départ.
+  Je te l’offre pour qu’aux jours de doute tu te rappelles qu’on sait déjà traverser les averses.
   
   ${giftLabel} : Sam`,
               cta: '/claim?style=romantic',
@@ -1228,8 +1305,9 @@ function RegistryShowcase() {
               title: 'Bienvenue, Aïcha',
               ts: '2023-03-02',
               msg:
-                `06:12. Un cri. La chambre devient immense.
-  Le 02/03/2023, Aïcha arrive. On devient trois.
+  `06:12. Un cri minuscule. Nos mains tremblent, et soudain tout s’aligne.
+  Le 02/03/2023, Aïcha arrive — et nous devenons trois.
+  Je te l’offre pour garder le courage des premières nuits, et ces sourires qu’on se fait sans se parler.
   
   ${giftLabel} : Mehdi`,
               cta: '/claim?style=birth',
@@ -1240,8 +1318,9 @@ function RegistryShowcase() {
               title: '18 ans',
               ts: '2006-09-15',
               msg:
-                `Bougies, rires, grand vertige.
-  Le 15/09/2006, une porte s’ouvre.
+  `Une table trop petite pour tous les rires, des bougies qui hésitent puis s’embrasent.
+  Le 15/09/2006 a le goût du possible.
+  Je te l’offre pour te dire que je te vois grandir — et que je crois en la suite.
   
   ${giftLabel} : Léo`,
               cta: '/claim?style=birthday',
@@ -1263,8 +1342,9 @@ function RegistryShowcase() {
               title: 'Our first kiss',
               ts: '2018-07-19',
               msg:
-                `Rain on the awning. Our hands met.
-  2018-07-19 changed everything.
+  `Rain drummed on the awning; your laugh cut through it.
+  07/19/2018 became our beginning.
+  I’m giving you this so that on heavy days you remember we already learned to dance in the rain.
   
   ${giftLabel}: Sam`,
               cta: '/claim?style=romantic',
@@ -1275,8 +1355,9 @@ function RegistryShowcase() {
               title: 'Welcome, Aïcha',
               ts: '2023-03-02',
               msg:
-                `06:12. A tiny cry. The room grows vast.
-  On 2023-03-02, Aïcha arrives. We become three.
+  `06:12. A tiny cry. Our hands shook; suddenly everything made sense.
+  On 2023-03-02, Aïcha arrived — and we became three.
+  I’m giving you this to carry us through the sleepless nights and the quiet smiles we share.
   
   ${giftLabel}: Mehdi`,
               cta: '/claim?style=birth',
@@ -1287,8 +1368,9 @@ function RegistryShowcase() {
               title: '18',
               ts: '2006-09-15',
               msg:
-                `Candles, laughter, brave beginnings.
-  2006-09-15 feels like a door opening.
+  `A table too small for all the laughter; candles unsure, then brave.
+  2006-09-15 tastes like possibility.
+  I’m giving you this to say I see you growing — and I believe in what comes next.
   
   ${giftLabel}: Leo`,
               cta: '/claim?style=birthday',
