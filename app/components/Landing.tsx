@@ -1277,106 +1277,107 @@ function RegistryShowcase() {
     const giftLabel = isFR ? 'Offert par' : 'Gifted by'
   
     const copy = isFR
-      ? {
-          eyebrow: 'Ce que vous recevez',
-          title: 'Gardez une journée qui compte',
-          lead:
-            'Un certificat HD (PDF/JPG) prêt à imprimer, unique et vérifiable — à votre nom. ' +
-            'Chaque date est vendue une seule fois.',
-          note:
-            'Chaque certificat inclut un QR scannable vers votre page souvenir et une empreinte d’intégrité (SHA-256).',
-          cards: [
-            {
-              style: 'romantic' as PreviewStyle,
-              owner: 'Clara',
-              title: 'Notre premier baiser',
-              ts: '2018-07-19',
-              msg:
-  `Il pleuvait sous l’auvent de la boulangerie. Ton rire a tout éclairé.
-  Le 19/07/2018 est devenu notre point de départ.
-  Je te l’offre pour qu’aux jours de doute tu te rappelles qu’on sait déjà traverser les averses.
+    ? {
+        eyebrow: 'Ce que vous recevez',
+        title: 'Gardez une journée qui compte',
+        lead:
+          'Un certificat HD (PDF/JPG) prêt à imprimer, unique et vérifiable — à votre nom. ' +
+          'Chaque date est vendue une seule fois.',
+        note:
+          'Chaque certificat inclut un QR scannable vers votre page souvenir et une empreinte d’intégrité (SHA-256).',
+        cards: [
+          {
+            style: 'romantic' as PreviewStyle,
+            owner: 'Sam',
+            title: 'Notre pique-nique sous l’averse',
+            ts: '2018-07-19',
+            msg:
+  `On s’est pris la pluie en plein pique-nique, et toi qui chantes faux juste pour me faire rire, comme pour qu’il pleuve encore plus. On était trempés, mais heureux.
+  Ce moment n’a rien d’exceptionnel, et c’est sûrement pour ça qu’il ne me lâche pas.
+  Le 19/07/2018 est devenu notre point de départ. Je te l’offre pour que, les jours de doute, on se rappelle qu’on sait déjà traverser les averses.
   
-  ${giftLabel} : Sam`,
-              cta: '/claim?style=romantic',
-            },
-            {
-              style: 'birth' as PreviewStyle,
-              owner: 'Nora',
-              title: 'Bienvenue, Aïcha',
-              ts: '2023-03-02',
-              msg:
-  `06:12. Un cri minuscule. Nos mains tremblent, et soudain tout s’aligne.
-  Le 02/03/2023, Aïcha arrive — et nous devenons trois.
-  Je te l’offre pour garder le courage des premières nuits, et ces sourires qu’on se fait sans se parler.
+  ${giftLabel} : Eva`,
+            cta: '/claim?style=romantic',
+          },
+          {
+            style: 'birth' as PreviewStyle,
+            owner: 'Zoé',
+            title: 'Bienvenue, Zoé',
+            ts: '2023-03-02',
+            msg:
+  `Un cri minuscule. Ce 2 mars 2023, tu es arrivée, et nous sommes devenus trois.
+  J’acquiers symboliquement ce jour pour qu’il nous appartienne toujours.
   
-  ${giftLabel} : Mehdi`,
-              cta: '/claim?style=birth',
-            },
-            {
-              style: 'birthday' as PreviewStyle,
-              owner: 'Élise',
-              title: '18 ans',
-              ts: '2006-09-15',
-              msg:
-  `Une table trop petite pour tous les rires, des bougies qui hésitent puis s’embrasent.
-  Le 15/09/2006 a le goût du possible.
-  Je te l’offre pour te dire que je te vois grandir — et que je crois en la suite.
+  ${giftLabel} : Maman & Papa`,
+            cta: '/claim?style=birth',
+          },
+          {
+            style: 'birthday' as PreviewStyle,
+            owner: 'Mathieu',
+            title: '18 ans',
+            ts: '2025-09-15',
+            msg:
+  `Bon anniversaire mon fils, déjà 18 ans. Tu parles d’études, de musique, d’ailleurs…
+  Rien n’est décidé mais tout est possible.
+  Je réserve symboliquement cette date pour qu’elle te rappelle que la première marche, tu l’as déjà montée,
+  et que je crois en la suite.
   
-  ${giftLabel} : Léo`,
-              cta: '/claim?style=birthday',
-            },
-          ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
-        }
-      : {
-          eyebrow: 'What you receive',
-          title: 'Keep a day that matters',
-          lead:
-            'A print-ready, HD certificate (PDF/JPG) — unique, verifiable, and in your name. ' +
-            'Each date is sold only once.',
-          note:
-            'Every certificate includes a scannable QR to your memory page and an integrity fingerprint (SHA-256).',
-          cards: [
-            {
-              style: 'romantic' as PreviewStyle,
-              owner: 'Clara',
-              title: 'Our first kiss',
-              ts: '2018-07-19',
-              msg:
-  `Rain drummed on the awning; your laugh cut through it.
-  07/19/2018 became our beginning.
-  I’m giving you this so that on heavy days you remember we already learned to dance in the rain.
+  ${giftLabel} : Maman`,
+            cta: '/claim?style=birthday',
+          },
+        ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
+      }
+    : {
+        eyebrow: 'What you receive',
+        title: 'Keep a day that matters',
+        lead:
+          'A print-ready, HD certificate (PDF/JPG) — unique, verifiable, and in your name. ' +
+          'Each date is sold only once.',
+        note:
+          'Every certificate includes a scannable QR to your memory page and an integrity fingerprint (SHA-256).',
+        cards: [
+          {
+            style: 'romantic' as PreviewStyle,
+            owner: 'Sam',
+            title: 'Our picnic in the rain',
+            ts: '2018-07-19',
+            msg:
+  `We got caught in the rain mid-picnic, and you sang off-key just to make me laugh — as if it could make the clouds pour harder. We were soaked, and happy.
+  It wasn’t extraordinary, and maybe that’s why it sticks.
+  07/19/2018 became our beginning. I’m giving you this so that, on doubtful days, we remember we already know how to walk through storms.
   
-  ${giftLabel}: Sam`,
-              cta: '/claim?style=romantic',
-            },
-            {
-              style: 'birth' as PreviewStyle,
-              owner: 'Nora',
-              title: 'Welcome, Aïcha',
-              ts: '2023-03-02',
-              msg:
-  `06:12. A tiny cry. Our hands shook; suddenly everything made sense.
-  On 2023-03-02, Aïcha arrived — and we became three.
-  I’m giving you this to carry us through the sleepless nights and the quiet smiles we share.
+  ${giftLabel}: Eva`,
+            cta: '/claim?style=romantic',
+          },
+          {
+            style: 'birth' as PreviewStyle,
+            owner: 'Zoé',
+            title: 'Welcome, Zoé',
+            ts: '2023-03-02',
+            msg:
+  `A tiny cry. On 2023-03-02, you arrived, and we became three.
+  I’m claiming this day for us, so it will always be ours.
   
-  ${giftLabel}: Mehdi`,
-              cta: '/claim?style=birth',
-            },
-            {
-              style: 'birthday' as PreviewStyle,
-              owner: 'Elise',
-              title: '18',
-              ts: '2006-09-15',
-              msg:
-  `A table too small for all the laughter; candles unsure, then brave.
-  2006-09-15 tastes like possibility.
-  I’m giving you this to say I see you growing — and I believe in what comes next.
+  ${giftLabel}: Mom & Dad`,
+            cta: '/claim?style=birth',
+          },
+          {
+            style: 'birthday' as PreviewStyle,
+            owner: 'Mathieu',
+            title: '18',
+            ts: '2025-09-15',
+            msg:
+  `Happy birthday my son, eighteen already. You talk about studies, music, somewhere else…
+  Nothing’s decided, but everything’s possible.
+  I’m reserving this date to remind you the first step is already behind you —
+  and that I believe in what comes next.
   
-  ${giftLabel}: Leo`,
-              cta: '/claim?style=birthday',
-            },
-          ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
-        }
+  ${giftLabel}: Mom`,
+            cta: '/claim?style=birthday',
+          },
+        ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
+      }
+  
   
     return (
       <section>
