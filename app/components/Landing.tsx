@@ -419,132 +419,253 @@ const SAFE_INSETS_PCT: Record<PreviewStyle, { top: number; right: number; bottom
 }
 const EDGE_PX = 12
 
-function CertificatePreview({
-  styleId,
-  owner,
-  title,
-  message,
-  ts,
-  href,
-  compact = false,
-}: {
-  styleId: PreviewStyle
-  owner: string
-  title?: string
-  message?: string
-  ts: string
-  href: string
-  compact?: boolean
-}) {
-  const tsText = useMemo(() => {
-    const d = new Date(ts)
-    if (isNaN(d.getTime())) return ts
-    const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
-    return utc.toISOString().slice(0, 10) + ' UTC'
-  }, [ts])
-
-  const previewTextColor = 'rgba(26, 31, 42, 0.92)'
-  const previewSubtle = 'rgba(26, 31, 42, 0.70)'
-  const ins = SAFE_INSETS_PCT[styleId]
-
-  return (
-    <a href={href} aria-label={`Choose style ${styleId}`} style={{ textDecoration: 'none', color: 'var(--color-text)', display: 'block' }}>
-      <figure
-        style={{
-          margin: 0,
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-lg)',
-          overflow: 'hidden',
-          boxShadow: 'var(--shadow-1)',
-        }}
-      >
-        <div style={{ position: 'relative', width: '100%', aspectRatio: compact ? '3 / 4' : '595 / 842', background: '#F4F1EC' }}>
-          <img
-            src={`/cert_bg/${styleId}.png`}
-            alt={`Certificate style ${styleId}`}
-            width={595}
-            height={842}
-            loading="lazy"
-            decoding="async"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-          <div aria-hidden style={{ position: 'absolute', inset: 0, color: previewTextColor }}>
+/* =========================================================
+   CERTIFICATE PREVIEW — aligné sur la version actuelle
+   ========================================================= */
+   function CertificatePreview({
+    styleId,
+    owner,
+    title,
+    message,
+    ts,
+    href,
+    compact = false,
+    showAttestation = true,
+  }: {
+    styleId:
+      | 'neutral' | 'romantic' | 'birthday' | 'wedding'
+      | 'birth'   | 'christmas'| 'newyear'  | 'graduation' | 'custom'
+    owner: string
+    title?: string
+    message?: string
+    ts: string
+    href: string
+    compact?: boolean
+    showAttestation?: boolean
+  }) {
+    const pathname = usePathname() || '/'
+    const isFR = /^\/fr(\/|$)/.test(pathname)
+  
+    // --- A4 + safe area (miroir des valeurs PDF en points, converties en pourcentage)
+    const A4_W_PT = 595.28, A4_H_PT = 841.89
+    const EDGE_PT = 16, QR_SIZE_PT = 120, META_H_PT = 76
+    const SAFE = { top: 120, right: 96, bottom: 130, left: 96 }
+    const pct = (v:number, total:number) => (v/total)*100
+    const INS = {
+      top:    pct(SAFE.top, A4_H_PT),
+      right:  pct(SAFE.right, A4_W_PT),
+      bottom: pct(SAFE.bottom, A4_H_PT),
+      left:   pct(SAFE.left, A4_W_PT),
+    }
+  
+    // --- Texte (labels & couleurs identiques au rendu PDF)
+    const mainColor = '#1A1F2A'
+    const lightenTowardWhite = (hex: string, t = 0.45) => {
+      const m = /^#?([0-9a-f]{6})$/i.exec(hex)
+      const n = m ? parseInt(m[1], 16) : 0x1a1f2a
+      const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+      const mix = (a:number,b:number,t:number)=> Math.round(a*(1-t)+b*t)
+      return `rgba(${mix(r,255,t)}, ${mix(g,255,t)}, ${mix(b,255,t)}, 0.9)`
+    }
+    const subtle = lightenTowardWhite(mainColor, 0.45)
+  
+    const L = isFR
+      ? {
+          brand:'Parcels of Time',
+          title:'Certificat d’acquisition',
+          ownedBy:'Au nom de',
+          giftedBy:'Offert par',
+          titleLabel:'Titre',
+          message:'Message',
+          attestationLabel:'Texte d’attestation',
+          certId:'ID du certificat',
+          integrity:'Intégrité (SHA-256)',
+          anon:'Anonyme',
+          previewNote:'Aperçu non contractuel — le PDF final inclut un QR scannable et l’empreinte d’intégrité.',
+        }
+      : {
+          brand:'Parcels of Time',
+          title:'Certificate of Claim',
+          ownedBy:'Owned by',
+          giftedBy:'Gifted by',
+          titleLabel:'Title',
+          message:'Message',
+          attestationLabel:'Attestation text',
+          certId:'Certificate ID',
+          integrity:'Integrity (SHA-256)',
+          anon:'Anonymous',
+          previewNote:'Non-contractual preview — final PDF includes a scannable QR and integrity fingerprint.',
+        }
+  
+    // Date principale affichée (AAAA-MM-JJ UTC)
+    const tsText = useMemo(() => {
+      const d = new Date(ts)
+      if (isNaN(d.getTime())) return ts
+      const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
+      return utc.toISOString().slice(0, 10)
+    }, [ts])
+  
+    // Attestation par défaut (section indépendante dans la nouvelle version)
+    const attestationText = isFR
+      ? `Ce certificat atteste que ${(owner || L.anon)} est reconnu(e) comme propriétaire symbolique de la journée du ${tsText}. Le présent document confirme la validité et l’authenticité de cette acquisition.`
+      : `This certificate attests that ${(owner || L.anon)} is recognized as the symbolic owner of ${tsText}. This document confirms the validity and authenticity of this acquisition.`
+  
+    // Tailles (proches du PDF — légèrement réduites si "compact")
+    const f = (x:number)=> (compact ? x*0.85 : x)
+    const S = {
+      brand: f(18),
+      sub: f(12),
+      date: f(24),
+      label: f(11),
+      name: f(15),
+      msg: f(12.5),
+      meta: f(11),
+    }
+  
+    return (
+      <a href={href} aria-label={`Choose style ${styleId}`} style={{ textDecoration: 'none', color: 'var(--color-text)', display: 'block' }}>
+        <figure
+          style={{
+            margin: 0,
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-1)',
+          }}
+        >
+          <div style={{ position: 'relative', width: '100%', aspectRatio: compact ? '3 / 4' : `${A4_W_PT} / ${A4_H_PT}`, background: '#0E1017' }}>
+            <img
+              src={`/cert_bg/${styleId}.png`}
+              alt={`Certificate style ${styleId}`}
+              width={595}
+              height={842}
+              loading="lazy"
+              decoding="async"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+  
+            {/* Filigrane léger pour rappeler l’aperçu */}
+            <div aria-hidden style={{ position:'absolute', inset:0, pointerEvents:'none', display:'grid', placeItems:'center', transform:'rotate(-22deg)', opacity:.12, mixBlendMode:'multiply' }}>
+              <div style={{ fontWeight: 900, fontSize: 'min(18vw, 120px)', letterSpacing: 2, color: '#1a1f2a' }}>
+                PARCELS OF TIME — PREVIEW
+              </div>
+            </div>
+  
+            {/* Zone sûre (miroir du PDF) */}
             <div
+              aria-hidden
               style={{
                 position: 'absolute',
-                top: `${ins.top}%`,
-                right: `${ins.right}%`,
-                bottom: `${ins.bottom}%`,
-                left: `${ins.left}%`,
+                top: `${INS.top}%`,
+                right: `${INS.right}%`,
+                bottom: `${INS.bottom}%`,
+                left: `${INS.left}%`,
                 display: 'grid',
-                gridTemplateRows: 'auto 1fr',
+                gridTemplateRows: 'auto 1fr auto',
                 textAlign: 'center',
+                color: mainColor,
               }}
             >
+              {/* Header — brand + sous-titre */}
               <div>
-                <div style={{ fontWeight: 900, fontSize: compact ? 14 : 16 }}>Parcels of Time</div>
-                <div style={{ opacity: 0.9, fontSize: compact ? 10 : 12 }}>Certificate of Claim</div>
+                <div style={{ fontWeight: 900, fontSize: S.brand }}>{L.brand}</div>
+                <div style={{ opacity: 0.9, fontSize: S.sub, color: subtle }}>{L.title}</div>
               </div>
-
-              <div style={{ display: 'grid', alignItems: 'start', justifyItems: 'center', rowGap: 8, paddingTop: 8 }}>
-                <div style={{ fontWeight: 800, fontSize: compact ? 18 : 24, letterSpacing: 0.2 }}>{tsText}</div>
-
-                {!compact && (
+  
+              {/* Contenu centré (date + sections) */}
+              <div
+                style={{
+                  display: 'grid',
+                  alignContent: 'start',
+                  justifyItems: 'center',
+                  rowGap: 10,
+                  paddingTop: 8,
+                }}
+              >
+                {/* Date principale AAAA-MM-JJ */}
+                <div style={{ fontWeight: 800, fontSize: S.date, letterSpacing: 0.2 }}>{tsText} UTC</div>
+  
+                {/* Owned by */}
+                <div style={{ opacity: 0.85, fontSize: S.label, color: subtle, marginTop: 8 }}>{L.ownedBy}</div>
+                <div style={{ fontWeight: 800, fontSize: S.name }}>{owner || L.anon}</div>
+  
+                {/* Titre (optionnel) */}
+                {title && (
                   <>
-                    <div style={{ opacity: 0.7, fontSize: 12, marginTop: 8 }}>Owned by</div>
-                    <div style={{ fontWeight: 800, fontSize: 16 }}>{owner || 'Anonymous'}</div>
-
-                    {title && (
-                      <>
-                        <div style={{ opacity: 0.7, fontSize: 12, marginTop: 8 }}>Title</div>
-                        <div style={{ fontWeight: 800, fontSize: 16 }}>{title}</div>
-                      </>
-                    )}
-
-                    {message && (
-                      <>
-                        <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>Message</div>
-                        <div style={{ maxWidth: '72%', lineHeight: 1.35, fontSize: 13 }}>“{message}”</div>
-                      </>
-                    )}
+                    <div style={{ opacity: 0.85, fontSize: S.label, color: subtle, marginTop: 8 }}>{L.titleLabel}</div>
+                    <div style={{ fontWeight: 800, fontSize: S.name, maxWidth: '80%' }}>{title}</div>
+                  </>
+                )}
+  
+                {/* Message (optionnel) */}
+                {message && (
+                  <>
+                    <div style={{ opacity: 0.85, fontSize: S.label, color: subtle, marginTop: 8 }}>{L.message}</div>
+                    <div style={{ maxWidth: '78%', lineHeight: 1.35, fontSize: S.msg }}>“{message}”</div>
+                  </>
+                )}
+  
+                {/* Attestation (nouveau bloc) */}
+                {showAttestation && (
+                  <>
+                    <div style={{ opacity: 0.85, fontSize: S.label, color: subtle, marginTop: 8 }}>
+                      {L.attestationLabel}
+                    </div>
+                    <div style={{ maxWidth: '84%', lineHeight: 1.35, fontSize: S.msg }}>
+                      {attestationText}
+                    </div>
                   </>
                 )}
               </div>
-            </div>
-
-            <div style={{ position: 'absolute', left: EDGE_PX, bottom: EDGE_PX, fontSize: 12, color: previewSubtle, pointerEvents: 'none' }}>
-              Certificate ID • Integrity hash (preview)
-            </div>
-            <div
-              style={{
-                position: 'absolute',
-                right: EDGE_PX,
-                bottom: EDGE_PX,
-                width: compact ? 56 : 84,
-                height: compact ? 56 : 84,
-                border: '1px dashed rgba(26,31,42,.45)',
-                borderRadius: 8,
-                display: 'grid',
-                placeItems: 'center',
-                fontSize: 12,
-                opacity: 0.85,
-                pointerEvents: 'none',
-              }}
-            >
-              QR
+  
+              {/* Footer (métadonnées + QR placeholder) */}
+              <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'end' }}>
+                <div style={{ textAlign: 'left', color: subtle, fontSize: S.meta }}>
+                  <div style={{ opacity: 0.9 }}>{L.certId}</div>
+                  <div style={{ marginTop: 6, fontWeight: 800, color: mainColor, fontSize: S.meta - 0.5 }}>
+                    ••••••••••••••••••••••••••••••••••••••
+                  </div>
+                  <div style={{ marginTop: 8, opacity: 0.9 }}>{L.integrity}</div>
+                  <div style={{ marginTop: 6, color: mainColor, fontSize: S.meta - 1 }}>
+                    ••••••••••••••••••••••••••••••••••••••
+                  </div>
+                  <div style={{ marginTop: 4, color: mainColor, fontSize: S.meta - 1 }}>
+                    ••••••••••••••••••••••••••••••••••••••
+                  </div>
+                </div>
+  
+                <div
+                  style={{
+                    width: QR_SIZE_PT,
+                    height: QR_SIZE_PT,
+                    border: '1px dashed rgba(26,31,42,.45)',
+                    borderRadius: 8,
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontSize: 12,
+                    color: 'rgba(26,31,42,.85)',
+                    background: 'rgba(255,255,255,.06)',
+                    justifySelf: 'end',
+                  }}
+                  aria-label="QR placeholder"
+                >
+                  QR
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        {!compact && (
-          <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
-            Non-contractual preview — final PDF includes a scannable QR and the integrity fingerprint.
-          </figcaption>
-        )}
-      </figure>
-    </a>
-  )
-}
+  
+          {!compact && (
+            <figcaption style={{ padding: '12px 14px', fontSize: 12, color: 'var(--color-muted)' }}>
+              {L.previewNote}
+            </figcaption>
+          )}
+        </figure>
+      </a>
+    )
+  }
+  
 
 /* =========================================================
    HERO
@@ -745,25 +866,17 @@ function CollectorThemesCarousel() {
       icon: '🏛️',
       titleFR: 'Basculements d’époque',
       titleEN: 'Epochal shifts',
-      textFR: 'Pages qui se tournent : frontières, innovations, sociétés qui changent.',
-      textEN: 'Pages turning: borders, breakthroughs, societies shifting.',
+      textFR: 'Ce jour où une page s’est tournée, possédez la date qui a tout basculé.',
+      textEN: 'The day the page turned, claim the date that changed everything.',
       badgeFR: 'Historique', badgeEN: 'Historic', tone: 'warning',
     },
     {
       icon: '🎨',
       titleFR: 'Icônes culturelles',
       titleEN: 'Cultural icons',
-      textFR: 'Concerts, sorties majeures, annonces qui ont bousculé l’art et la tech.',
-      textEN: 'Concerts, major releases, announcements that moved art & tech.',
+      textFR: 'Concerts, sorties majeures, gardez la trace du jour où une icône est née.',
+      textEN: 'Concerts, major releases, keep the date when an icon was born',
       badgeFR: 'Collector', badgeEN: 'Collectible', tone: 'success',
-    },
-    {
-      icon: '🧗',
-      titleFR: 'Explorations & sommets',
-      titleEN: 'Exploration & summits',
-      textFR: 'Ascensions, traversées, premières — l’esprit d’aventure.',
-      textEN: 'Ascents, crossings, firsts — the spirit of adventure.',
-      badgeFR: 'Rare', badgeEN: 'Rare', tone: 'danger',
     },
   ]
 
@@ -962,71 +1075,150 @@ function RegistryShowcase() {
 /* =========================================================
    WHAT YOU RECEIVE – DÉMOS
    ========================================================= */
-function ReceiveShowcase() {
-  const href = useLocaleHref()
-  const { t } = useT()
-  return (
-    <section>
-      <Container>
-        <SectionEyebrow>{t('receive.eyebrow')}</SectionEyebrow>
-        <H2>{t('receive.title')}</H2>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
-          <div style={{ gridColumn: 'span 4' }}>
-            <CertificatePreview
-              styleId="romantic"
-              owner="Clara & Sam"
-              title="Notre premier baiser"
-              ts="2018-07-19"
-              message="Te souviens-tu ? Ce 19 juillet 2018, on s’était abrités de l’averse. Puis, là, tu m’as embrassé."
-              href={href('/claim?style=romantic')}
-            />
+/* =========================================================
+   WHAT YOU RECEIVE — version plus émotive (FR/EN)
+   ========================================================= */
+   function ReceiveShowcase() {
+    const href = useLocaleHref()
+    const pathname = usePathname() || '/'
+    const isFR = /^\/fr(\/|$)/.test(pathname)
+  
+    const copy = isFR
+      ? {
+          eyebrow: 'Ce que vous recevez',
+          title: 'Posséder une journée, c’est plus qu’un souvenir',
+          intro:
+            'Votre certificat HD (PDF/JPG) rend tangible une émotion et une date précises. QR scannable, empreinte d’intégrité — et surtout, la certitude d’être le·la seul·e à posséder cette journée : chaque date est vendue une seule fois.',
+          note:
+            'Aperçu non contractuel. Le PDF final inclut QR + empreinte SHA-256 et respecte la mise en page professionnelle.',
+        }
+      : {
+          eyebrow: 'What you receive',
+          title: 'Owning a day is more than a memory',
+          intro:
+            'Your HD certificate (PDF/JPG) makes a precise emotion and date tangible. Scannable QR, integrity fingerprint — and, above all, the certainty you are the only owner of this day: each date is sold only once.',
+          note:
+            'Non-contractual preview. Final PDF includes QR + SHA-256 hash and professional layout.',
+        }
+  
+    // Exemples demandés (plus d’émotion + insistance sur l’unicité)
+    const cards = isFR
+      ? [
+          {
+            style: 'romantic' as const,
+            owner: 'Clara & Sam',
+            title: 'Un premier baiser',
+            ts: '2018-07-19',
+            msg:
+              'Sous l’averse, à 19:04, nos mains se sont trouvées. Ce baiser a changé notre boussole. Cette journée est désormais la nôtre — à nous seuls.',
+            href: href('/claim?style=romantic'),
+          },
+          {
+            style: 'birth' as const,
+            owner: 'Nora & Mehdi',
+            title: 'Une naissance',
+            ts: '2023-03-02',
+            msg:
+              '06:12. Un cri, puis un silence rempli de lumière. Ce jour a fait naître une vie — et nous en possédons la trace unique.',
+            href: href('/claim?style=birth'),
+          },
+          {
+            style: 'birthday' as const,
+            owner: 'Élise',
+            title: '18 ans — le passage',
+            ts: '2007-09-12',
+            msg:
+              'À minuit, dix-huit bougies s’allument. Un horizon neuf. Réserver cette date, c’est affirmer : « cette journée m’appartient, une fois pour toutes. »',
+            href: href('/claim?style=birthday'),
+          },
+        ]
+      : [
+          {
+            style: 'romantic' as const,
+            owner: 'Clara & Sam',
+            title: 'A first kiss',
+            ts: '2018-07-19',
+            msg:
+              'In the rain at 7:04 pm, our hands found each other. One kiss, a new compass. This day is ours — and ours alone.',
+            href: href('/claim?style=romantic'),
+          },
+          {
+            style: 'birth' as const,
+            owner: 'Nora & Mehdi',
+            title: 'A birth',
+            ts: '2023-03-02',
+            msg:
+              '06:12. A first cry, then a bright, quiet hush. This day began a life — and we own its one-of-a-kind trace.',
+            href: href('/claim?style=birth'),
+          },
+          {
+            style: 'birthday' as const,
+            owner: 'Elise',
+            title: '18th birthday — the crossing',
+            ts: '2007-09-12',
+            msg:
+              'At midnight, eighteen candles. A wide-open horizon. Claiming this date says: “this day is mine, once and for all.”',
+            href: href('/claim?style=birthday'),
+          },
+        ]
+  
+    return (
+      <section>
+        <Container>
+          <SectionEyebrow>{copy.eyebrow}</SectionEyebrow>
+          <H2>{copy.title}</H2>
+          <p style={{ margin: '6px 0 16px', color: 'var(--color-text)', opacity: 0.92, maxWidth: 760 }}>
+            {copy.intro}
+          </p>
+  
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
+            {cards.map((c, i) => (
+              <div key={i} style={{ gridColumn: 'span 4' }}>
+                <CertificatePreview
+                  styleId={c.style}
+                  owner={c.owner}
+                  title={c.title}
+                  ts={c.ts}
+                  message={c.msg}
+                  href={c.href}
+                />
+              </div>
+            ))}
           </div>
-          <div style={{ gridColumn: 'span 4' }}>
-            <CertificatePreview
-              styleId="birth"
-              owner="Nora & Mehdi"
-              title="Bienvenue, Aïcha"
-              ts="2023-03-02"
-              message="À 06:12, le 2 mars 2023, tu as crié. Le silence d’après s’est rempli de lumière : tu étais née."
-              href={href('/claim?style=birth')}
-            />
+  
+          <div
+            style={{
+              marginTop: 18,
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 16,
+            }}
+          >
+            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: '28px' }}>
+              {isFR ? (
+                <>
+                  <li>Certificat HD (PDF/JPG) prêt à imprimer (A4) + QR scannable.</li>
+                  <li>Empreinte d’intégrité (SHA-256) — votre pièce est vérifiable.</li>
+                  <li><strong>Unicité garantie :</strong> chaque date est vendue une seule fois.</li>
+                </>
+              ) : (
+                <>
+                  <li>HD certificate (PDF/JPG) ready to print (A4) + scannable QR.</li>
+                  <li>Integrity fingerprint (SHA-256) — your piece is verifiable.</li>
+                  <li><strong>Guaranteed uniqueness:</strong> each date is sold only once.</li>
+                </>
+              )}
+            </ul>
+            <div style={{ marginTop: 10, fontSize: 14, color: 'var(--color-muted)' }}>
+              {copy.note}
+            </div>
           </div>
-          <div style={{ gridColumn: 'span 4' }}>
-            <CertificatePreview
-              styleId="wedding"
-              owner="Inès & Hugo"
-              title="À 17:31, plus que nous deux"
-              ts="2024-07-20"
-              message="Les confettis volaient. À 17:31, nos deux « oui » ont effacé le reste."
-              href={href('/claim?style=wedding')}
-            />
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 18,
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: 16,
-          }}
-        >
-          <ul style={{ margin: 0, paddingLeft: 18, lineHeight: '28px' }}>
-            <li>{t('receive.list1')}</li>
-            <li>{t('receive.list2')}</li>
-            <li>{t('receive.list3')}</li>
-          </ul>
-          <div style={{ marginTop: 10, fontSize: 14, color: 'var(--color-muted)' }}>
-            {t('receive.note')}
-          </div>
-        </div>
-      </Container>
-    </section>
-  )
-}
-
+        </Container>
+      </section>
+    )
+  }
+  
 /* =========================================================
    HOW IT WORKS / TESTIMONIALS / FAQ
    ========================================================= */

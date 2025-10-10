@@ -188,7 +188,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   const L = useMemo(()=>({
     brand:'Parcels of Time',
-    title:isFR?'Certificat de Claim':'Certificate of Claim',
+    title:isFR?'Certificat d’acquisition':'Certificate of Claim',
     ownedBy:isFR?'Au nom de':'Owned by',
     giftedBy:isFR?'Offert par':'Gifted by',
     titleLabel:isFR?'Titre':'Title',

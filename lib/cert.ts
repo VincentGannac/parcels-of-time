@@ -28,7 +28,7 @@ const TEXTS = {
   },
   fr: {
     brand:'Parcels of Time',
-    title:'Certificat de Claim',
+    title:'Certificat d’acquisition',
     ownedBy:'Au nom de',
     giftedBy:'Offert par',
     titleLabel:'Titre',
