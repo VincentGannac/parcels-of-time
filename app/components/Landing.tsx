@@ -409,7 +409,7 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
 
   const SAFE_INSETS_PCT: Record<PreviewStyle, { top: number; right: number; bottom: number; left: number }> = {
     neutral: { top: 120, right: 100, bottom: 130, left: 100 },
-    romantic: { top: 120, right: 110, bottom: 130, left: 110  },
+    romantic: { top: 120, right: 120, bottom: 130, left: 120  },
     birthday: { top: 120, right: 100, bottom: 130, left: 100  },
     birth: { top: 120, right: 100, bottom: 130, left: 100  },
     wedding: { top: 120, right: 100, bottom: 130, left: 100  },
