@@ -1197,109 +1197,100 @@ function RegistryShowcase() {
     const pathname = usePathname() || '/'
     const isFR = /^\/fr(\/|$)/.test(pathname)
   
+    // 🔁 même wording que ClientClaim
+    const giftLabel = isFR ? 'Offert par' : 'Gifted by'
+  
     const copy = isFR
       ? {
           eyebrow: 'Ce que vous recevez',
-          title: 'Possédez la journée qui a tout changé',
+          title: 'Gardez une journée qui compte',
           lead:
-            'Un certificat HD (PDF/JPG) prêt à imprimer, unique et vérifiable — la preuve que cette date vous appartient symboliquement. ' +
-            'Chaque journée est vendue une seule fois.',
+            'Un certificat HD (PDF/JPG) prêt à imprimer, unique et vérifiable — à votre nom. ' +
+            'Chaque date est vendue une seule fois.',
           note:
-            'Chaque certificat comporte un QR scannable menant à votre page souvenir et une empreinte d’intégrité (SHA-256).',
+            'Chaque certificat inclut un QR scannable vers votre page souvenir et une empreinte d’intégrité (SHA-256).',
           cards: [
             {
-              style: 'romantic',
-              owner: 'Clara', // un seul prénom
-              title: 'Un premier baiser',
+              style: 'romantic' as PreviewStyle,
+              owner: 'Clara',
+              title: 'Notre premier baiser',
               ts: '2018-07-19',
               msg:
-                `La pluie tambourinait sur le porche, nos mains se sont cherchées, puis tout s’est mis au ralenti. 
-  Ce 19/07/2018 a changé la trajectoire de nos vies : un « nous » est né, simple et immense.
+                `Il pleuvait sous l’auvent. Nos mains se sont trouvées.
+  Ce 19/07/2018 a tout changé.
   
-  Garder cette date, c’est conserver la lumière exacte de ce soir-là — le frisson intact de notre premier baiser.
-  
-  Offert par : Sam`,
+  ${giftLabel} : Sam`,
               cta: '/claim?style=romantic',
             },
             {
-              style: 'birth',
+              style: 'birth' as PreviewStyle,
               owner: 'Nora',
               title: 'Bienvenue, Aïcha',
               ts: '2023-03-02',
               msg:
-                `06:12 — un cri minuscule fend la nuit, la chambre devient immensité. 
-  Première peau contre peau, odeur de lait tiède, et notre temps s’agrandit d’un prénom.
+                `06:12. Un cri. La chambre devient immense.
+  Le 02/03/2023, Aïcha arrive. On devient trois.
   
-  Graver le 02/03/2023, c’est garder pour toujours la toute première lumière d’Aïcha, l’aube où nous sommes devenus trois.
-  
-  Offert par : Mehdi`,
+  ${giftLabel} : Mehdi`,
               cta: '/claim?style=birth',
             },
             {
-              style: 'birthday',
+              style: 'birthday' as PreviewStyle,
               owner: 'Élise',
-              title: '18 ans — lumière nouvelle',
+              title: '18 ans',
               ts: '2006-09-15',
               msg:
-                `18 ans — un matin comme une porte qui s’ouvre grand. 
-  Des bougies, des rires, un vertige joyeux : le monde invite à partir, à tenter, à oser.
+                `Bougies, rires, grand vertige.
+  Le 15/09/2006, une porte s’ouvre.
   
-  Posséder le 15/09/2006, c’est garder la clé de ce courage — y revenir quand le cœur a besoin d’élan.
-  
-  Offert par : Léo`,
+  ${giftLabel} : Léo`,
               cta: '/claim?style=birthday',
             },
           ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
         }
       : {
           eyebrow: 'What you receive',
-          title: 'Own the day that changed everything',
+          title: 'Keep a day that matters',
           lead:
-            'A high-definition certificate (PDF/JPG), print-ready, unique and verifiable — proof that this date is symbolically yours. ' +
-            'Each day is sold only once.',
+            'A print-ready, HD certificate (PDF/JPG) — unique, verifiable, and in your name. ' +
+            'Each date is sold only once.',
           note:
-            'Every certificate includes a scannable QR linking to your memory page and an integrity fingerprint (SHA-256).',
+            'Every certificate includes a scannable QR to your memory page and an integrity fingerprint (SHA-256).',
           cards: [
             {
-              style: 'romantic',
+              style: 'romantic' as PreviewStyle,
               owner: 'Clara',
-              title: 'A first kiss',
+              title: 'Our first kiss',
               ts: '2018-07-19',
               msg:
-                `Rain hammered the awning; our hands found each other and time slowed. 
-  On 2018-07-19 our lives tilted — the exact moment a simple, vast “we” began.
+                `Rain on the awning. Our hands met.
+  2018-07-19 changed everything.
   
-  Keeping this date preserves that evening’s light, and the intact shiver of our first kiss.
-  
-  Gifted by: Sam`,
+  ${giftLabel}: Sam`,
               cta: '/claim?style=romantic',
             },
             {
-              style: 'birth',
+              style: 'birth' as PreviewStyle,
               owner: 'Nora',
               title: 'Welcome, Aïcha',
               ts: '2023-03-02',
               msg:
-                `06:12 — a tiny cry split the night and the room became vast. 
-  First skin-to-skin, warm milk on the air, and our time widened around one name.
+                `06:12. A tiny cry. The room grows vast.
+  On 2023-03-02, Aïcha arrives. We become three.
   
-  Marking 2023-03-02 keeps Aïcha’s very first light — the dawn we became three.
-  
-  Gifted by: Mehdi`,
+  ${giftLabel}: Mehdi`,
               cta: '/claim?style=birth',
             },
             {
-              style: 'birthday',
+              style: 'birthday' as PreviewStyle,
               owner: 'Elise',
-              title: '18th birthday — new light',
+              title: '18',
               ts: '2006-09-15',
               msg:
-                `Eighteen — a morning like a door flung open. 
-  Candles, laughter, that tremor of first departures and brave beginnings.
+                `Candles, laughter, brave beginnings.
+  2006-09-15 feels like a door opening.
   
-  Owning 2006-09-15 means holding the key to that courage — a touchstone you can return to.
-  
-  Gifted by: Leo`,
+  ${giftLabel}: Leo`,
               cta: '/claim?style=birthday',
             },
           ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
@@ -1354,6 +1345,7 @@ function RegistryShowcase() {
   
   
   
+  
 /* =========================================================
    HOW IT WORKS / TESTIMONIALS / FAQ
    ========================================================= */
@@ -1396,7 +1388,7 @@ function Testimonials() {
   const eyebrow = isFR ? 'Témoignages' : 'Testimonials'
   const items = isFR
     ? [
-        { q: '“Nous avons revendiqué la journée de la naissance d’Aïcha… frissons à chaque fois !”', a: 'Camille' },
+        { q: '“Nous avons revendiqué la journée de la naissance d’Aïcha… frissons à chaque fois !”', a: 'Mathilde' },
         { q: '“Mon cadeau préféré : la journée de notre rencontre.”', a: 'Thomas' },
         { q: '“La journée du diplôme de ma sœur. Simple, mémorable, classe.”', a: 'Mina' },
       ]
