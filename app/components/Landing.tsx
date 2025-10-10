@@ -409,14 +409,14 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
    type PreviewStyle = 'romantic' | 'birth' | 'wedding' | 'birthday' | 'christmas' | 'newyear' | 'graduation' | 'neutral'
 
   const SAFE_INSETS_PCT: Record<PreviewStyle, { top: number; right: number; bottom: number; left: number }> = {
-    neutral: { top: 120, right: 96, bottom: 130, left: 96 },
-    romantic: { top: 120, right: 96, bottom: 130, left: 96  },
-    birthday: { top: 120, right: 96, bottom: 130, left: 96  },
-    birth: { top: 120, right: 96, bottom: 130, left: 96  },
-    wedding: { top: 120, right: 96, bottom: 130, left: 96  },
-    christmas: { top: 120, right: 96, bottom: 130, left: 96 },
-    newyear: { top: 120, right: 96, bottom: 130, left: 96  },
-    graduation: { top: 120, right: 96, bottom: 130, left: 96  },
+    neutral: { top: 120, right: 100, bottom: 130, left: 100 },
+    romantic: { top: 120, right: 100, bottom: 130, left: 100  },
+    birthday: { top: 120, right: 100, bottom: 130, left: 100  },
+    birth: { top: 120, right: 100, bottom: 130, left: 100  },
+    wedding: { top: 120, right: 100, bottom: 130, left: 100  },
+    christmas: { top: 120, right: 100, bottom: 130, left: 100 },
+    newyear: { top: 120, right: 100, bottom: 130, left: 100  },
+    graduation: { top: 120, right: 100, bottom: 130, left: 100  },
   }
   const EDGE_PX = 12
 
@@ -464,7 +464,7 @@ function Header({ onToggleTheme, href }: { onToggleTheme: () => void; href: (p: 
     type Insets = { top: number; right: number; bottom: number; left: number }
     function getSafeArea(style: PreviewStyle): Insets {
       // même boîte que le PDF (tous styles identiques ici)
-      return { top: 120, right: 96, bottom: 130, left: 96 }
+      return { top: 120, right: 100, bottom: 130, left: 100 }
     }
   
     // ---------- Utils ----------
