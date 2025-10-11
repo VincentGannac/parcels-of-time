@@ -1,8 +1,4 @@
-// app/legal/refund/page.tsx
-/**
- * Politique de remboursement / rétractation (FR)
- * Cohérente avec la mention déjà affichée lors du paiement pour un contenu numérique livré immédiatement.
- */
+// app/[locale]/legal/refund/page.tsx
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -19,7 +15,10 @@ const TOKENS = {
   '--shadow-elev1': '0 6px 20px rgba(0,0,0,.35)',
 } as const
 
-export default function Page() {
+export default function Page({ params }: { params: { locale: string } }) {
+  const locale = params?.locale || 'en'
+  const fr = locale.toLowerCase().startsWith('fr')
+
   const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || 'Parcels of Time'
   const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@parcelsoftime.com'
   const UPDATED = '2025-01-01'
@@ -41,45 +40,86 @@ export default function Page() {
       <section style={{maxWidth:980, margin:'0 auto', padding:'48px 24px'}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18}}>
           <a href="/" style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; {COMPANY_NAME}</a>
-          <span style={{fontSize:12, color:'var(--color-muted)'}}>Mise à jour : {UPDATED}</span>
+          <span style={{fontSize:12, color:'var(--color-muted)'}}>
+            {fr ? 'Mise à jour' : 'Updated'} : {UPDATED}
+          </span>
         </div>
 
         <header style={{marginBottom:12}}>
-          <h1 style={{fontFamily:'Fraunces, serif', fontSize:40, margin:'0 0 8px'}}>Remboursements & droit de rétractation</h1>
-          <p style={{margin:0, opacity:.85}}>Règles applicables aux certificats numériques.</p>
+          <h1 style={{fontFamily:'Fraunces, serif', fontSize:40, margin:'0 0 8px'}}>
+            {fr ? 'Remboursements & droit de rétractation' : 'Refund & Withdrawal Policy'}
+          </h1>
+          <p style={{margin:0, opacity:.85}}>
+            {fr ? 'Règles applicables aux certificats numériques.' : 'Rules applicable to digital certificates.'}
+          </p>
         </header>
 
         <div style={{display:'grid', gap:14}}>
           <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <h2 style={{margin:'0 0 6px', fontSize:20}}>Contenu numérique et exécution immédiate</h2>
+            <h2 style={{margin:'0 0 6px', fontSize:20}}>
+              {fr ? 'Contenu numérique et exécution immédiate' : 'Digital Content & Immediate Execution'}
+            </h2>
             <p style={{margin:'0 0 8px'}}>
-              Les certificats vendus sont des <strong>contenus numériques fournis immédiatement</strong> (génération du PDF et lien de téléchargement dès le paiement).
-              En procédant au paiement, vous consentez à l’exécution immédiate et <strong>renoncez expressément à votre droit de rétractation</strong> (directive UE).
+              {fr ? (
+                <>
+                  Les certificats vendus sont des <strong>contenus numériques fournis immédiatement</strong> (génération du PDF et lien de téléchargement dès le paiement).
+                  En procédant au paiement, vous consentez à l’exécution immédiate et <strong>renoncez expressément à votre droit de rétractation</strong> (directive UE).
+                </>
+              ) : (
+                <>
+                  Certificates are <strong>digital content delivered immediately</strong> (PDF generation and download link upon payment).
+                  By completing payment, you consent to immediate execution and <strong>explicitly waive your right of withdrawal</strong> (EU directive).
+                </>
+              )}
             </p>
             <p style={{margin:0, fontSize:13, color:'var(--color-muted)'}}>
-              Cette information est rappelée au moment du paiement.
+              {fr ? 'Cette information est rappelée au moment du paiement.' : 'This notice is shown again at checkout.'}
             </p>
           </section>
 
           <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <h2 style={{margin:'0 0 6px', fontSize:20}}>Erreurs de facturation & doublons</h2>
+            <h2 style={{margin:'0 0 6px', fontSize:20}}>
+              {fr ? 'Erreurs de facturation & doublons' : 'Billing Errors & Duplicates'}
+            </h2>
             <p style={{margin:0}}>
-              En cas de <strong>paiement en double</strong>, d’erreur manifeste ou de problème technique empêchant la
-              livraison du certificat, contactez-nous à <a href={`mailto:${SUPPORT_EMAIL}`} style={{color:'var(--color-text)'}}>{SUPPORT_EMAIL}</a>.
-              Nous investiguerons et procéderons, le cas échéant, à un remboursement.
+              {fr ? (
+                <>
+                  En cas de <strong>paiement en double</strong>, d’erreur manifeste ou de problème technique empêchant la
+                  livraison du certificat, contactez-nous à{' '}
+                  <a href={`mailto:${SUPPORT_EMAIL}`} style={{color:'var(--color-text)'}}>{SUPPORT_EMAIL}</a>.
+                  Nous investiguerons et procéderons, le cas échéant, à un remboursement.
+                </>
+              ) : (
+                <>
+                  In case of a <strong>duplicate payment</strong>, obvious error, or technical issue preventing
+                  certificate delivery, contact us at{' '}
+                  <a href={`mailto:${SUPPORT_EMAIL}`} style={{color:'var(--color-text)'}}>{SUPPORT_EMAIL}</a>.
+                  We will investigate and refund where applicable.
+                </>
+              )}
             </p>
           </section>
 
           <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-            <h2 style={{margin:'0 0 6px', fontSize:20}}>Marketplace</h2>
+            <h2 style={{margin:'0 0 6px', fontSize:20}}>{fr ? 'Marketplace' : 'Marketplace'}</h2>
             <p style={{margin:0}}>
-              Les reventes entre utilisateurs sont traitées via un paiement sécurisé. Une <strong>commission</strong> est
-              prélevée lors de la transaction réussie. Les certificats ne sont ni retournables ni échangeables.
+              {fr ? (
+                <>
+                  Les reventes entre utilisateurs sont traitées via un paiement sécurisé. Une <strong>commission</strong> est
+                  prélevée lors de la transaction réussie. Les certificats ne sont ni retournables ni échangeables.
+                </>
+              ) : (
+                <>
+                  User-to-user resales are processed via secure payment. A <strong>commission</strong> is applied upon a successful
+                  transaction. Certificates are neither returnable nor exchangeable.
+                </>
+              )}
             </p>
           </section>
 
           <footer style={{marginTop:8, fontSize:13, color:'var(--color-muted)'}}>
-            Besoin d’aide ? <a href={`mailto:${SUPPORT_EMAIL}`} style={{color:'var(--color-text)'}}>{SUPPORT_EMAIL}</a>
+            {fr ? 'Besoin d’aide ? ' : 'Need help? '}
+            <a href={`mailto:${SUPPORT_EMAIL}`} style={{color:'var(--color-text)'}}>{SUPPORT_EMAIL}</a>
           </footer>
         </div>
       </section>

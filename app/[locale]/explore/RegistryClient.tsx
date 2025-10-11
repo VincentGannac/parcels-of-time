@@ -1,6 +1,7 @@
+// app/[locale]/explore/RegistryClient.tsx
 'use client'
 
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef, type CSSProperties } from 'react'
 
 type StyleId =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
@@ -47,11 +48,84 @@ const localeToBCP47 = (loc:string) => (loc?.toLowerCase().startsWith('fr') ? 'fr
 let __bootInflight = 0
 const MAX_BOOT_CONCURRENCY = 3
 
+const TEXT = (loc: string) => {
+  const fr = (loc || '').toLowerCase().startsWith('fr')
+  return fr ? {
+    backLabel: '← Parcels of Time',
+    buy: 'Acheter une œuvre →',
+    title: 'Registre public — œuvres de la minute',
+    lead: 'Une exposition vivante et bienveillante des instants qui nous portent. Chaque pièce est un',
+    leadStrong: 'certificat intégral',
+    leadTail: 'publié volontairement — une nouvelle forme d’art participatif numérique pour inspirer par les réussites, les liens et les bonheurs partagés.',
+    note: 'Les œuvres demeurent la propriété de leurs auteur·rice·s. Consultation uniquement. Pas de téléchargement ni d’export.',
+    warningA: 'Les certificats listés ici peuvent contenir des ',
+    warningB: 'données personnelles',
+    warningC: ' rendues publiques par leurs auteur·rice·s. Pour signaler un contenu : ',
+    warningTerms: 'CGU/CGV',
+    warningPrivacy: 'Confidentialité',
+    loading: 'Chargement du registre…',
+    loadError: 'Impossible de charger le registre public.',
+    empty: 'Aucune œuvre publique pour le moment.',
+    searchPh: 'Rechercher une émotion, un titre, un prénom, une minute…',
+    random: 'Inspiration aléatoire',
+    viewWall: 'Mur — mosaïque',
+    viewSalon: 'Salon — œuvres larges',
+    curations: 'Curations :',
+    chips: ['Amour','Réussite','Naissance','Mariage','Fête','Courage','Hasard heureux'],
+    filter: 'Filtre :',
+    filterBoth: 'Les deux',
+    filterOn: 'En vente',
+    filterOff: 'Pas en vente',
+    count: (n:number, total:number) => `${n} œuvre${n>1?'s':''}${n!==total ? ' — filtrées' : ''}`,
+    noResults: 'Aucun résultat.',
+    ariaFilterSale: 'Filtrer par statut de vente',
+    badgeAuth: 'Authentifié',
+    badgeOnSale: 'En vente',
+    iframeTitle: 'Œuvre',
+    cardTitleOnSale: (price: string) => `En vente — ${price}`,
+  } : {
+    backLabel: '← Parcels of Time',
+    buy: 'Buy an artwork →',
+    title: 'Public Registry — minute artworks',
+    lead: 'A living, caring exhibition of the moments that carry us. Each piece is a ',
+    leadStrong: 'full certificate',
+    leadTail: 'published voluntarily — a new form of participatory digital art to inspire through achievements, bonds, and shared joy.',
+    note: 'Works remain the property of their authors. Viewing only. No download or export.',
+    warningA: 'Certificates listed here may contain ',
+    warningB: 'personal data',
+    warningC: ' made public by their authors. To report content: ',
+    warningTerms: 'Terms',
+    warningPrivacy: 'Privacy',
+    loading: 'Loading registry…',
+    loadError: 'Unable to load the public registry.',
+    empty: 'No public entry at the moment.',
+    searchPh: 'Search a feeling, a title, a first name, a minute…',
+    random: 'Random inspiration',
+    viewWall: 'Wall — mosaic',
+    viewSalon: 'Gallery — large view',
+    curations: 'Curations:',
+    chips: ['Love','Achievement','Birth','Wedding','Party','Courage','Lucky break'],
+    filter: 'Filter:',
+    filterBoth: 'Both',
+    filterOn: 'On sale',
+    filterOff: 'Not on sale',
+    count: (n:number, total:number) => `${n} work${n===1?'':'s'}${n!==total ? ' — filtered' : ''}`,
+    noResults: 'No results.',
+    ariaFilterSale: 'Filter by sale status',
+    badgeAuth: 'Authenticated',
+    badgeOnSale: 'On sale',
+    iframeTitle: 'Artwork',
+    cardTitleOnSale: (price: string) => `On sale — ${price}`,
+  }
+}
+
 export default function RegistryClient({
   locale,
   initialItems
 }: { locale: string; initialItems: RegistryRow[] }) {
   const loc = (locale || 'en') as string
+  const T = TEXT(loc)
+
   const [items, setItems] = useState<RegistryRow[]>(initialItems)
   const [loading, setLoading] = useState(initialItems.length === 0)
   const [error, setError] = useState<string>('')
@@ -99,12 +173,13 @@ export default function RegistryClient({
           }
         }
       } catch {
-        if (!cancelled) { setError('Impossible de charger le registre public.'); setLoading(false) }
+        if (!cancelled) { setError(T.loadError); setLoading(false) }
       }
     }
     load()
     return () => { cancelled = true }
-  }, [initialItems.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialItems.length, loc])
 
   /** ====== Récupère les annonces (vente) pour tous les mois présents ====== */
   useEffect(() => {
@@ -193,42 +268,47 @@ export default function RegistryClient({
     >
       <section style={{maxWidth:1280, margin:'0 auto', padding:'56px 24px 64px'}}>
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18}}>
-          <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>&larr; Parcels of Time</a>
+          <a href={`/${loc}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>{TEXT(loc).backLabel}</a>
           <a href={`/${loc}/claim`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85, border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:12}}>
-            Acheter une œuvre →
+            {T.buy}
           </a>
         </div>
 
         <header style={{marginBottom:20}}>
           <h1 style={{fontFamily:'Fraunces, serif', fontSize:46, lineHeight:'54px', margin:'0 0 10px', letterSpacing:.2}}>
-            Registre public — œuvres de la minute
+            {T.title}
           </h1>
           <p style={{margin:'0 0 10px', maxWidth:900, opacity:.92, fontSize:16, lineHeight:'24px'}}>
-            Une exposition vivante et bienveillante des instants qui nous portent. Chaque pièce est un
-            <strong> certificat intégral</strong> publié volontairement — une nouvelle forme d’art participatif numérique pour
-            inspirer par les réussites, les liens et les bonheurs partagés.
+            {T.lead}
+            <strong> {T.leadStrong} </strong>
+            {T.leadTail}
           </p>
           <p style={{margin:0, maxWidth:900, opacity:.65, fontSize:13}}>
-            Les œuvres demeurent la propriété de leurs auteur·rice·s. Consultation uniquement. Pas de téléchargement ni d’export.
+            {T.note}
           </p>
         </header>
 
         {/* Avertissement registre public */}
         <div style={{margin:'10px 0 0', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, fontSize:12, background:'rgba(255,255,255,.03)'}}>
-          Les certificats listés ici peuvent contenir des <strong>données personnelles</strong> rendues publiques par leurs auteur·rice·s. 
-          Pour signaler un contenu : <a href="mailto:support@parcelsoftime.example" style={{color:'var(--color-text)'}}>support@parcelsoftime.example</a>. 
-          Voir <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Confidentialité</a>.
+          {T.warningA}<strong>{T.warningB}</strong>{T.warningC}
+          <a href="mailto:support@parcelsoftime.com" style={{color:'var(--color-text)'}}>support@parcelsoftime.com</a>.{' '}
+          {TEXT(loc).warningTerms && (
+            <>
+              {TEXT(loc).warningTerms ? 'Voir ' : ''}
+              <a href={`/${loc}/legal/terms`} style={{color:'var(--color-text)'}}>{T.warningTerms}</a> {loc.startsWith('fr') ? 'et' : 'and'}{' '}
+              <a href={`/${loc}/legal/privacy`} style={{color:'var(--color-text)'}}>{T.warningPrivacy}</a>.
+            </>
+          )}
         </div>
 
-
         {loading ? (
-          <div style={{marginTop:24, opacity:.8}}>Chargement du registre…</div>
+          <div style={{marginTop:24, opacity:.8}}>{T.loading}</div>
         ) : error ? (
           <div style={{marginTop:24, color:'#ffb2b2', border:'1px solid #ff8a8a', background:'rgba(255,0,0,.06)', padding:12, borderRadius:12}}>
             {error}
           </div>
         ) : items.length === 0 ? (
-          <div style={{marginTop:24, opacity:.8}}>Aucune œuvre publique pour le moment.</div>
+          <div style={{marginTop:24, opacity:.8}}>{T.empty}</div>
         ) : (
           <CurationBar items={items} saleMap={saleMap} locale={loc} />
         )}
@@ -240,6 +320,7 @@ export default function RegistryClient({
 /* ---------------- Client subcomponents ---------------- */
 
 function CurationBar({ items, saleMap, locale }: { items: RegistryRow[]; saleMap: Record<string, SaleInfo>; locale: string }) {
+  const T = TEXT(locale)
   const [q, setQ] = useState('')
   const [view, setView] = useState<'wall'|'salon'>('wall')
   const [list, setList] = useState<RegistryRow[]>(items)
@@ -253,7 +334,7 @@ function CurationBar({ items, saleMap, locale }: { items: RegistryRow[]; saleMap
         alignItems:'center', margin:'18px 0 16px'
       }}>
         <input
-          placeholder="Rechercher une émotion, un titre, un prénom, une minute…"
+          placeholder={T.searchPh}
           value={q} onChange={e=>setQ(e.target.value)}
           style={{
             padding:'12px 14px', border:'1px solid var(--color-border)', borderRadius:12,
@@ -263,15 +344,19 @@ function CurationBar({ items, saleMap, locale }: { items: RegistryRow[]; saleMap
         />
         <button onClick={()=>setList(s=>shuffle(s))}
           style={{padding:'10px 12px', borderRadius:10, background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
-          Inspiration aléatoire
+          {T.random}
         </button>
         <button onClick={()=>setView(v=>v==='wall'?'salon':'wall')}
           style={{padding:'10px 12px', borderRadius:10, background:'transparent', color:'var(--color-text)', border:'1px solid var(--color-border)'}}>
-          {view==='wall' ? 'Mur — mosaïque' : 'Salon — œuvres larges'}
+          {view==='wall' ? T.viewWall : T.viewSalon}
         </button>
       </div>
 
-      <RegistryGalleryControls q={q} setQ={setQ} view={view} saleFilter={saleFilter} setSaleFilter={setSaleFilter} />
+      <RegistryGalleryControls
+        q={q} setQ={setQ} view={view}
+        saleFilter={saleFilter} setSaleFilter={setSaleFilter}
+        locale={locale}
+      />
 
       <RegistryWall
         key={view}
@@ -287,14 +372,15 @@ function CurationBar({ items, saleMap, locale }: { items: RegistryRow[]; saleMap
   )
 }
 
-function RegistryGalleryControls({ q, setQ, view, saleFilter, setSaleFilter }:{
+function RegistryGalleryControls({ q, setQ, view, saleFilter, setSaleFilter, locale }:{
   q:string; setQ:(s:string)=>void; view:'wall'|'salon';
-  saleFilter:'both'|'on'|'off'; setSaleFilter:(v:'both'|'on'|'off')=>void
+  saleFilter:'both'|'on'|'off'; setSaleFilter:(v:'both'|'on'|'off')=>void; locale: string
 }) {
-  const chips = ['Amour','Réussite','Naissance','Mariage','Fête','Courage','Hasard heureux']
+  const T = TEXT(locale)
+  const chips = T.chips
   return (
     <div style={{display:'flex', gap:8, alignItems:'center', margin:'6px 0 12px', flexWrap:'wrap'}}>
-      <span style={{fontSize:12, color:'var(--color-muted)'}}>Curations :</span>
+      <span style={{fontSize:12, color:'var(--color-muted)'}}>{T.curations}</span>
       {chips.map(t=>(
         <button
           key={t}
@@ -313,31 +399,33 @@ function RegistryGalleryControls({ q, setQ, view, saleFilter, setSaleFilter }:{
 
       {/* -------- Filtre vente -------- */}
       <div style={{marginLeft:'auto', display:'inline-flex', gap:6, alignItems:'center'}}>
-        <span style={{fontSize:12, color:'var(--color-muted)'}}>Filtre :</span>
+        <span style={{fontSize:12, color:'var(--color-muted)'}}>{T.filter}</span>
         <SegmentedTri
           value={saleFilter}
           onChange={setSaleFilter}
-          labels={{ both:'Les deux', on:'En vente', off:'Pas en vente' }}
+          labels={{ both:T.filterBoth, on:T.filterOn, off:T.filterOff }}
+          ariaLabel={T.ariaFilterSale}
         />
         <span style={{fontSize:12, color:'var(--color-muted)'}}>
-          {view==='wall' ? 'Mur — mosaïque' : 'Salon — œuvres larges'}
+          {view==='wall' ? T.viewWall : T.viewSalon}
         </span>
       </div>
     </div>
   )
 }
 
-function SegmentedTri({ value, onChange, labels }:{
+function SegmentedTri({ value, onChange, labels, ariaLabel }:{
   value:'both'|'on'|'off'
   onChange:(v:'both'|'on'|'off')=>void
   labels:{ both:string; on:string; off:string }
+  ariaLabel: string
 }) {
-  const baseBtn: React.CSSProperties = {
+  const baseBtn: CSSProperties = {
     padding:'6px 10px', border:'1px solid var(--color-border)', cursor:'pointer',
     background:'var(--color-surface)', color:'var(--color-text)'
   }
   return (
-    <div role="group" aria-label="Filtrer par statut de vente" style={{display:'inline-grid', gridTemplateColumns:'auto auto auto', borderRadius:999, overflow:'hidden', border:'1px solid var(--color-border)'}}>
+    <div role="group" aria-label={ariaLabel} style={{display:'inline-grid', gridTemplateColumns:'auto auto auto', borderRadius:999, overflow:'hidden', border:'1px solid var(--color-border)'}}>
       <button onClick={()=>onChange('both')} style={{...baseBtn, fontSize:12, fontWeight:700, background: value==='both' ? 'rgba(228,183,61,.18)' : 'var(--color-surface)'}}>{labels.both}</button>
       <button onClick={()=>onChange('on')}   style={{...baseBtn, fontSize:12, fontWeight:700, background: value==='on'   ? 'rgba(228,183,61,.28)' : 'var(--color-surface)'}}>🟡 {labels.on}</button>
       <button onClick={()=>onChange('off')}  style={{...baseBtn, fontSize:12, fontWeight:700, background: value==='off'  ? 'rgba(255,255,255,.06)' : 'var(--color-surface)'}}>{labels.off}</button>
@@ -353,6 +441,7 @@ function RegistryWall({
   saleFilter: 'both'|'on'|'off'
   locale: string
 }) {
+  const T = TEXT(locale)
   const filtered = useMemo(()=>{
     const s = q.trim().toLowerCase()
     let base = items
@@ -376,7 +465,7 @@ function RegistryWall({
   return (
     <>
       <div style={{fontSize:12, color:'var(--color-muted)', margin:'2px 0 10px'}}>
-        {filtered.length} œuvre{filtered.length>1?'s':''} {filtered.length!==total && <>— <span style={{opacity:.75}}>filtrées</span></>}
+        {TEXT(locale).count(filtered.length, total)}
       </div>
 
       <div
@@ -398,7 +487,7 @@ function RegistryWall({
             priority={i < 12}
           />
         ))}
-        {filtered.length===0 && <p style={{opacity:.7, gridColumn:'1 / -1'}}>Aucun résultat.</p>}
+        {filtered.length===0 && <p style={{opacity:.7, gridColumn:'1 / -1'}}>{TEXT(locale).noResults}</p>}
       </div>
     </>
   )
@@ -406,8 +495,9 @@ function RegistryWall({
 
 function RegistryCard(
   { row, sale, locale, style, tall, priority }:
-  { row:RegistryRow; sale: SaleInfo | null; locale:string; style?:React.CSSProperties; tall?:boolean; priority?:boolean }
+  { row:RegistryRow; sale: SaleInfo | null; locale:string; style?:CSSProperties; tall?:boolean; priority?:boolean }
 ) {
+  const T = TEXT(locale)
   const tsDay =
     /^\d{4}-\d{2}-\d{2}$/.test(row.ts)
       ? row.ts
@@ -431,7 +521,7 @@ function RegistryCard(
       onClick={onCardClick}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : -1}
-      title={clickable ? `En vente — ${priceLabel}` : undefined}
+      title={clickable ? T.cardTitleOnSale(priceLabel) : undefined}
       style={{
         ...style,
         position:'relative',
@@ -467,9 +557,9 @@ function RegistryCard(
           pointerEvents:'none'
         }} />
 
-        {/* ✅ Badge Authentifié */}
+        {/* ✅ Badge Authentifié / Authenticated */}
         <div
-          aria-label="Certificat authentifié"
+          aria-label={T.badgeAuth}
           style={{
             position:'absolute', left:8, bottom:8,
             display:'inline-flex', alignItems:'center', gap:6,
@@ -480,13 +570,13 @@ function RegistryCard(
             pointerEvents:'none'
           }}
         >
-          <span>Authentifié</span><span aria-hidden>✓</span>
+          <span>{T.badgeAuth}</span><span aria-hidden>✓</span>
         </div>
 
-        {/* 💛 Prix — surbrillance si en vente */}
+        {/* 💛 Prix — surbrillance si en vente / on sale */}
         {sale && (
           <div
-            aria-label="En vente"
+            aria-label={T.badgeOnSale}
             style={{
               position:'absolute', right:8, top:8,
               display:'inline-flex', alignItems:'center', gap:8,
@@ -498,7 +588,7 @@ function RegistryCard(
               pointerEvents:'none'
             }}
           >
-            <span style={{fontWeight:800}}>En vente</span>
+            <span style={{fontWeight:800}}>{T.badgeOnSale}</span>
             <span style={{opacity:.9}}>•</span>
             <span>{priceLabel}</span>
           </div>
@@ -607,7 +697,7 @@ function LazyIframe({ src, priority }: { src: string; priority: boolean }) {
         <iframe
           ref={iframeRef}
           src={src}
-          title="Œuvre"
+          title={TEXT('en').iframeTitle} // titre générique; pas important pour l’accessibilité ici
           loading="lazy"
           style={{
             position:'absolute', inset:0, width:'100%', height:'100%', border:'0',
