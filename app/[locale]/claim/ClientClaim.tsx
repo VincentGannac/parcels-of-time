@@ -30,7 +30,7 @@ const SHIFT_UP_PT = Math.round(2 * PT_PER_CM) // 2cm
 function getSafeArea(style: CertStyle){
   const base = { top: 120, right: 100, bottom: 130, left: 100 }
   switch (style) {
-    case 'romantic':   return { top: 120, right: 100, bottom: 130, left: 100 }
+    case 'romantic':   return { top: 120, right: 101, bottom: 130, left: 100 }
     case 'birthday':   return { top: 120, right: 100, bottom: 130, left: 100 }
     case 'birth':      return { top: 120, right: 100, bottom: 130, left: 100 }
     case 'wedding':    return { top: 120, right: 100, bottom: 130, left: 100 }
