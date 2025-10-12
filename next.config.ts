@@ -1,13 +1,8 @@
 // next.config.ts
 import type { NextConfig } from 'next'
 
-const config = {
-  i18n: {
-    locales: ['fr', 'en'],
-    defaultLocale: 'en',     // fallback aligné avec le middleware
-    localeDetection: false,  // la détection est faite par le middleware
-  },
-
+const config: NextConfig = {
+  // ❌ pas d'i18n ici, on gère la locale via le segment [locale] + middleware
   async headers() {
     return [
       {
@@ -35,6 +30,6 @@ const config = {
       { source: '/:locale(fr|en)/reset',  headers: [{ key: 'Cache-Control', value: 'private, no-store' }] },
     ]
   },
-} satisfies NextConfig
+}
 
 export default config

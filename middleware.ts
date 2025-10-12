@@ -1,12 +1,12 @@
 // middleware.ts
 import { NextResponse, type NextRequest } from 'next/server'
 
-const SUPPORTED_LOCALES = ['fr', 'en'] as const
-type Locale = (typeof SUPPORTED_LOCALES)[number]
+const LOCALES = ['fr', 'en'] as const
+type Locale = (typeof LOCALES)[number]
 const FALLBACK: Locale = 'en'
 
 function isLocale(x: unknown): x is Locale {
-  return typeof x === 'string' && (SUPPORTED_LOCALES as readonly string[]).includes(x as any)
+  return typeof x === 'string' && (LOCALES as readonly string[]).includes(x as any)
 }
 
 function pickLocaleFromAcceptLanguage(al: string): Locale {
@@ -27,32 +27,45 @@ function pickLocaleFromAcceptLanguage(al: string): Locale {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Laisse passer assets / fichiers / API
-  if (pathname.startsWith('/_next') || pathname.startsWith('/api') || /\.[a-zA-Z0-9]+$/.test(pathname)) {
+  // Laisser passer assets/API/fichiers
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    /\.[a-zA-Z0-9]+$/.test(pathname)
+  ) {
     return NextResponse.next()
   }
 
-  // Déjà localisé → on laisse passer
-  const firstSeg = pathname.split('/').find(Boolean) ?? ''
-  if (isLocale(firstSeg)) return NextResponse.next()
+  // Si déjà /fr ou /en → rien à faire
+  const first = pathname.split('/').find(Boolean) ?? ''
+  if (isLocale(first)) return NextResponse.next()
 
-  // Racine → redirige selon cookie puis Accept-Language
+  // Racine → redirige vers la locale (cookie puis Accept-Language)
   if (pathname === '/' || pathname === '') {
     const cookieLoc = req.cookies.get('pt_locale')?.value
-    const loc: Locale = isLocale(cookieLoc) ? cookieLoc : pickLocaleFromAcceptLanguage(req.headers.get('accept-language') || '')
+    const loc: Locale = isLocale(cookieLoc)
+      ? cookieLoc
+      : pickLocaleFromAcceptLanguage(req.headers.get('accept-language') || '')
 
-    const url = new URL(`/${loc}`, req.url)
-    const res = NextResponse.redirect(url, 307)
-    res.cookies.set('pt_locale', loc, { path: '/', maxAge: 60 * 60 * 24 * 365 }) // 1 an
+    const res = NextResponse.redirect(new URL(`/${loc}`, req.url), 307)
+    // Cookie partagé sous-domaine, non cacheable
+    res.cookies.set('pt_locale', loc, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+      secure: true,
+      domain: '.parcelsoftime.com',
+    })
+    res.headers.set('Cache-Control', 'no-store')
+    res.headers.set('x-pt-reason', 'root-redirect')
     return res
   }
 
-  // Autre chemin non localisé → réécrit vers la locale par défaut
-  const url = req.nextUrl.clone()
-  url.pathname = `/${FALLBACK}${pathname}`
-  return NextResponse.rewrite(url)
+  // Pour tout chemin non localisé → on laisse passer (404 si mauvais chemin)
+  return NextResponse.next()
 }
 
+// S'applique à tout sauf fichiers statiques explicites
 export const config = {
   matcher: ['/((?!_next/|.*\\..*|favicon.ico|robots.txt|sitemap.xml).*)'],
 }

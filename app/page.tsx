@@ -25,7 +25,6 @@ function pickLocaleFromAcceptLanguage(al: string): Locale {
   return (found as Locale) || FALLBACK
 }
 
-/** Fallback si le middleware n’a pas tourné (dev/export). */
 export default async function RootRedirect() {
   const h = await headers()
   const c = await cookies()
