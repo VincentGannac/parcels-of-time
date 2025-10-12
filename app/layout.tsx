@@ -9,7 +9,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Parcels of Time',
-  description: 'Claim a unique minute in UTC with a signed certificate.',
+  description: 'Claim a unique day in UTC with a signed certificate.',
   // Pas d’ENV publique ici : on fige sur l’hôte canonique (www)
   metadataBase: new URL('https://www.parcelsoftime.com'),
 }

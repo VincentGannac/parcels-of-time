@@ -4,8 +4,8 @@ import type { NextConfig } from 'next'
 const config = {
   i18n: {
     locales: ['fr', 'en'],
-    defaultLocale: 'fr',
-    localeDetection: false, // ✅ Next 15 App Router : la détection se fait via le middleware
+    defaultLocale: 'en',     // fallback aligné avec le middleware
+    localeDetection: false,  // la détection est faite par le middleware
   },
 
   async headers() {
@@ -31,14 +31,8 @@ const config = {
           { key: 'Vary', value: 'Cookie' },
         ],
       },
-      {
-        source: '/:locale(fr|en)/forgot',
-        headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
-      },
-      {
-        source: '/:locale(fr|en)/reset',
-        headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
-      },
+      { source: '/:locale(fr|en)/forgot', headers: [{ key: 'Cache-Control', value: 'private, no-store' }] },
+      { source: '/:locale(fr|en)/reset',  headers: [{ key: 'Cache-Control', value: 'private, no-store' }] },
     ]
   },
 } satisfies NextConfig
