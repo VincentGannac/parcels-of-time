@@ -1,7 +1,13 @@
 // next.config.ts
 import type { NextConfig } from 'next'
 
-const config: NextConfig = {
+const config = {
+  i18n: {
+    locales: ['fr', 'en'],
+    defaultLocale: 'fr',
+    localeDetection: false, // ✅ Next 15 App Router : la détection se fait via le middleware
+  },
+
   async headers() {
     return [
       {
@@ -25,17 +31,16 @@ const config: NextConfig = {
           { key: 'Vary', value: 'Cookie' },
         ],
       },
-
       {
-          source: '/:locale(fr|en)/forgot',
-          headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
-        },
-        {
-          source: '/:locale(fr|en)/reset',
-          headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
-        },
+        source: '/:locale(fr|en)/forgot',
+        headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
+      },
+      {
+        source: '/:locale(fr|en)/reset',
+        headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
+      },
     ]
   },
-}
+} satisfies NextConfig
 
 export default config
