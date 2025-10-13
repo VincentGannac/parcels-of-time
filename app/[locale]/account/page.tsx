@@ -35,6 +35,8 @@ const T = (l: 'fr' | 'en') => {
     merchantTitle: fr ? 'Compte marchand' : 'Merchant account',
     ready: fr ? 'Prêt à vendre' : 'Ready to sell',
     needsCompletion: fr ? 'À compléter' : 'Needs completion',
+    /** nouveau libellé “en savoir plus” utilisé dans le résumé du menu dépliant */
+    learnMore: fr ? 'En savoir plus' : 'Learn more',
     charges: fr ? 'Encaissements' : 'Charges',
     payouts: fr ? 'Virements' : 'Payouts',
     introNoMerchant:
@@ -499,7 +501,8 @@ export default async function Page({
                 <summary>
                   <span data-chevron>▸</span>
                   <strong style={{fontSize:16}}>{t.merchantTitle}</strong>
-                  <span style={{opacity:.75}}> — {t.needsCompletion}</span>
+                  {/* libellé changé ici */}
+                  <span style={{opacity:.75}}> — {t.learnMore}</span>
                   <span style={{marginLeft:'auto', fontSize:12, opacity:.85}}>{t.createMerchant}</span>
                 </summary>
 
@@ -508,6 +511,7 @@ export default async function Page({
                     {t.introNoMerchant}
                   </div>
 
+                  {/* Formulaire d’onboarding */}
                   <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}} data-merchant-form>
                     <input type="hidden" name="locale" value={locale} />
 
@@ -598,53 +602,94 @@ export default async function Page({
                     />
                   </form>
 
+                  {/* Transparence plateforme */}
                   <div style={{background:'rgba(255,255,255,.03)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px', fontSize:12, lineHeight:1.35}}>
                     {t.platformTransparency}
+                  </div>
+
+                  {/* Mes annonces actives — intégré au menu dépliant quand pas de compte marchand */}
+                  <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:12}}>
+                    <h3 style={{fontSize:16, margin:'0 0 8px'}}>{t.activeListings}</h3>
+                    {listings.length === 0 ? (
+                      <p style={{margin:0, opacity:.8}}>
+                        {t.noneActive}
+                      </p>
+                    ) : (
+                      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10}}>
+                        {listings.map(item=>{
+                          const ymd = ymdSafe(item.ts)
+                          return (
+                            <div key={item.id} style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)'}}>
+                              <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
+                              <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
+                              <div style={{display:'flex', gap:8, marginTop:10}}>
+                                <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}>
+                                  {t.open}
+                                </a>
+                                <form method="post" action={`/api/marketplace/listing/${item.id}/status`}>
+                                  <input type="hidden" name="action" value="cancel" />
+                                  <input type="hidden" name="locale" value={locale} />
+                                  <input type="hidden" name="next" value={`/${locale}/account`} />
+                                  <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'#ffb2b2'}}>
+                                    {t.cancel}
+                                  </button>
+                                </form>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <p style={{marginTop:10, fontSize:12, opacity:.7}}>
+                      {t.commissionNote}
+                    </p>
                   </div>
                 </div>
               </details>
             )}
           </section>
 
-          {/* Active listings */}
-          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
-            <h2 style={{fontSize:18, margin:'0 0 10px'}}>
-              {t.activeListings}
-            </h2>
-            {listings.length === 0 ? (
-              <p style={{margin:0, opacity:.8}}>
-                {t.noneActive}
-              </p>
-            ) : (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10}}>
-                {listings.map(item=>{
-                  const ymd = ymdSafe(item.ts)
-                  return (
-                    <div key={item.id} style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)'}}>
-                      <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
-                      <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
-                      <div style={{display:'flex', gap:8, marginTop:10}}>
-                        <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}>
-                          {t.open}
-                        </a>
-                        <form method="post" action={`/api/marketplace/listing/${item.id}/status`}>
-                          <input type="hidden" name="action" value="cancel" />
-                          <input type="hidden" name="locale" value={locale} />
-                          <input type="hidden" name="next" value={`/${locale}/account`} />
-                          <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'#ffb2b2'}}>
-                            {t.cancel}
-                          </button>
-                        </form>
+          {/* Active listings (hors menu) — affiché seulement si un compte marchand existe */}
+          {hasMerchant && (
+            <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:14}}>
+              <h2 style={{fontSize:18, margin:'0 0 10px'}}>
+                {t.activeListings}
+              </h2>
+              {listings.length === 0 ? (
+                <p style={{margin:0, opacity:.8}}>
+                  {t.noneActive}
+                </p>
+              ) : (
+                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:10}}>
+                  {listings.map(item=>{
+                    const ymd = ymdSafe(item.ts)
+                    return (
+                      <div key={item.id} style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)'}}>
+                        <div style={{fontWeight:800, fontSize:16}}>{ymd}</div>
+                        <div style={{marginTop:4, opacity:.85}}>{(item.price_cents/100).toFixed(0)} €</div>
+                        <div style={{display:'flex', gap:8, marginTop:10}}>
+                          <a href={`/${locale}/m/${encodeURIComponent(ymd)}`} style={{textDecoration:'none', padding:'8px 10px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}>
+                            {t.open}
+                          </a>
+                          <form method="post" action={`/api/marketplace/listing/${item.id}/status`}>
+                            <input type="hidden" name="action" value="cancel" />
+                            <input type="hidden" name="locale" value={locale} />
+                            <input type="hidden" name="next" value={`/${locale}/account`} />
+                            <button type="submit" style={{padding:'8px 10px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'#ffb2b2'}}>
+                              {t.cancel}
+                            </button>
+                          </form>
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            <p style={{marginTop:10, fontSize:12, opacity:.7}}>
-              {t.commissionNote}
-            </p>
-          </section>
+                    )
+                  })}
+                </div>
+              )}
+              <p style={{marginTop:10, fontSize:12, opacity:.7}}>
+                {t.commissionNote}
+              </p>
+            </section>
+          )}
         </div>
 
         {/* Certificates gallery */}
