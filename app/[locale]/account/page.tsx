@@ -41,7 +41,7 @@ const T = (l: 'fr' | 'en') => {
     payouts: fr ? 'Virements' : 'Payouts',
     introNoMerchant:
       fr
-        ? <>Le mode marchand vous permet d’<strong>encaisser des paiements</strong> via Stripe, puis de <strong>recevoir vos virements</strong> sur votre IBAN. Il est requis pour <strong>revendre vos certificats</strong> sur la place de marché. Les frais de plateforme standard s’appliquent.</>
+        ? <>Le mode marchand vous permet d’<strong>encaisser des paiements</strong> via Stripe, puis de <strong>recevoir vos virements</strong> sur votre IBAN. Il est requis pour <strong>revendre vos certificats.</strong> Les frais de plateforme standard s’appliquent.</>
         : <>Merchant mode lets you <strong>accept payments</strong> via Stripe and <strong>receive payouts</strong> to your bank account. It’s required to <strong>resell your certificates</strong> on the marketplace. Standard platform fees apply.</>,
     individualNotice:
       fr
@@ -83,7 +83,7 @@ const T = (l: 'fr' | 'en') => {
     noneActive: fr ? 'Aucune date en vente pour l’instant.' : 'No active listings yet.',
     open: fr ? 'Ouvrir' : 'Open',
     cancel: fr ? 'Retirer' : 'Cancel',
-    commissionNote: fr ? 'Commission 10% (min 1 €) appliquée lors de la vente.' : '10% commission (min €1) on sale.',
+    commissionNote: fr ? 'Commission 15% (min 1 €) appliquée lors de la vente.' : '15% commission (min €1) on sale.',
     myCerts: fr ? 'Mes certificats' : 'My certificates',
     noneCerts: fr ? 'Aucun certificat pour le moment.' : 'No certificates yet.',
     onSale: fr ? 'En vente' : 'On sale',
@@ -502,7 +502,7 @@ export default async function Page({
                   <span data-chevron>▸</span>
                   <strong style={{fontSize:16}}>{t.merchantTitle}</strong>
                   {/* libellé changé ici */}
-                  <span style={{opacity:.75}}> — {t.learnMore}</span>
+                  <span style={{opacity:.75}}> {t.learnMore}</span>
                   <span style={{marginLeft:'auto', fontSize:12, opacity:.85}}>{t.createMerchant}</span>
                 </summary>
 
