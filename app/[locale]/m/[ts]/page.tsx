@@ -275,7 +275,6 @@ export default async function Page({
 
   // UI logic
   const listingJustPublished = (sp.listing === 'ok')
-  const regAction = sp.reg === 'pub' ? 'pub' : (sp.reg === 'priv' ? 'priv' : null)
 
   const canSell =
     isOwner &&
@@ -342,7 +341,7 @@ export default async function Page({
         <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 18 }}>
           {/* Left column */}
           <div style={{ display:'grid', gap:18 }}>
-            {/* Certificate actions (PDF / Invoice) */}
+            {/* Certificate actions hidden si “vierge” pour l’acheteur */}
             {!isBlankForBuyer && (
               <div
                 style={{
@@ -358,7 +357,6 @@ export default async function Page({
                 </div>
 
                 <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-                  {/* PDF (certificat) — visible au propriétaire et aux acheteurs potentiels seulement si le vendeur ne masque pas */}
                   <a
                     href={pdfHref}
                     target="_blank"
@@ -378,7 +376,6 @@ export default async function Page({
                     {locale==='fr' ? 'PDF (certificat)' : 'PDF (certificate)'}
                   </a>
 
-                  {/* Facture / Reçu (owner only) */}
                   {isOwner && (
                     <a
                       href={invoiceHref}
@@ -416,7 +413,7 @@ export default async function Page({
               </div>
             )}
 
-            {/* Marketplace — SELL (owner) */}
+            {/* SELL (owner) + choix d’affichage full/vierge */}
             {isOwner && canSell && (
               <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
@@ -434,7 +431,6 @@ export default async function Page({
                       </label>
                     </div>
 
-                    {/* Display mode: full vs blank */}
                     <fieldset style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12}}>
                       <legend style={{padding:'0 6px', fontSize:12, color:'var(--color-muted)'}}>
                         {locale==='fr' ? 'Affichage sur la marketplace' : 'Marketplace display'}
@@ -499,23 +495,7 @@ export default async function Page({
               </section>
             )}
 
-            {/* Nudges / status */}
-            {isOwner && !merchant?.stripe_account_id && (
-              <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-                <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
-                  {locale==='fr' ? 'Vendre sur la marketplace' : 'Sell on the marketplace'}
-                </div>
-                <p style={{margin:'0 0 10px', opacity:.85}}>
-                  {locale==='fr'
-                    ? 'Pour revendre ce certificat, créez d’abord votre compte vendeur.'
-                    : 'To resell this certificate, please create your seller account first.'}
-                </p>
-                <a href={`/${locale}/account`} style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, color:'var(--color-text)'}}>
-                  {locale==='fr' ? 'Ouvrir mon compte vendeur' : 'Open my seller account'}
-                </a>
-              </section>
-            )}
-
+            {/* badges état */}
             {isOwner && (sp.listing === 'ok' || myListingForThisDay) && (
               <div style={{
                 padding:'10px 12px',
@@ -525,21 +505,6 @@ export default async function Page({
                 fontSize:14
               }}>
                 ✅ {locale==='fr' ? 'Votre annonce a été publiée sur la marketplace.' : 'Your listing is live on the marketplace.'}
-              </div>
-            )}
-
-            {isOwner && (sp.reg === 'pub' || sp.reg === 'priv') && (
-              <div style={{
-                padding:'10px 12px',
-                border:'1px solid rgba(14,170,80,.4)',
-                background: sp.reg === 'pub' ? 'rgba(14,170,80,.12)' : 'rgba(120,130,150,.12)',
-                borderRadius:10,
-                fontSize:14
-              }}>
-                {sp.reg === 'pub'
-                  ? (locale==='fr' ? '✅ Votre certificat a été publié dans le registre public.' : '✅ Your certificate is now public in the registry.')
-                  : (locale==='fr' ? '🔒 Votre certificat est maintenant privé.' : '🔒 Your certificate is now private.')
-                }
               </div>
             )}
 
@@ -575,8 +540,8 @@ export default async function Page({
             {/* Buyer: active public listing */}
             {!isOwner && listing && (
               <>
-                {/* “Blank” rendering: anonymous, like an available day but in yellow + price */}
                 {listing.hide_claim_details ? (
+                  // Rendu anonymisé “vierge”
                   <section
                     style={{
                       border:'1px solid #3b3200',
@@ -591,15 +556,13 @@ export default async function Page({
                           {locale==='fr'?'Annonce (anonyme)':'Listing (anonymous)'}
                         </div>
                         <div style={{display:'flex', alignItems:'center', gap:8, marginTop:6}}>
-                          <span style={{fontSize:18, fontWeight:800, color:'var(--color-primary)'}}>
-                            {niceTs}
-                          </span>
+                          <span style={{fontSize:18, fontWeight:800, color:'var(--color-primary)'}}>{niceTs}</span>
                           <span style={{fontSize:12, padding:'2px 8px', borderRadius:999, border:'1px solid var(--color-border)'}}>
                             {locale==='fr'?'Vierge':'Blank'}
                           </span>
                         </div>
                         <div style={{marginTop:6, fontWeight:700}}>
-                          {(listing.price_cents/100).toFixed(0)} € 
+                          {(listing.price_cents/100).toFixed(0)} €
                         </div>
                       </div>
 
@@ -645,7 +608,7 @@ export default async function Page({
                     </p>
                   </section>
                 ) : (
-                  // Full details (current behavior)
+                  // Rendu complet
                   <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                       <div>
@@ -685,7 +648,7 @@ export default async function Page({
               </>
             )}
 
-            {/* Public registry */}
+            {/* Registre public */}
             <aside style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--color-muted)' }}>
@@ -695,34 +658,34 @@ export default async function Page({
                   style={{
                     padding: '6px 10px',
                     borderRadius: 999,
-                    background: isPublic ? 'rgba(14,170,80,.18)' : 'rgba(120,130,150,.18)',
+                    background: (await getPublicStateDb(tsISO!)) ? 'rgba(14,170,80,.18)' : 'rgba(120,130,150,.18)',
                     border: '1px solid var(--color-border)',
                     fontSize: 12,
                   }}
                 >
-                  {locale==='fr' ? 'Statut' : 'Status'} : <strong>{isPublic ? 'Public' : 'Privé'}</strong>
+                  {locale==='fr' ? 'Statut' : 'Status'} : <strong>{(await getPublicStateDb(tsISO!)) ? 'Public' : 'Privé'}</strong>
                 </span>
               </div>
               {isOwner && (
                 <form action={togglePublic} style={{ display: 'flex', gap: 10 }}>
                   <input type="hidden" name="ts" value={tsYMD!} />
-                  <input type="hidden" name="next" value={isPublic ? '0' : '1'} />
+                  <input type="hidden" name="next" value={(await getPublicStateDb(tsISO!)) ? '0' : '1'} />
                   <button
                     type="submit"
                     style={{
                       padding: '10px 12px',
                       borderRadius: 10,
-                      background: isPublic ? 'var(--color-surface)' : 'var(--color-primary)',
-                      color: isPublic ? 'var(--color-text)' : 'var(--color-on-primary)',
+                      background: (await getPublicStateDb(tsISO!)) ? 'var(--color-surface)' : 'var(--color-primary)',
+                      color: (await getPublicStateDb(tsISO!)) ? 'var(--color-text)' : 'var(--color-on-primary)',
                       border: '1px solid var(--color-border)',
                       fontWeight: 800,
                       cursor: 'pointer',
                     }}
                   >
-                    {isPublic ? (locale==='fr' ? 'Rendre privé' : 'Make private') : (locale==='fr' ? 'Rendre public' : 'Make public')}
+                    {(await getPublicStateDb(tsISO!)) ? (locale==='fr' ? 'Rendre privé' : 'Make private') : (locale==='fr' ? 'Rendre public' : 'Make public')}
                   </button>
                   <a
-                    href={exploreHref}
+                    href={`/${locale}/explore`}
                     style={{ textDecoration: 'none', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '10px 12px' }}
                   >
                     {locale==='fr'?'Voir le registre':'Open registry'} →
@@ -732,7 +695,7 @@ export default async function Page({
             </aside>
           </div>
 
-          {/* Right column — PDF preview (masked for blank listings) */}
+          {/* Preview PDF (masqué si “vierge”) */}
           <aside
             aria-label="Aperçu du certificat (PDF)"
             style={{
@@ -746,7 +709,7 @@ export default async function Page({
             }}
           >
             <div style={{width:'100%', aspectRatio:'595.28/841.89', border:'1px solid var(--color-border)', borderRadius:12, overflow:'hidden', display:'grid', placeItems:'center'}}>
-              {isBlankForBuyer ? (
+              {(!isOwner && listing?.hide_claim_details) ? (
                 <div style={{padding:16, textAlign:'center'}}>
                   <div style={{fontWeight:800, marginBottom:6}}>
                     {locale==='fr' ? 'Prévisualisation masquée' : 'Preview hidden'}

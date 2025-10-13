@@ -1,4 +1,3 @@
-// app/[locale]/claim/ClientClaim.tsx
 'use client'
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -79,6 +78,11 @@ function ymdUTC(d: Date){
   const m = String(d.getUTCMonth()+1).padStart(2,'0')
   const day = String(d.getUTCDate()).padStart(2,'0')
   return `${y}-${m}-${day}`
+}
+
+// string ISO/Date -> YMD
+const ymd = (d: Date | string) => {
+  try { const dd = new Date(d as any); dd.setUTCHours(0,0,0,0); return dd.toISOString().slice(0,10) } catch { return '' }
 }
 
 /** ====== Mesure & wrap en pixels équivalents aux points PDF ====== */
@@ -278,7 +282,7 @@ function TEXTS(fr:boolean) {
     // Aide taille / formats custom
     customLimits: fr
       ? 'Rappels — images custom :\n• Formats en entrée : JPEG, PNG, WebP, AVIF, GIF (1er frame), BMP, SVG, HEIC/HEIF (convertis), TIFF (baseline).\n• Sortie envoyée : JPEG A4 2480×3508 (~300 dpi), taille finale < 4 Mo.\n• Le serveur n’accepte que PNG/JPEG en data URL.\n• AVIF/WebP/TIFF peuvent ne pas être décodés par certains navigateurs.\n• Les GIF/HEIC “séquence” sont aplatis au 1er frame.\n• Les images énormes peuvent échouer (limite mémoire/canvas) : réduisez la résolution si besoin.'
-      : 'Reminders — custom images:\n• Input formats: JPEG, PNG, WebP, AVIF, GIF (first frame), BMP, SVG, HEIC/HEIF (converted), TIFF (baseline).\n• Output sent: A4 JPEG 2480×3508 (~300 dpi), final size < 4 MB.\n• Server accepts only PNG/JPEG as data URLs.\n• AVIF/WebP/TIFF may not decode in some browsers.\n• GIF/HEIC “sequence” files are flattened to first frame.\n• Very large images may fail (memory/canvas limit): reduce resolution if needed.'
+      : 'Reminders — custom images:\n• Input formats: JPEG, PNG, WebP, AVIF, GIF (first frame), BMP, SVG, HEIC/HEIF (converted), TIFF (baseline).\n• Output sent: A4 JPEG 2480×3508 (~300 dpi), final size < 4 MB.\n• Server accepts only PNG/JPEG as data URLs.\n• AVIF/WebP/TIFF may not decode in some browsers.\n• GIF/HEIC “sequence” files are flattened to first frame.\n• Very large images may fail (memory/canvas limit): reduce the image size if needed.'
   }
 }
 
@@ -292,7 +296,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const giftParam = params.get('gift')
   const initialGift = giftParam === '1' || giftParam === 'true'
 
-  // Locale depuis l’URL, sinon navigateur
+  // Locale
   const loc = useMemo(() => {
     try {
       const seg = (window.location.pathname.split('/')[1] || '').slice(0,2).toLowerCase()
@@ -310,11 +314,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   const [isGift, setIsGift] = useState<boolean>(initialGift)
 
-  // Date par défaut (aujourd’hui, arrondie à 00:00:00 UTC)
-  const now = new Date()
-  const prefillDate = parseToDateOrNull(prefillTs) || now
-
-  // ✅ bornes : aujourd’hui UTC et max = +1 an
+  // bornes
   const todayUtc = useMemo(() => {
     const t = new Date()
     return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()))
@@ -328,21 +328,56 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const MAX_M = maxDateUtc.getUTCMonth() + 1
   const MAX_D = maxDateUtc.getUTCDate()
 
-  const [Y, setY] = useState<number>(prefillDate.getFullYear())
-  const [M, setM] = useState<number>(prefillDate.getMonth()+1)
-  const [D, setD] = useState<number>(prefillDate.getDate())
+  // Date initiale
+  const prefillDate = parseToDateOrNull(prefillTs) || todayUtc
+  const [Y, setY] = useState<number>(prefillDate.getUTCFullYear())
+  const [M, setM] = useState<number>(prefillDate.getUTCMonth()+1)
+  const [D, setD] = useState<number>(prefillDate.getUTCDate())
 
-  const MIN_GAP_HEADER_PT = 28 // marge min entre "Certificate of Claim" et la date
-
+  const MIN_GAP_HEADER_PT = 28
   const lastPrefilledYmdRef = useRef<string | null>(null)
   const ymdSelected = useMemo(() => {
     try { return new Date(Date.UTC(Y, M-1, D)).toISOString().slice(0,10) } catch { return '' }
   }, [Y, M, D])
 
-  // Ajuste le jour si dépasse le nb de jours du mois
-  useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M])
+  // ---- Listing actif (par /api/marketplace/by-ts/[ts]) ----
+  type Listing = { id: string; ts: string; price_cents: number; currency: string; hide_claim_details?: boolean }
+  const [activeListing, setActiveListing] = useState<Listing | null>(null)
+  const [listingForYMD, setListingForYMD] = useState<string>('')
 
-  // Clamp à la borne max (J+1 an)
+  useEffect(() => {
+    let cancelled = false
+    setActiveListing(null)            // reset immédiat pour éviter l'ancien rendu
+    setListingForYMD(ymdSelected)
+
+    const iso = `${ymdSelected}T00:00:00.000Z`
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/marketplace/by-ts/${encodeURIComponent(iso)}`, { cache:'no-store' })
+        const j = await res.json()
+        const ret = j?.listing
+        if (!cancelled && ret && ymd(ret.ts) === ymdSelected) {
+          setActiveListing(ret)
+        }
+      } catch {
+        if (!cancelled) setActiveListing(null)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [ymdSelected])
+
+  // util
+  function pickFirstFreeWhiteDay(days: Array<{ ymd: string; sold?: boolean; listing_active?: boolean }>, todayYmd: string) {
+    const white = days.find(d => !d.sold && !d.listing_active)
+    if (white) return white.ymd
+    const freeAny = days.find(d => !d.sold)
+    if (freeAny) return freeAny.ymd
+    return todayYmd
+  }
+
+  // clamp Y/M/D
+  useEffect(()=>{ const dim=daysInMonth(Y,M); if(D>dim) setD(dim) }, [Y,M])
   useEffect(() => {
     let y = Y, m = M, d = D
     if (y > MAX_Y) y = MAX_Y
@@ -384,50 +419,41 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     display_name: '',
     title: '',
     message: '',
-    // cadeau
     gifted_by: '',
-    // rendu
     link_url: '',
-    ts: prefillTs, // recalculé plus bas
+    ts: prefillTs,
     cert_style: initialStyle as CertStyle,
-    // compat serveur (non exposé)
     time_display: 'local+utc' as 'utc'|'utc+local'|'local+utc',
-    local_date_only: true, // journée
+    local_date_only: true,
     text_color: '#1A1F2A',
-    // (anciens flags “public” conservés pour compat)
     title_public: false,
     message_public: false,
     public_registry: false,
   })
 
-  // Visibilité des sections (par défaut : tout affiché)
+  // Visibilité des sections
   const [show, setShow] = useState({
     ownedBy: true,
     title: true,
     message: true,
-    attestation: true,   // ✅ bloc attestation
-    giftedBy: true,      // seulement si isGift
+    attestation: true,
+    giftedBy: true,
   })
 
   const [status, setStatus] = useState<'idle'|'loading'|'error'>('idle')
   const [error, setError] = useState('')
 
-  // Jours indisponibles / en vente
+  // Jours indisponibles / en vente (pour l’affichage du sélecteur & prix)
   const [unavailableDays, setUnavailableDays] = useState<number[]>([])
   const [isLoadingDays, setIsLoadingDays] = useState(false)
   const [forSaleDays, setForSaleDays] = useState<number[]>([])
   const [saleLookup, setSaleLookup] = useState<Record<number, { id:string; price_cents:number; currency:string }>>({})
-
   const [isLoadingClaim, setIsLoadingClaim] = useState(false)
-
   const autoPickDoneRef = useRef(false)
 
-  // 🔁 auto-pick d’un jour blanc si pas de ts pré-rempli
+  // auto-pick jour blanc si pas de ts pré-rempli
   useEffect(() => {
-    if (autoPickDoneRef.current || prefillTs) {
-      autoPickDoneRef.current = true
-      return
-    }
+    if (autoPickDoneRef.current || prefillTs) { autoPickDoneRef.current = true; return }
     if (!hasHydrated(Y, M)) return
     ;(async () => {
       const nearest = await findNearestWhiteDate()
@@ -436,7 +462,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     })()
   }, [prefillTs, Y, M, isLoadingDays])
 
-  // Cache par mois
+  // cache par mois
   type MonthCache = {
     red: number[]
     yellow: number[]
@@ -499,18 +525,13 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     return null
   }
 
-  // Pour annuler les requêtes précédentes si on change Y/M rapidement
+  // fetch des jours par mois
   const daysReqAbortRef = useRef<AbortController | null>(null)
   useEffect(() => {
     const ym = `${Y}-${String(M).padStart(2,'0')}`
-    if (daysReqAbortRef.current) {
-      try { daysReqAbortRef.current.abort() } catch {}
-      daysReqAbortRef.current = null
-    }
+    if (daysReqAbortRef.current) { try { daysReqAbortRef.current.abort() } catch {}; daysReqAbortRef.current = null }
     setIsLoadingDays(true)
-    setUnavailableDays([])
-    setForSaleDays([])
-    setSaleLookup({})
+    setUnavailableDays([]); setForSaleDays([]); setSaleLookup({})
 
     const cached = monthCacheRef.current.get(ym)
     if (cached?.hydrated) {
@@ -544,9 +565,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
         monthCacheRef.current.set(ym, { red, yellow, lookup: map, hydrated:true })
       } catch (e:any) {
         if (e?.name !== 'AbortError') {
-          setUnavailableDays([])
-          setForSaleDays([])
-          setSaleLookup({})
+          setUnavailableDays([]); setForSaleDays([]); setSaleLookup({})
         }
       } finally {
         if (daysReqAbortRef.current === ctrl) daysReqAbortRef.current = null
@@ -554,14 +573,11 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       }
     })()
     return () => {
-      if (daysReqAbortRef.current === ctrl) {
-        try { ctrl.abort() } catch {}
-        daysReqAbortRef.current = null
-      }
+      if (daysReqAbortRef.current === ctrl) { try { ctrl.abort() } catch {}; daysReqAbortRef.current = null }
     }
   }, [Y, M])
 
-  // Si le jour sélectionné devient indisponible, tente un autre
+  // Si le jour sélectionné devient indisponible
   useEffect(() => {
     const dim = daysInMonth(Y, M)
     const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
@@ -573,26 +589,49 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     }
   }, [unavailableDays, Y, M, MAX_Y, MAX_M, MAX_D, D])
 
-  // Recalcule `ts` à chaque changement
+  // Recalcule ts
   useEffect(()=>{
     const d = new Date(Date.UTC(Y, M-1, D, 0, 0, 0, 0))
     setForm(f=>({ ...f, ts: isoDayString(d) }))
   }, [Y, M, D])
 
-  // Pré-remplir si jour en vente
+  // --------- Pré-remplissage si jour en vente ---------
   useEffect(() => {
-    const onSale = new Set(forSaleDays).has(D)
-    const listing = saleLookup[D]
-    if (!onSale || !listing || !ymdSelected) return
-    if (lastPrefilledYmdRef.current === ymdSelected) return
-    lastPrefilledYmdRef.current = ymdSelected
+    // pas de listing → rien
+    if (!activeListing) return
 
+    // Mode “vierge” → purge totale & style neutre (comme une date blanche)
+    if (activeListing.hide_claim_details) {
+      lastPrefilledYmdRef.current = null
+      setIsGift(false)
+      setForm(f => ({
+        ...f,
+        display_name: '',
+        title: '',
+        message: '',
+        gifted_by: '',
+        link_url: '',
+        cert_style: 'neutral',
+        text_color: '#1A1F2A',
+      }))
+      setCustomBg(null)
+      setShow({ ownedBy: true, title: true, message: true, attestation: true, giftedBy: true })
+      return
+    }
+
+    // Listing classique : on hydrate avec la preview du claim
+    const ysel = ymdSelected
+    if (lastPrefilledYmdRef.current === ysel) return
+    lastPrefilledYmdRef.current = ysel
+
+    let cancelled = false
     setIsLoadingClaim(true)
     ;(async () => {
       try {
-        const res = await fetch(`/api/claim/preview/by-ts/${encodeURIComponent(ymdSelected)}`)
+        const res = await fetch(`/api/claim/preview/by-ts/${encodeURIComponent(ysel)}`)
         const j = await res.json()
         if (!j?.claim) return
+        if (cancelled || ymdSelected !== ysel) return // garde-fou
 
         let raw = String(j.claim.message || '')
         const hadAttestation =
@@ -634,17 +673,20 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
         if (j.custom_bg_data_url && (j.claim.cert_style === 'custom')) {
           setCustomBg({ url: j.custom_bg_data_url, dataUrl: j.custom_bg_data_url, w: 2480, h: 3508 })
+        } else {
+          setCustomBg(null)
         }
       } catch {} finally {
-        setIsLoadingClaim(false)
+        if (!cancelled) setIsLoadingClaim(false)
       }
     })()
-  }, [D, forSaleDays, saleLookup, ymdSelected])
+
+    return () => { cancelled = true }
+  }, [activeListing, ymdSelected])
 
   // Quand la date n'est pas en vente → état par défaut
   useEffect(() => {
-    const isYellow = new Set(forSaleDays).has(D)
-    if (isYellow) return
+    if (activeListing) return
     lastPrefilledYmdRef.current = null
     setForm(f => ({
       ...f,
@@ -665,7 +707,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
       attestation: true,
       giftedBy: isGift ? true : false,
     }))
-  }, [D, forSaleDays, isGift])
+  }, [activeListing, isGift])
 
   // Date choisie
   const parsedDate = useMemo(() => parseToDateOrNull(form.ts), [form.ts])
