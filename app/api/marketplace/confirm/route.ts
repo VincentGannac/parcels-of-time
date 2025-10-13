@@ -113,12 +113,26 @@ export async function GET(req: Request) {
 
       // 1) Lock annonce
       const { rows: lrows } = await client.query(
-        `select id, ts, seller_owner_id, price_cents, currency, status
+      `select id, ts, seller_owner_id, price_cents, currency, status,
+        coalesce(hide_claim_details,false) as hide_claim_details
            from listings
           where id=$1
           for update`,
         [listingId]
       )
+
+      const asNull = (v:any) => {
+        if (v === undefined || v === null) return null
+        const s = String(v).trim()
+        return s ? s : null
+      }
+      const isHexColor = (s:any) => typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s)
+      const validStyle = (s:any) => {
+        const v = String(s || '').toLowerCase()
+        return ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'].includes(v) ? v : 'neutral'
+      }
+      const validTime = (s:any) => (s === 'utc' || s === 'utc+local' || s === 'local+utc') ? s : 'local+utc'
+      
 
       if (!lrows.length) throw new Error('listing_not_found')
       const L = lrows[0]
@@ -169,9 +183,58 @@ export async function GET(req: Request) {
       buyerOwnerId = buyerId
 
       // 4) Appliquer modifs “comme Edit/confirm” + transfert owner
-      const updates = normalizeClaimUpdates(P) // titre, message, style, couleurs, flags…
+      const isBlankListing = !!L.hide_claim_details
+
+      // Pour une annonce “vierge”, on construit un payload qui remet à zéro
+      // tout ce qui n’est pas explicitement fourni par l’acheteur.
+      const PForUpdate: any = isBlankListing ? {
+        display_name: asNull(P.display_name),
+        title:        asNull(P.title),
+        message:      asNull(P.message),
+        link_url:     asNull(P.link_url),
+        cert_style:   validStyle(P.cert_style),
+       time_display: validTime(P.time_display),
+        local_date_only: (P.local_date_only === true || P.local_date_only === '1'),
+        text_color:   isHexColor(P.text_color) ? String(P.text_color).toLowerCase() : '#1a1f2a',
+        // Jamais d’auto-public pour une “vierge” sauf demande explicite de l’acheteur
+        title_public:   false,
+        message_public: false,
+        public_registry: !!P.public_registry,
+      } : P
+
+      const updates = normalizeClaimUpdates(PForUpdate)
       await applyClaimUpdatesLikeEdit(client, tsISO, updates, { newOwnerId: buyerOwnerId })
 
+      // Enforce : si “vierge”, on impose côté DB la nullification/default
+      // pour éviter toute persistance d’infos du vendeur.
+      if (isBlankListing) {
+        await client.query(
+          `update claims set
+             display_name   = $2,
+             title          = $3,
+             message        = $4,
+             link_url       = $5,
+             cert_style     = $6,
+             time_display   = $7,
+             local_date_only= $8,
+             text_color     = $9,
+             title_public   = false,
+             message_public = false
+             where date_trunc('day', ts) = $1::timestamptz`,
+          [
+            tsISO,
+            PForUpdate.display_name ?? null,
+            PForUpdate.title ?? null,
+            PForUpdate.message ?? null,
+            PForUpdate.link_url ?? null,
+            PForUpdate.cert_style || 'neutral',
+            validTime(PForUpdate.time_display),
+            (PForUpdate.local_date_only === true || PForUpdate.local_date_only === '1'),
+            isHexColor(PForUpdate.text_color) ? String(PForUpdate.text_color).toLowerCase() : '#1a1f2a',
+          ]
+        )
+      }
+      
       // 4bis) Mettre à jour prix/devise + champs secondaires si présents
       const cols = await getColumns(client, 'claims')
       const sets: string[] = []
@@ -187,7 +250,7 @@ export async function GET(req: Request) {
       )
 
       // 4ter) Image custom : temp -> persist si style=custom
-      const styleLower = String(updates.cert_style || '').toLowerCase()
+      const styleLower = String(updates.cert_style || PForUpdate.cert_style || '').toLowerCase()
       if (styleLower === 'custom') {
         const hasPersist = await tableExists(client, 'claim_custom_bg')
 
@@ -226,6 +289,14 @@ export async function GET(req: Request) {
         }
       }
 
+      // Si “vierge” ET style non-custom : on supprime tout fond custom antérieur
+      if (isBlankListing && styleLower !== 'custom') {
+        const hasPersist2 = await tableExists(client, 'claim_custom_bg')
+        if (hasPersist2) {
+          await client.query(`delete from claim_custom_bg where ts = $1::timestamptz`, [tsISO])
+        }
+      }
+      
       // 4quater) Registre public si demandé
       if (updates.public_registry === true) {
         await client.query(
