@@ -1223,17 +1223,187 @@ function FeatureBand() {
 
 
 /* =========================================================
-   REGISTRE PUBLIC
+   REGISTRE PUBLIC — v2 (aléatoire + vrai visuel + CTA jaune)
    ========================================================= */
+
+// Mini type local (aligné sur /api/registry)
+type PublicRegistryRow = {
+  ts: string
+  owner: string
+  title: string | null
+  message: string | null
+  style: string
+}
+
+function shuffle<T>(arr: T[]) {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+/** Vignette avec le *vrai* PDF embarqué */
+function PublicCertThumb({
+  ts,
+  owner,
+  title,
+  href,
+}: {
+  ts: string
+  owner: string
+  title?: string | null
+  href: string
+}) {
+  // Normalise AAAA-MM-JJ
+  const day =
+    /^\d{4}-\d{2}-\d{2}$/.test(ts)
+      ? ts
+      : (() => {
+          try {
+            return new Date(ts).toISOString().slice(0, 10)
+          } catch {
+            return String(ts).slice(0, 10)
+          }
+        })()
+
+  const pdfSrc = `/api/ccert/${encodeURIComponent(
+    day
+  )}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+
+  return (
+    <a href={href} aria-label={`Voir le certificat du ${day}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+      <figure
+        style={{
+          margin: 0,
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)',
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-1)',
+          transition: 'transform .25s ease, box-shadow .25s ease',
+        }}
+      >
+        <div
+          style={{
+            position: 'relative',
+            width: '100%',
+            aspectRatio: '595/842',
+            background: '#0E1017',
+            overflow: 'hidden',
+          }}
+        >
+          <iframe
+            src={pdfSrc}
+            title="Certificate"
+            loading="lazy"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, pointerEvents: 'none', userSelect: 'none' }}
+          />
+          {/* voile + légende */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'radial-gradient(100% 70% at 50% -10%, rgba(255,255,255,0) 40%, rgba(0,0,0,.22) 100%)',
+              pointerEvents: 'none',
+            }}
+          />
+          <figcaption
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              padding: '10px 12px',
+              background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.66) 100%)',
+              color: '#fff',
+              fontSize: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <strong style={{ letterSpacing: 0.2 }}>{owner || 'Anonymous'}</strong>
+              <span style={{ opacity: 0.9 }}>{day}</span>
+            </div>
+            {title && <div style={{ marginTop: 4, opacity: 0.95 }}>{title}</div>}
+          </figcaption>
+        </div>
+      </figure>
+      <style>{`
+        a:hover > figure { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(0,0,0,.34) }
+      `}</style>
+    </a>
+  )
+}
+
+/** Grosse variation jaune du CTA (beaucoup plus visible) */
+function GoldCTA({ href, children, ariaLabel }: { href: string; children: React.ReactNode; ariaLabel?: string }) {
+  return (
+    <Link
+      href={href}
+      aria-label={ariaLabel}
+      style={{
+        textDecoration: 'none',
+        fontWeight: 900,
+        borderRadius: '18px',
+        padding: '16px 22px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 10,
+        fontSize: 15,
+        lineHeight: '22px',
+        minHeight: 52,
+        color: '#0B0E14',
+        background: 'linear-gradient(180deg, #FFD84D, #E5B53B)',
+        boxShadow: '0 10px 28px rgba(229,181,59,.35), inset 0 0 0 1px rgba(0,0,0,.18)',
+        border: '1px solid rgba(0,0,0,.25)',
+        transition: 'transform .12s ease, box-shadow .12s ease',
+      }}
+      onMouseEnter={(e) => ((e.currentTarget as any).style.boxShadow = '0 12px 34px rgba(229,181,59,.45), inset 0 0 0 1px rgba(0,0,0,.2)')}
+      onMouseLeave={(e) => ((e.currentTarget as any).style.boxShadow = '0 10px 28px rgba(229,181,59,.35), inset 0 0 0 1px rgba(0,0,0,.18)')}
+      onMouseDown={(e) => ((e.currentTarget as any).style.transform = 'translateY(1px)')}
+      onMouseUp={(e) => ((e.currentTarget as any).style.transform = 'translateY(0)')}
+    >
+      {children}
+    </Link>
+  )
+}
+
 function RegistryShowcase() {
   const href = useLocaleHref()
   const { t } = useT()
-  const items: Array<{ styleId: PreviewStyle; ts: string; owner: string; title?: string }> = [
-    { styleId: 'romantic', ts: '2018-07-19', owner: 'Clara & Sam', title: 'Premier baiser' },
-    { styleId: 'birth', ts: '2023-03-02', owner: 'Nora & Mehdi', title: 'Bienvenue, Aïcha' },
-    { styleId: 'wedding', ts: '2024-07-20', owner: 'Inès & Hugo', title: 'Nos deux “oui”' },
-    { styleId: 'neutral', ts: '2011-11-11', owner: 'Anonyme', title: '11:11' },
+  const [entries, setEntries] = useState<PublicRegistryRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/registry?v=${Date.now()}`, { cache: 'no-store' })
+        if (!res.ok) throw new Error('HTTP ' + res.status)
+        const data: PublicRegistryRow[] = (await res.json()) || []
+        if (!cancelled) {
+          const random3 = shuffle(data).slice(0, 3)
+          setEntries(random3)
+          setLoading(false)
+        }
+      } catch {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Fallback ultra-léger si fetch KO
+  const fallback: PublicRegistryRow[] = [
+    { ts: '2018-07-19', owner: 'Clara & Sam', title: 'Premier baiser', message: null, style: 'romantic' },
+    { ts: '2023-03-02', owner: 'Nora & Mehdi', title: 'Bienvenue, Aïcha', message: null, style: 'birth' },
+    { ts: '2024-07-20', owner: 'Inès & Hugo', title: 'Nos deux “oui”', message: null, style: 'wedding' },
   ]
+
+  const list = entries.length ? entries : fallback
 
   return (
     <section id="registry" aria-labelledby="registry-title" style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -1244,25 +1414,51 @@ function RegistryShowcase() {
           {t('registry.paragraph')}
         </p>
 
+        {/* 3 vignettes A4 réelles */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
-          {items.map((it, i) => (
-            <div key={i} style={{ gridColumn: 'span 3' }}>
-              <CertificatePreview styleId={it.styleId} owner={it.owner} ts={it.ts} title={it.title} href={href('/explore')} compact />
+          {(loading ? Array.from({ length: 3 }) : list).map((it: any, i: number) => (
+            <div key={i} style={{ gridColumn: 'span 4' }}>
+              {loading ? (
+                <div
+                  style={{
+                    width: '100%',
+                    aspectRatio: '595/842',
+                    borderRadius: 'var(--radius-lg)',
+                    background:
+                      'linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.08), rgba(255,255,255,.04))',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 1.4s infinite',
+                    border: '1px solid var(--color-border)',
+                  }}
+                />
+              ) : (
+                <PublicCertThumb ts={it.ts} owner={it.owner} title={it.title} href={href('/explore')} />
+              )}
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems:'center', flexWrap:'wrap' }}>
-          <Button href={href('/explore')} variant="secondary" ariaLabel={t('registry.cta')}>
-            {t('registry.cta')} →
-          </Button>
+        {/* CTA + informations */}
+        <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <GoldCTA href={href('/explore')} ariaLabel={t('registry.cta')}>
+            ✨ {t('registry.cta')}
+          </GoldCTA>
           <Pill tone="success">{t('registry.moderation')}</Pill>
           <Pill>{t('registry.visibility')}</Pill>
         </div>
       </Container>
+
+      {/* shimmer keyframes */}
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 0% 0%; }
+          100% { background-position: -200% 0%; }
+        }
+      `}</style>
     </section>
   )
 }
+
 
 /* =========================================================
    WHAT YOU RECEIVE — Démos (version émotion) — UPDATED
