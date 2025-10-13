@@ -142,13 +142,21 @@ type ListingRow = {
   currency: string
   status: 'active' | 'sold' | 'canceled'
   seller_display_name: string | null
+  hide_claim_details: boolean
 }
-type MyListing = { id: string; ts: string; price_cents: number; currency: string; status: 'active'|'sold'|'canceled' }
+type MyListing = {
+  id: string
+  ts: string
+  price_cents: number
+  currency: string
+  status: 'active'|'sold'|'canceled'
+  hide_claim_details: boolean
+}
 
 async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
   try {
     const { rows } = await pool.query(
-      `select id, ts, price_cents, currency, status
+      `select id, ts, price_cents, currency, status, coalesce(hide_claim_details,false) as hide_claim_details
          from listings
         where seller_owner_id = $1
           and status = 'active'
@@ -160,7 +168,8 @@ async function readMyActiveListings(ownerId: string): Promise<MyListing[]> {
       ts: new Date(r.ts).toISOString(),
       price_cents: r.price_cents,
       currency: r.currency || 'EUR',
-      status: r.status
+      status: r.status,
+      hide_claim_details: !!r.hide_claim_details,
     }))
   } catch { return [] }
 }
@@ -168,7 +177,8 @@ async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
   try {
     const { rows } = await pool.query(
       `select l.id, l.ts, l.price_cents, l.currency, l.status,
-              o.display_name as seller_display_name
+              o.display_name as seller_display_name,
+              coalesce(l.hide_claim_details,false) as hide_claim_details
          from listings l
          join owners o on o.id = l.seller_owner_id
         where l.ts = $1::timestamptz
@@ -176,7 +186,15 @@ async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
         limit 1`,
       [tsISO]
     )
-    return rows[0] || null
+    return rows[0] ? {
+      id: String(rows[0].id),
+      ts: new Date(rows[0].ts).toISOString(),
+      price_cents: Number(rows[0].price_cents),
+      currency: rows[0].currency || 'EUR',
+      status: rows[0].status,
+      seller_display_name: rows[0].seller_display_name ?? null,
+      hide_claim_details: !!rows[0].hide_claim_details,
+    } : null
   } catch { return null }
 }
 
@@ -241,7 +259,6 @@ export default async function Page({
   }
 
   const myListingForThisDay = isOwner ? myListings.find(l => (ymdSafe(l.ts) === tsYMD)) : null
-
   const isPublic = await getPublicStateDb(tsISO!)
 
   // claim data
@@ -281,6 +298,8 @@ export default async function Page({
     redirect(`/${locale}/m/${encodeURIComponent(norm.tsYMD)}?reg=${next ? 'pub' : 'priv'}`)
   }
 
+  const isBlankForBuyer = (!isOwner && listing?.hide_claim_details) ? true : false
+
   return (
     <main
       style={{
@@ -312,7 +331,9 @@ export default async function Page({
         {/* Heading */}
         <header style={{ marginBottom: 16 }}>
           <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 40, lineHeight: '48px', margin: '0 0 6px' }}>
-            {locale==='fr' ? 'Merci ❤ Votre journée est réservée' : 'Thank you ❤ Your day is reserved'}
+            {isOwner
+              ? (locale==='fr' ? 'Merci ❤ Votre journée est réservée' : 'Thank you ❤ Your day is reserved')
+              : (locale==='fr' ? 'Journée en revente (Marketplace)' : 'Day listed for resale')}
           </h1>
           <p style={{ fontSize: 16, opacity: 0.9, margin: 0 }}>{niceTs}</p>
         </header>
@@ -321,77 +342,79 @@ export default async function Page({
         <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 18 }}>
           {/* Left column */}
           <div style={{ display:'grid', gap:18 }}>
-            {/* Certificate actions (ONLY TWO BUTTONS) */}
-            <div
-              style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 16,
-                padding: 18,
-                boxShadow: 'var(--shadow-elev1)',
-              }}
-            >
-              <div style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--color-muted)', marginBottom: 10 }}>
-                {locale==='fr' ? 'Votre certificat' : 'Your certificate'}
-              </div>
+            {/* Certificate actions (PDF / Invoice) */}
+            {!isBlankForBuyer && (
+              <div
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 16,
+                  padding: 18,
+                  boxShadow: 'var(--shadow-elev1)',
+                }}
+              >
+                <div style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--color-muted)', marginBottom: 10 }}>
+                  {locale==='fr' ? 'Votre certificat' : 'Your certificate'}
+                </div>
 
-              <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-                {/* PDF (certificat) */}
-                <a
-                  href={pdfHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: 'inline-flex',
-                    gap: 10,
-                    background: 'var(--color-primary)',
-                    color: 'var(--color-on-primary)',
-                    padding: '14px 18px',
-                    borderRadius: 12,
-                    fontWeight: 800,
-                    textDecoration: 'none',
-                    border: '1px solid transparent',
-                  }}
-                >
-                  {locale==='fr' ? 'PDF (certificat)' : 'PDF (certificate)'}
-                </a>
-
-                {/* Facture / Reçu (owner only) */}
-                {isOwner && (
+                <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+                  {/* PDF (certificat) — visible au propriétaire et aux acheteurs potentiels seulement si le vendeur ne masque pas */}
                   <a
-                    href={invoiceHref}
+                    href={pdfHref}
                     target="_blank"
                     rel="noreferrer"
                     style={{
                       display: 'inline-flex',
                       gap: 10,
-                      background: 'var(--color-surface)',
-                      color: 'var(--color-text)',
-                      padding: '12px 16px',
+                      background: 'var(--color-primary)',
+                      color: 'var(--color-on-primary)',
+                      padding: '14px 18px',
                       borderRadius: 12,
                       fontWeight: 800,
                       textDecoration: 'none',
-                      border: '1px solid var(--color-border)',
+                      border: '1px solid transparent',
                     }}
                   >
-                    {locale==='fr' ? 'Facture' : 'Invoice'}
+                    {locale==='fr' ? 'PDF (certificat)' : 'PDF (certificate)'}
                   </a>
+
+                  {/* Facture / Reçu (owner only) */}
+                  {isOwner && (
+                    <a
+                      href={invoiceHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        gap: 10,
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text)',
+                        padding: '12px 16px',
+                        borderRadius: 12,
+                        fontWeight: 800,
+                        textDecoration: 'none',
+                        border: '1px solid var(--color-border)',
+                      }}
+                    >
+                      {locale==='fr' ? 'Facture' : 'Invoice'}
+                    </a>
+                  )}
+                </div>
+
+                <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--color-muted)' }}>
+                  {locale==='fr'
+                    ? 'Le PDF est aussi envoyé par e-mail (vérifiez vos indésirables).'
+                    : 'The PDF is also sent by email (check your spam).'}
+                </p>
+                {isOwner && (
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
+                    {locale==='fr'
+                      ? 'La facture reflète le montant réellement payé (29 € ou prix Marketplace).'
+                      : 'The invoice reflects the amount actually paid (€29 or marketplace price).'}
+                  </p>
                 )}
               </div>
-
-              <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--color-muted)' }}>
-                {locale==='fr'
-                  ? 'Le PDF est aussi envoyé par e-mail (vérifiez vos indésirables).'
-                  : 'The PDF is also sent by email (check your spam).'}
-              </p>
-              {isOwner && (
-                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-muted)' }}>
-                  {locale==='fr'
-                    ? 'La facture reflète le montant réellement payé (29 € ou prix Marketplace).'
-                    : 'The invoice reflects the amount actually paid (€29 or marketplace price).'}
-                </p>
-              )}
-            </div>
+            )}
 
             {/* Marketplace — SELL (owner) */}
             {isOwner && canSell && (
@@ -402,38 +425,81 @@ export default async function Page({
                 <form method="post" action="/api/marketplace/listing">
                   <input type="hidden" name="ts" value={tsYMD!} />
                   <input type="hidden" name="locale" value={locale} />
-                  <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
-                    <label style={{display:'flex', alignItems:'center', gap:8}}>
-                      <span style={{opacity:.85}}>{locale==='fr' ? 'Prix (€)' : 'Price (€)'}</span>
-                      <input name="price" type="number" min={1} step={1} required
-                             style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
-                    </label>
+                  <div style={{display:'grid', gap:12}}>
+                    <div style={{display:'flex', gap:16, alignItems:'center', flexWrap:'wrap'}}>
+                      <label style={{display:'flex', alignItems:'center', gap:8}}>
+                        <span style={{opacity:.85}}>{locale==='fr' ? 'Prix (€)' : 'Price (€)'}</span>
+                        <input name="price" type="number" min={1} step={1} required
+                               style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
+                      </label>
+                    </div>
+
+                    {/* Display mode: full vs blank */}
+                    <fieldset style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12}}>
+                      <legend style={{padding:'0 6px', fontSize:12, color:'var(--color-muted)'}}>
+                        {locale==='fr' ? 'Affichage sur la marketplace' : 'Marketplace display'}
+                      </legend>
+                      <div style={{display:'grid', gap:10}}>
+                        <label style={{display:'flex', gap:10, alignItems:'flex-start'}}>
+                          <input type="radio" name="display_mode" value="full" defaultChecked />
+                          <span>
+                            <strong>{locale==='fr' ? 'Afficher les infos du certificat' : 'Show certificate details'}</strong><br/>
+                            <small style={{opacity:.8}}>
+                              {locale==='fr'
+                                ? 'Nom, titre et message visibles (date en jaune).'
+                                : 'Name, title and message visible (yellow date).'}
+                            </small>
+                          </span>
+                        </label>
+                        <label style={{display:'flex', gap:10, alignItems:'flex-start'}}>
+                          <input type="radio" name="display_mode" value="blank" />
+                          <span>
+                            <strong>{locale==='fr' ? 'Annonce “vierge”' : 'Blank listing'}</strong><br/>
+                            <small style={{opacity:.8}}>
+                              {locale==='fr'
+                                ? 'Affichage comme une date disponible (anonyme), mais en jaune + votre prix.'
+                                : 'Shown like an available (anonymous) day, but in yellow + your price.'}
+                            </small>
+                          </span>
+                        </label>
+                      </div>
+                    </fieldset>
 
                     <div style={{display:'grid', gap:6, fontSize:12}}>
                       <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                         <input type="checkbox" name="seller_terms" required />
-                        <span>J’accepte les <a href={`/${locale}/legal/seller`} style={{color:'var(--color-text)'}}>Conditions Vendeur</a> (commission 15% min 1 €) et les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a>.</span>
+                        <span>
+                          {locale==='fr'
+                            ? <>J’accepte les <a href={`/${locale}/legal/seller`} style={{color:'var(--color-text)'}}>Conditions Vendeur</a> (commission 15% min 1 €) et les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a>.</>
+                            : <>I accept the <a href={`/${locale}/legal/seller`} style={{color:'var(--color-text)'}}>Seller Terms</a> (15% fee min €1) and the <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>Terms</a>.</>}
+                        </span>
                       </label>
                       <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                         <input type="checkbox" name="seller_rights" required />
-                        <span>Je certifie être l’unique titulaire des droits nécessaires et déclare les revenus conformément à la réglementation fiscale applicable.</span>
+                        <span>
+                          {locale==='fr'
+                            ? 'Je certifie être l’unique titulaire des droits nécessaires et déclare les revenus conformément à la réglementation fiscale applicable.'
+                            : 'I certify I hold all necessary rights and will declare any income as required by applicable tax law.'}
+                        </span>
                       </label>
                     </div>
 
-                    <button type="submit"
-                      style={{padding:'12px 14px', borderRadius:12, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}
-                    >{locale==='fr' ? 'Mettre en vente' : 'List for sale'}</button>
+                    <div>
+                      <button type="submit"
+                        style={{padding:'12px 14px', borderRadius:12, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}
+                      >{locale==='fr' ? 'Mettre en vente' : 'List for sale'}</button>
+                    </div>
                   </div>
                   <p style={{fontSize:12, opacity:.7, marginTop:8}}>
                     {locale==='fr'
-                      ? 'Commission 10% (min 1 €) lors de la vente.'
-                      : '10% commission (min €1) at sale time.'}
+                      ? 'Commission 15% (min 1 €) lors de la vente.'
+                      : '15% fee (min €1) at sale time.'}
                   </p>
                 </form>
               </section>
             )}
 
-            {/* Nudges / status … (inchangé) */}
+            {/* Nudges / status */}
             {isOwner && !merchant?.stripe_account_id && (
               <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
@@ -484,8 +550,13 @@ export default async function Page({
                   {locale==='fr' ? 'Annonce active' : 'Active listing'}
                 </div>
                 <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap'}}>
-                  <div style={{fontSize:16}}>
+                  <div style={{fontSize:16, display:'flex', alignItems:'center', gap:10}}>
                     {(myListingForThisDay.price_cents/100).toFixed(0)} € — statut : <strong>active</strong>
+                    {myListingForThisDay.hide_claim_details && (
+                      <span style={{fontSize:12, padding:'2px 8px', borderRadius:999, border:'1px solid var(--color-border)'}}>
+                        {locale==='fr' ? 'Vierge' : 'Blank'}
+                      </span>
+                    )}
                   </div>
                   <form method="post" action={`/api/marketplace/listing/${myListingForThisDay.id}/status`}>
                     <input type="hidden" name="status" value="canceled" />
@@ -503,41 +574,115 @@ export default async function Page({
 
             {/* Buyer: active public listing */}
             {!isOwner && listing && (
-              <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                  <div>
-                    <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>{locale==='fr'?'Annonce':'Listing'}</div>
-                    <div style={{fontSize:18, fontWeight:800, marginTop:4}}>
-                      {listing.price_cents/100} € — {listing.seller_display_name || (locale==='fr'?'Vendeur':'Seller')}
+              <>
+                {/* “Blank” rendering: anonymous, like an available day but in yellow + price */}
+                {listing.hide_claim_details ? (
+                  <section
+                    style={{
+                      border:'1px solid #3b3200',
+                      background: 'linear-gradient(0deg, rgba(228,183,61,0.08), rgba(228,183,61,0.08))',
+                      borderRadius:16,
+                      padding:16
+                    }}
+                  >
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                      <div>
+                        <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>
+                          {locale==='fr'?'Annonce (anonyme)':'Listing (anonymous)'}
+                        </div>
+                        <div style={{display:'flex', alignItems:'center', gap:8, marginTop:6}}>
+                          <span style={{fontSize:18, fontWeight:800, color:'var(--color-primary)'}}>
+                            {niceTs}
+                          </span>
+                          <span style={{fontSize:12, padding:'2px 8px', borderRadius:999, border:'1px solid var(--color-border)'}}>
+                            {locale==='fr'?'Vierge':'Blank'}
+                          </span>
+                        </div>
+                        <div style={{marginTop:6, fontWeight:700}}>
+                          {(listing.price_cents/100).toFixed(0)} € 
+                        </div>
+                      </div>
+
+                      <form method="post" action="/api/marketplace/checkout" style={{display:'grid', gap:10}}>
+                        <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end'}}>
+                          <input type="hidden" name="listing_id" value={String(listing.id)} />
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="email" required name="buyer_email" placeholder={locale==='fr'?'vous@exemple.com':'you@example.com'}
+                            style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
+                          <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
+                            {locale==='fr' ? 'Acheter' : 'Buy'}
+                          </button>
+                        </div>
+                        <div style={{display:'grid', gap:6, fontSize:12}}>
+                          <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                            <input type="checkbox" name="accept_terms" required />
+                            <span>
+                              {locale==='fr'
+                                ? <>J’accepte les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et j’ai lu la <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Politique de confidentialité</a>.</>
+                                : <>I accept the <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>Terms</a> and have read the <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Privacy Policy</a>.</>}
+                            </span>
+                          </label>
+                          <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                            <input type="checkbox" name="withdrawal_waiver" required />
+                            <span>
+                              {locale==='fr'
+                                ? <>Je demande l’<strong>exécution immédiate</strong> et <strong>renonce</strong> à mon droit de rétractation (contenu numérique).</>
+                                : <>I request <strong>immediate performance</strong> and <strong>waive</strong> my right of withdrawal (digital content).</>}
+                            </span>
+                          </label>
+                          <small style={{opacity:.75}}>
+                            {locale==='fr'
+                              ? 'Le vendeur est l’auteur du certificat ; Parcels of Time opère la plateforme et l’encaissement via Stripe Connect.'
+                              : 'The seller is the author of the certificate; Parcels of Time operates the platform and payment via Stripe Connect.'}
+                          </small>
+                        </div>
+                      </form>
                     </div>
-                  </div>
-                  <form method="post" action="/api/marketplace/checkout" style={{display:'grid', gap:10}}>
-                    <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
-                      <input type="hidden" name="listing_id" value={String(listing.id)} />
-                      <input type="hidden" name="locale" value={locale} />
-                      <input type="email" required name="buyer_email" placeholder="vous@exemple.com"
-                        style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
-                      <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
-                        {locale==='fr' ? 'Acheter' : 'Buy'}
-                      </button>
+                    <p style={{fontSize:12, opacity:.7, marginTop:8}}>
+                      {locale==='fr'
+                        ? 'Affichage anonymisé par le vendeur. Paiement sécurisé Stripe.'
+                        : 'Display anonymized by the seller. Secure Stripe checkout.'}
+                    </p>
+                  </section>
+                ) : (
+                  // Full details (current behavior)
+                  <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                      <div>
+                        <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)'}}>{locale==='fr'?'Annonce':'Listing'}</div>
+                        <div style={{fontSize:18, fontWeight:800, marginTop:4}}>
+                          {listing.price_cents/100} € — {listing.seller_display_name || (locale==='fr'?'Vendeur':'Seller')}
+                        </div>
+                      </div>
+                      <form method="post" action="/api/marketplace/checkout" style={{display:'grid', gap:10}}>
+                        <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+                          <input type="hidden" name="listing_id" value={String(listing.id)} />
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="email" required name="buyer_email" placeholder={locale==='fr'?'vous@exemple.com':'you@example.com'}
+                            style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
+                          <button style={{padding:'12px 14px', borderRadius:12, border:'none', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}>
+                            {locale==='fr' ? 'Acheter' : 'Buy'}
+                          </button>
+                        </div>
+                        <div style={{display:'grid', gap:6, fontSize:12}}>
+                          <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                            <input type="checkbox" name="accept_terms" required />
+                            <span>J’accepte les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et j’ai lu la <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Politique de confidentialité</a>.</span>
+                          </label>
+                          <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                            <input type="checkbox" name="withdrawal_waiver" required />
+                            <span>Je demande l’<strong>exécution immédiate</strong> et <strong>renonce</strong> à mon droit de rétractation (contenu numérique).</span>
+                          </label>
+                          <small style={{opacity:.75}}>
+                            Le vendeur est l’auteur du certificat ; Parcels of Time opère la plateforme et l’encaissement via Stripe Connect.
+                          </small>
+                        </div>
+                      </form>
                     </div>
-                    <div style={{display:'grid', gap:6, fontSize:12}}>
-                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                        <input type="checkbox" name="accept_terms" required />
-                        <span>J’accepte les <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>CGU/CGV</a> et j’ai lu la <a href={`/${locale}/legal/privacy`} style={{color:'var(--color-text)'}}>Politique de confidentialité</a>.</span>
-                      </label>
-                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                        <input type="checkbox" name="withdrawal_waiver" required />
-                        <span>Je demande l’<strong>exécution immédiate</strong> et <strong>renonce</strong> à mon droit de rétractation (contenu numérique).</span>
-                      </label>
-                      <small style={{opacity:.75}}>
-                        Le vendeur est l’auteur du certificat ; Parcels of Time opère la plateforme et l’encaissement via Stripe Connect.
-                      </small>
-                    </div>
-                  </form>
-                </div>
-                <p style={{fontSize:12, opacity:.7, marginTop:8}}>{locale==='fr'?'Paiement sécurisé Stripe. PDF transmis au nouvel acquéreur.':'Secure Stripe checkout. PDF transferred to the buyer.'}</p>
-              </section>
+                    <p style={{fontSize:12, opacity:.7, marginTop:8}}>{locale==='fr'?'Paiement sécurisé Stripe. PDF transmis au nouvel acquéreur.':'Secure Stripe checkout. PDF transferred to the buyer.'}</p>
+                  </section>
+                )}
+              </>
             )}
 
             {/* Public registry */}
@@ -587,7 +732,7 @@ export default async function Page({
             </aside>
           </div>
 
-          {/* Right column — PDF preview (sans boutons) */}
+          {/* Right column — PDF preview (masked for blank listings) */}
           <aside
             aria-label="Aperçu du certificat (PDF)"
             style={{
@@ -600,19 +745,32 @@ export default async function Page({
               boxShadow:'var(--shadow-elev1)'
             }}
           >
-            <div style={{width:'100%', aspectRatio:'595.28/841.89', border:'1px solid var(--color-border)', borderRadius:12, overflow:'hidden'}}>
-              <object
-                data={pdfHref}
-                type="application/pdf"
-                aria-label="Prévisualisation PDF du certificat"
-                style={{ width:'100%', height:'100%', border:'none' }}
-              >
-                <div style={{padding:12, fontSize:14}}>
-                  {locale==='fr'
-                    ? <>Votre navigateur ne peut pas afficher le PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Ouvrir le PDF dans un nouvel onglet</a>.</>
-                    : <>Your browser cannot display the PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Open the PDF in a new tab</a>.</>}
+            <div style={{width:'100%', aspectRatio:'595.28/841.89', border:'1px solid var(--color-border)', borderRadius:12, overflow:'hidden', display:'grid', placeItems:'center'}}>
+              {isBlankForBuyer ? (
+                <div style={{padding:16, textAlign:'center'}}>
+                  <div style={{fontWeight:800, marginBottom:6}}>
+                    {locale==='fr' ? 'Prévisualisation masquée' : 'Preview hidden'}
+                  </div>
+                  <div style={{fontSize:13, color:'var(--color-muted)'}}>
+                    {locale==='fr'
+                      ? 'Le vendeur a choisi une annonce “vierge”. Les informations du certificat sont masquées jusqu’à l’achat.'
+                      : 'The seller chose a “blank” listing. Certificate details are hidden until purchase.'}
+                  </div>
                 </div>
-              </object>
+              ) : (
+                <object
+                  data={pdfHref}
+                  type="application/pdf"
+                  aria-label="Prévisualisation PDF du certificat"
+                  style={{ width:'100%', height:'100%', border:'none' }}
+                >
+                  <div style={{padding:12, fontSize:14}}>
+                    {locale==='fr'
+                      ? <>Votre navigateur ne peut pas afficher le PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Ouvrir le PDF dans un nouvel onglet</a>.</>
+                      : <>Your browser cannot display the PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Open the PDF in a new tab</a>.</>}
+                  </div>
+                </object>
+              )}
             </div>
           </aside>
         </div>
@@ -643,7 +801,7 @@ export default async function Page({
           )}
         </aside>
 
-        {/* Edition + Danger zone (inchangés) */}
+        {/* Edition + Danger zone */}
         <section style={{ marginTop: 24 }}>
           <details style={{ border: '1px solid var(--color-border)', borderRadius: 12, background: 'var(--color-surface)' }}>
             <summary
