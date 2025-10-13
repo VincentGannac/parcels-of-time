@@ -1268,9 +1268,7 @@ function PublicCertThumb({
           }
         })()
 
-  const pdfSrc = `/api/ccert/${encodeURIComponent(
-    day
-  )}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+  const pdfSrc = `/api/cert/${encodeURIComponent(day)}?public=1&hide_meta=1#view=FitH&toolbar=0&navpanes=0&scrollbar=0`
 
   return (
     <a href={href} aria-label={`Voir le certificat du ${day}`} style={{ textDecoration: 'none', color: 'inherit' }}>
