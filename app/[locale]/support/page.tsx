@@ -1,4 +1,4 @@
-// app/[locale]/legal/registry-guidelines/page.tsx
+//app/[locale]/support/page.tsx
 import type { CSSProperties } from 'react'
 
 export const runtime = 'nodejs'

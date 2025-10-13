@@ -809,10 +809,24 @@ useEffect(() => {
   useEffect(() => { if (!needsCustomImageConsent) setAcceptCustomImageRules(false) }, [needsCustomImageConsent])
   useEffect(() => { if (!needsPublicContentConsent) setAcceptPublicContentRules(false) }, [needsPublicContentConsent])
 
-  const moderationConsentText = isFR
-    ? "Je certifie que les contenus rendus publics (titre, message, lien et, le cas échéant, image) respectent notre charte : pas de violence ou cruauté gratuites ; pas d’incitation à la haine, harcèlement ou discrimination ; pas de nudité explicite ni de contenu sexuel, en particulier impliquant des mineurs ; pas de promotion d’activités illégales ; pas de données personnelles sensibles ni d’informations identifiantes de tiers sans leur accord ; et pas d’atteinte aux droits de tiers (copyright, marques, vie privée). Je comprends que la publication est soumise à modération et peut être retirée."
-    : "I certify that publicly displayed content (title, message, link and, where applicable, image) complies with our guidelines: no gratuitous violence or cruelty; no hate speech, harassment or discrimination; no explicit nudity or sexual content—especially involving minors; no promotion of illegal activities; no sensitive personal data or identifying information about third parties without consent; and no infringement of others’ rights (copyright, trademarks, privacy). I understand the publication is moderated and may be removed."
-
+    const moderationConsentText: React.ReactNode = isFR ? (
+      <>
+        Je confirme que mon contenu public respecte notre{" "}
+        <a href={`/${loc}/support`} style={{ color: 'var(--color-text)' }}>
+          charte de modération
+        </a>
+        . Publication modérée ; contenu susceptible d’être retiré.
+      </>
+    ) : (
+      <>
+        I confirm my public content follows our{" "}
+        <a href={`/${loc}/support`} style={{ color: 'var(--color-text)' }}>
+          moderation guidelines
+        </a>
+        . Publication is moderated and content may be removed.
+      </>
+    )
+    
   // ====== Conversions images (HEIC/TIFF/etc.) ======
   async function heicToPngIfNeeded(original: File): Promise<{file: File, wasHeic:boolean}> {
     const type = (original.type || '').toLowerCase()

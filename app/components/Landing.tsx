@@ -1441,7 +1441,7 @@ function RegistryShowcase() {
         {/* CTA + informations */}
         <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
           <GoldCTA href={href('/explore')} ariaLabel={t('registry.cta')}>
-            ✨ {t('registry.cta')}
+             {t('registry.cta')}
           </GoldCTA>
           <Pill tone="success">{t('registry.moderation')}</Pill>
           <Pill>{t('registry.visibility')}</Pill>
