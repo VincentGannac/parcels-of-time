@@ -1,3 +1,4 @@
+//app/[locale]/claim/clientclaim.tsx
 'use client'
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -376,20 +377,20 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
 
   useEffect(() => {
     let cancelled = false
-    // 🧽 FIX: on nettoie le loader dès qu'on change de Y/M/D
-    setIsLoadingClaim(false)
   
-    setActiveListing(null)            // reset immédiat pour éviter l'ancien rendu
+    // ⚠️ reset immédiat du rendu claim le temps de (re)charger
+    setIsLoadingClaim(false)
+    setActiveListing(null)
     setListingForYMD(ymdSelected)
   
-    const iso = `${ymdSelected}T00:00:00.000Z`
+    // ✅ on passe YMD nu (YYYY-MM-DD) – plus robuste côté API
     ;(async () => {
       try {
-        const res = await fetch(`/api/marketplace/by-ts/${encodeURIComponent(iso)}`, { cache:'no-store' })
+        const res = await fetch(`/api/marketplace/by-ts/${encodeURIComponent(ymdSelected)}`, { cache:'no-store' })
         const j = await res.json()
-        const ret = j?.listing
-        if (!cancelled && ret && ymd(ret.ts) === ymdSelected) {
-          setActiveListing(ret)
+        if (!cancelled) {
+          // ✅ ne PAS re-filtrer par ymd(ret.ts) — certaines horodatations décalent le jour
+          setActiveListing(j?.listing || null)
         }
       } catch {
         if (!cancelled) setActiveListing(null)
@@ -398,6 +399,7 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   
     return () => { cancelled = true }
   }, [ymdSelected])
+  
   
 
   // util
@@ -634,10 +636,10 @@ useEffect(() => {
   if (!activeListing) { setIsLoadingClaim(false); return }
 
   // 🔹 Mode “vierge” → purge + pas de preview → pas de loader
-  if (activeListing.hide_claim_details) {
+  if (activeListing?.hide_claim_details) {
     setIsLoadingClaim(false)
     lastPrefilledYmdRef.current = null
-    setIsGift(false)
+
     setForm(f => ({
       ...f,
       display_name: '',
@@ -649,14 +651,23 @@ useEffect(() => {
       text_color: '#1A1F2A',
     }))
     setCustomBg(null)
-    setShow({ ownedBy: true, title: true, message: true, attestation: true, giftedBy: true })
-    return
-  }
+    setShow(s => ({
+    ...s,
+    ownedBy: true,
+    title: true,
+    message: true,
+    attestation: true,
+    giftedBy: isGift ? true : false,
+  }))
+
+  return
+}
 
   // Listing classique : on hydrate avec la preview du claim
   const ysel = ymdSelected
   if (lastPrefilledYmdRef.current === ysel) return
   lastPrefilledYmdRef.current = ysel
+
 
   let cancelled = false
   setIsLoadingClaim(true)
@@ -679,9 +690,16 @@ useEffect(() => {
       const nextColor = (c.text_color && /^#[0-9a-f]{6}$/i.test(c.text_color)) ? c.text_color : '#1A1F2A'
 
       // Fond custom s’il existe dans la preview
-      const bgUrl = c.custom_bg_data_url || c.custom_bg_url || c.bg_url || c.background_url || ''
+      const bgUrl =
+        j?.custom_bg_data_url // ✅ la preview renvoie souvent l’image ici (niveau racine)
+        || c?.custom_bg_data_url
+        || c?.custom_bg_url
+        || c?.bg_url
+        || c?.background_url
+        || ''
+
       if (nextStyle === 'custom' && bgUrl) {
-        // dimensions A4 par défaut pour la preview
+        // dimensions A4 pour la preview
         setCustomBg({ url: bgUrl, dataUrl: bgUrl, w: 2480, h: 3508 })
       } else {
         setCustomBg(null)
