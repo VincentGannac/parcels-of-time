@@ -358,6 +358,40 @@ export default async function Page({
       }}
     >
       <section style={{maxWidth: 1100, margin: '0 auto', padding: '32px 20px'}}>
+        {/* Local styles for the collapsible */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+            details[data-merchant-accordion]{
+              border:1px solid var(--color-border);
+              border-radius:12px;
+              background:rgba(255,255,255,.02);
+            }
+            details[data-merchant-accordion] > summary{
+              list-style:none;
+              cursor:pointer;
+              padding:10px 12px;
+              display:flex;
+              align-items:center;
+              gap:10px;
+              user-select:none;
+            }
+            details[data-merchant-accordion] > summary::-webkit-details-marker{ display:none; }
+            details[data-merchant-accordion] [data-chevron]{
+              transition: transform .18s ease;
+              font-size:14px;
+              opacity:.8;
+            }
+            details[data-merchant-accordion][open] [data-chevron]{ transform: rotate(90deg); }
+            details[data-merchant-accordion] .content{
+              padding:12px;
+              border-top:1px solid var(--color-border);
+              display:grid;
+              gap:12px;
+            }`
+          }}
+        />
+
         {/* Header */}
         <header style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 18}}>
           <a href={`/${locale}`} style={{textDecoration:'none', color:'var(--color-text)', opacity:.85}}>{t.back}</a>
@@ -391,173 +425,185 @@ export default async function Page({
         <div style={{display:'grid', gridTemplateColumns:'1fr', gap:18, marginTop:18}}>
 
           {/* Merchant card */}
-          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding:16, display:'grid', gap:14}}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10}}>
-              <h2 style={{fontSize:18, margin:0}}>
-                {t.merchantTitle}{hasMerchant && merchantKindLabel}
-              </h2>
-              {hasMerchant ? (
-                <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <StatusPill ok={isReady} label={isReady ? t.ready : t.needsCompletion} />
-                  <StatusPill ok={chargesOk} label={`${t.charges}: ${chargesOk ? 'ON' : 'OFF'}`} />
-                  <StatusPill ok={payoutsOk} label={`${t.payouts}: ${payoutsOk ? 'ON' : 'OFF'}`} />
-                </div>
-              ) : null}
-            </div>
-
-            {!hasMerchant && (
-              <div style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)', lineHeight:1.5}}>
-                {t.introNoMerchant}
-              </div>
-            )}
-
-            {hasMerchant && merchantKind === 'individual' && (
-              <div style={{background:'rgba(255,235,186,.08)', border:'1px solid rgba(245,227,161,.26)', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.35}}>
-                {t.individualNotice}
-              </div>
-            )}
-
-            {hasMerchant && (
-              <div style={{display:'grid', gap:6, border:'1px solid var(--color-border)', borderRadius:10, padding:12, background:'rgba(255,255,255,.02)'}}>
-                <div style={{display:'grid', gap:4, fontSize:14}}>
-                  <div>{t.stripeLabel}: <code>{merchant!.stripe_account_id}</code></div>
-                  <div style={{opacity:.85}}>
-                    {t.charges}: <strong>{chargesOk ? '✅' : '❌'}</strong> — {t.payouts}: <strong>{payoutsOk ? '✅' : '❌'}</strong>
+          <section style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:12, padding: hasMerchant ? 16 : 8, display:'grid', gap: hasMerchant ? 14 : 8}}>
+            {hasMerchant ? (
+              <>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:10}}>
+                  <h2 style={{fontSize:18, margin:0}}>
+                    {t.merchantTitle}{hasMerchant && merchantKindLabel}
+                  </h2>
+                  <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+                    <StatusPill ok={isReady} label={isReady ? t.ready : t.needsCompletion} />
+                    <StatusPill ok={chargesOk} label={`${t.charges}: ${chargesOk ? 'ON' : 'OFF'}`} />
+                    <StatusPill ok={payoutsOk} label={`${t.payouts}: ${payoutsOk ? 'ON' : 'OFF'}`} />
                   </div>
-                  {due.length > 0 && (
-                    <div style={{fontSize:13, color:'#ffb2b2'}}>
-                      {t.requiredInfo}: {due.join(', ')}
-                    </div>
-                  )}
                 </div>
-                <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:6}}>
-                  {!isReady && (
-                    <form method="post" action="/api/connect/sync">
-                      <button style={{padding:'8px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>
-                        {t.refresh}
+
+                {merchantKind === 'individual' && (
+                  <div style={{background:'rgba(255,235,186,.08)', border:'1px solid rgba(245,227,161,.26)', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.35}}>
+                    {t.individualNotice}
+                  </div>
+                )}
+
+                <div style={{display:'grid', gap:6, border:'1px solid var(--color-border)', borderRadius:10, padding:12, background:'rgba(255,255,255,.02)'}}>
+                  <div style={{display:'grid', gap:4, fontSize:14}}>
+                    <div>{t.stripeLabel}: <code>{merchant!.stripe_account_id}</code></div>
+                    <div style={{opacity:.85}}>
+                      {t.charges}: <strong>{chargesOk ? '✅' : '❌'}</strong> — {t.payouts}: <strong>{payoutsOk ? '✅' : '❌'}</strong>
+                    </div>
+                    {due.length > 0 && (
+                      <div style={{fontSize:13, color:'#ffb2b2'}}>
+                        {t.requiredInfo}: {due.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{display:'flex', gap:8, flexWrap:'wrap', marginTop:6}}>
+                    {!isReady && (
+                      <form method="post" action="/api/connect/sync">
+                        <button style={{padding:'8px 12px', borderRadius:10, border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text)'}}>
+                          {t.refresh}
+                        </button>
+                      </form>
+                    )}
+                    {isReady && (
+                      <a
+                        href={`/api/connect/dashboard`}
+                        style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}
+                      >
+                        {t.openStripe}
+                      </a>
+                    )}
+                  </div>
+
+                  {isReady && merchantKind === 'individual' && (
+                    <form method="post" action="/api/connect/onboard" style={{marginTop:6}}>
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="seller_kind" value="company" />
+                      <button
+                        type="submit"
+                        style={{background:'transparent', border:'none', color:'var(--color-text)', opacity:.8, textDecoration:'underline', cursor:'pointer', fontSize:12}}
+                      >
+                        {t.switchBusiness}
                       </button>
                     </form>
                   )}
-                  {isReady && (
-                    <a
-                      href={`/api/connect/dashboard`}
-                      style={{textDecoration:'none', padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}
-                    >
-                      {t.openStripe}
-                    </a>
-                  )}
                 </div>
 
-                {isReady && merchantKind === 'individual' && (
-                  <form method="post" action="/api/connect/onboard" style={{marginTop:6}}>
+                <div style={{background:'rgba(255,255,255,.03)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px', fontSize:12, lineHeight:1.35}}>
+                  {t.platformTransparency}
+                </div>
+              </>
+            ) : (
+              // No merchant yet → compact, collapsible (menu dépliant)
+              <details data-merchant-accordion>
+                <summary>
+                  <span data-chevron>▸</span>
+                  <strong style={{fontSize:16}}>{t.merchantTitle}</strong>
+                  <span style={{opacity:.75}}> — {t.needsCompletion}</span>
+                  <span style={{marginLeft:'auto', fontSize:12, opacity:.85}}>{t.createMerchant}</span>
+                </summary>
+
+                <div className="content" aria-live="polite">
+                  <div style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12, background:'rgba(255,255,255,.02)', lineHeight:1.5}}>
+                    {t.introNoMerchant}
+                  </div>
+
+                  <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}} data-merchant-form>
                     <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="seller_kind" value="company" />
-                    <button
-                      type="submit"
-                      style={{background:'transparent', border:'none', color:'var(--color-text)', opacity:.8, textDecoration:'underline', cursor:'pointer', fontSize:12}}
-                    >
-                      {t.switchBusiness}
-                    </button>
+
+                    <fieldset style={{border:'1px solid var(--color-border)', borderRadius:10, padding:12}}>
+                      <legend style={{padding:'0 6px'}}>
+                        {t.sellAsLegend}
+                      </legend>
+
+                      <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'center'}}>
+                        <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                          <input type="radio" name="seller_kind" value="individual" required />
+                          {t.indiv}
+                        </label>
+                        <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
+                          <input type="radio" name="seller_kind" value="company" />
+                          {t.comp}
+                        </label>
+                      </div>
+
+                      <div style={{marginTop:8, fontSize:12, lineHeight:1.45}}>
+                        <div id="hint-individual" style={{display:'none', opacity:.9}}>
+                          {t.hintIndiv}
+                        </div>
+                        <div id="hint-company" style={{display:'none', opacity:.9}}>
+                          {t.hintComp}
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <div style={{display:'grid', gap:8, fontSize:12, marginTop:4}}>
+                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                        <input type="checkbox" name="accept_seller_terms" required />
+                        <span>{t.sellerTerms}</span>
+                      </label>
+                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                        <input type="checkbox" name="confirm_age" required />
+                        <span>{t.ageConfirm}</span>
+                      </label>
+                      <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
+                        <input type="checkbox" name="confirm_rights" required />
+                        <span>{t.rightsConfirm}</span>
+                      </label>
+                      <small style={{opacity:.75}}>
+                        {t.kycNote}
+                      </small>
+                    </div>
+
+                    <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+                      <button
+                        data-merchant-submit
+                        style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800}}
+                      >
+                        {t.createMerchant}
+                      </button>
+                    </div>
+
+                    <script
+                      dangerouslySetInnerHTML={{
+                        __html: `
+    (function(){
+      try {
+        var form = document.querySelector('[data-merchant-form]');
+        if(!form) return;
+        var radios = form.querySelectorAll('input[name="seller_kind"]');
+        var hintInd = form.querySelector('#hint-individual');
+        var hintPro = form.querySelector('#hint-company');
+        var submit = form.querySelector('[data-merchant-submit]');
+        var checks = form.querySelectorAll('input[type="checkbox"][required]');
+        function update(){
+          var val = '';
+          radios.forEach(function(r){ if(r.checked) val = r.value; });
+          if(hintInd) hintInd.style.display = (val==='individual') ? 'block' : 'none';
+          if(hintPro) hintPro.style.display = (val==='company') ? 'block' : 'none';
+          var okRadio = !!val;
+          var okChecks = true; checks.forEach(function(c){ if(!c.checked) okChecks=false; });
+          if(submit){
+            submit.disabled = !(okRadio && okChecks);
+            submit.style.opacity = submit.disabled ? '.6' : '1';
+            submit.style.cursor = submit.disabled ? 'not-allowed' : 'pointer';
+          }
+        }
+        radios.forEach(function(r){ r.addEventListener('change', update); });
+        checks.forEach(function(c){ c.addEventListener('change', update); });
+        update();
+      } catch(_) {}
+    })();
+    `}}
+                    />
                   </form>
-                )}
-              </div>
-            )}
 
-            {!hasMerchant && (
-              <form method="post" action="/api/connect/onboard" style={{display:'grid', gap:10}} data-merchant-form>
-                <input type="hidden" name="locale" value={locale} />
-
-                <fieldset style={{border:'1px solid var(--color-border)', borderRadius:10, padding:12}}>
-                  <legend style={{padding:'0 6px'}}>
-                    {t.sellAsLegend}
-                  </legend>
-
-                  <div style={{display:'flex', gap:12, flexWrap:'wrap', alignItems:'center'}}>
-                    <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                      <input type="radio" name="seller_kind" value="individual" required />
-                      {t.indiv}
-                    </label>
-                    <label style={{display:'inline-flex', alignItems:'center', gap:8}}>
-                      <input type="radio" name="seller_kind" value="company" />
-                      {t.comp}
-                    </label>
+                  <div style={{background:'rgba(255,255,255,.03)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px', fontSize:12, lineHeight:1.35}}>
+                    {t.platformTransparency}
                   </div>
-
-                  <div style={{marginTop:8, fontSize:12, lineHeight:1.45}}>
-                    <div id="hint-individual" style={{display:'none', opacity:.9}}>
-                      {t.hintIndiv}
-                    </div>
-                    <div id="hint-company" style={{display:'none', opacity:.9}}>
-                      {t.hintComp}
-                    </div>
-                  </div>
-                </fieldset>
-
-                <div style={{display:'grid', gap:8, fontSize:12, marginTop:4}}>
-                  <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                    <input type="checkbox" name="accept_seller_terms" required />
-                    <span>{t.sellerTerms}</span>
-                  </label>
-                  <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                    <input type="checkbox" name="confirm_age" required />
-                    <span>{t.ageConfirm}</span>
-                  </label>
-                  <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
-                    <input type="checkbox" name="confirm_rights" required />
-                    <span>{t.rightsConfirm}</span>
-                  </label>
-                  <small style={{opacity:.75}}>
-                    {t.kycNote}
-                  </small>
                 </div>
-
-                <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-                  <button
-                    data-merchant-submit
-                    style={{padding:'10px 14px', borderRadius:10, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', cursor:'pointer', fontWeight:800}}
-                  >
-                    {t.createMerchant}
-                  </button>
-                </div>
-
-                <script
-                  dangerouslySetInnerHTML={{
-                    __html: `
-(function(){
-  try {
-    var form = document.querySelector('[data-merchant-form]');
-    if(!form) return;
-    var radios = form.querySelectorAll('input[name="seller_kind"]');
-    var hintInd = form.querySelector('#hint-individual');
-    var hintPro = form.querySelector('#hint-company');
-    var submit = form.querySelector('[data-merchant-submit]');
-    var checks = form.querySelectorAll('input[type="checkbox"][required]');
-    function update(){
-      var val = '';
-      radios.forEach(function(r){ if(r.checked) val = r.value; });
-      if(hintInd) hintInd.style.display = (val==='individual') ? 'block' : 'none';
-      if(hintPro) hintPro.style.display = (val==='company') ? 'block' : 'none';
-      var okRadio = !!val;
-      var okChecks = true; checks.forEach(function(c){ if(!c.checked) okChecks=false; });
-      if(submit){
-        submit.disabled = !(okRadio && okChecks);
-        submit.style.opacity = submit.disabled ? '.6' : '1';
-        submit.style.cursor = submit.disabled ? 'not-allowed' : 'pointer';
-      }
-    }
-    radios.forEach(function(r){ r.addEventListener('change', update); });
-    checks.forEach(function(c){ c.addEventListener('change', update); });
-    update();
-  } catch(_) {}
-})();
-`}}
-                />
-              </form>
+              </details>
             )}
-
-            <div style={{background:'rgba(255,255,255,.03)', border:'1px solid var(--color-border)', borderRadius:10, padding:'10px 12px', fontSize:12, lineHeight:1.35}}>
-              {t.platformTransparency}
-            </div>
           </section>
 
           {/* Active listings */}
