@@ -122,19 +122,24 @@ function stripAttestationText(input: string): string {
 
 function unpackClaimMessage(raw: string) {
   const GIFT_MAX = 40
-  if (!raw) return { message: '', giftedBy: '', hideOwned: false }
+  if (!raw) return { message: '', giftedBy: '', hideOwned: false, hadAttestation: false }
 
-  // retire attestation FR/EN
-  let msg = stripAttestationText(raw)
+  // Détection de l'attestation FR/EN avant strip
+  const RE_ATTEST_FR = /Ce certificat atteste que[\s\S]+?cette acquisition\./i
+  const RE_ATTEST_EN = /This certificate attests that[\s\S]+?this acquisition\./i
+  const hadAttestation = RE_ATTEST_FR.test(raw) || RE_ATTEST_EN.test(raw)
 
-  // détecte/retire le flag de masquage du propriétaire
+  // Retire l'attestation
+  let msg = raw.replace(RE_ATTEST_FR, '').replace(RE_ATTEST_EN, '').trim()
+
+  // Flag de masquage du propriétaire
   let hideOwned = false
-  if (/\[\[HIDE_OWNED_BY\]\]/.test(msg)) {
+  if (/\[\[\s*HIDE_OWNED_BY\s*\]\]/i.test(msg)) {
     hideOwned = true
-    msg = msg.replace(/\s*\[\[HIDE_OWNED_BY\]\]\s*/g, '').trim()
+    msg = msg.replace(/\s*\[\[\s*HIDE_OWNED_BY\s*\]\]\s*/gi, '').trim()
   }
 
-  // détecte/retire la ligne "Offert par: ..." ou "Gifted by: ..."
+  // “Offert par / Gifted by”
   let giftedBy = ''
   const giftedRe = /(?:^|\n)\s*(?:Offert\s+par|Gifted\s+by)\s*:\s*(.+)\s*$/i
   const m = msg.match(giftedRe)
@@ -143,8 +148,9 @@ function unpackClaimMessage(raw: string) {
     msg = msg.replace(giftedRe, '').trim()
   }
 
-  return { message: msg, giftedBy, hideOwned }
+  return { message: msg, giftedBy, hideOwned, hadAttestation }
 }
+
 
 
 
@@ -681,7 +687,9 @@ useEffect(() => {
       if (cancelled || ymdSelected !== ysel) return
 
       // Déplie le message : enlève attestation, récupère “Offert par / Gifted by” et le flag hide owned
-      const { message: msgUser, giftedBy, hideOwned } = unpackClaimMessage(String(c.message || ''))
+      const { message: msgUser, giftedBy, hideOwned, hadAttestation } =
+       unpackClaimMessage(String(c.message || ''))
+
 
       // Style texte & thème
       const nextStyle = (STYLE_IDS as readonly string[]).includes(String(c.cert_style || '').toLowerCase())
@@ -723,8 +731,8 @@ useEffect(() => {
         ownedBy: hideOwned ? false : Boolean(c.display_name && String(c.display_name).trim()),
         title: Boolean(c.title && String(c.title).trim()),
         message: Boolean(msgUser && String(msgUser).trim()),
-        attestation: true,            // toujours présent dans la preview finale
-        giftedBy: Boolean(giftedBy),  // affiche le champ si detecté
+        attestation: hadAttestation,     // ✅ respecte l'état réel du certificat source
+        giftedBy: Boolean(giftedBy),
       })
     } catch {
       // no-op : on laissera l’état par défaut si la preview échoue
