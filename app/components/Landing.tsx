@@ -1256,6 +1256,11 @@ function PublicCertThumb({
   title?: string | null
   href: string
 }) {
+
+  // Locale pour le libellé du badge
+  const pathname = usePathname() || '/'
+  const isFR = /^\/fr(\/|$)/.test(pathname)
+  const badgeLabel = isFR ? 'Authentifié' : 'Authenticated'
   // Normalise AAAA-MM-JJ
   const day =
     /^\d{4}-\d{2}-\d{2}$/.test(ts)
@@ -1306,25 +1311,22 @@ function PublicCertThumb({
               background: 'radial-gradient(100% 70% at 50% -10%, rgba(255,255,255,0) 40%, rgba(0,0,0,.22) 100%)',
               pointerEvents: 'none',
             }}
-          />
-          <figcaption
+            />
+          {/* Badge Authentifié — identique au registre public */}
+          <div
+            aria-label={badgeLabel}
             style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: 0,
-              padding: '10px 12px',
-              background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.66) 100%)',
-              color: '#fff',
-              fontSize: 12,
-            }}
+              position: 'absolute', left: 8, bottom: 8,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 8px', borderRadius: 999,
+             background: 'rgba(14,170,80,.18)',
+              border: '1px solid rgba(14,170,80,.45)',
+              color: '#D9FBE3', fontSize: 12, fontWeight: 700,
+              pointerEvents: 'none'
+           }}
           >
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-              <strong style={{ letterSpacing: 0.2 }}>{owner || 'Anonymous'}</strong>
-              <span style={{ opacity: 0.9 }}>{day}</span>
-            </div>
-            {title && <div style={{ marginTop: 4, opacity: 0.95 }}>{title}</div>}
-          </figcaption>
+            <span>{badgeLabel}</span><span aria-hidden>✓</span>
+          </div>
         </div>
       </figure>
       <style>{`
