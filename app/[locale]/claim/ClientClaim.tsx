@@ -119,6 +119,35 @@ function stripAttestationText(input: string): string {
     .trim()
 }
 
+function unpackClaimMessage(raw: string) {
+  const GIFT_MAX = 40
+  if (!raw) return { message: '', giftedBy: '', hideOwned: false }
+
+  // retire attestation FR/EN
+  let msg = stripAttestationText(raw)
+
+  // détecte/retire le flag de masquage du propriétaire
+  let hideOwned = false
+  if (/\[\[HIDE_OWNED_BY\]\]/.test(msg)) {
+    hideOwned = true
+    msg = msg.replace(/\s*\[\[HIDE_OWNED_BY\]\]\s*/g, '').trim()
+  }
+
+  // détecte/retire la ligne "Offert par: ..." ou "Gifted by: ..."
+  let giftedBy = ''
+  const giftedRe = /(?:^|\n)\s*(?:Offert\s+par|Gifted\s+by)\s*:\s*(.+)\s*$/i
+  const m = msg.match(giftedRe)
+  if (m) {
+    giftedBy = (m[1] || '').trim().slice(0, GIFT_MAX)
+    msg = msg.replace(giftedRe, '').trim()
+  }
+
+  return { message: msg, giftedBy, hideOwned }
+}
+
+
+
+
 /** ====== Localisation ====== */
 
 // Libellés de styles (FR/EN)
@@ -599,58 +628,97 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
     setForm(f=>({ ...f, ts: isoDayString(d) }))
   }, [Y, M, D])
 
-  // --------- Pré-remplissage si jour en vente ---------
-  useEffect(() => {
-    // 🔹 Pas de listing → pas de preview → pas de loader
-    if (!activeListing) { setIsLoadingClaim(false); return }
-  
-    // 🔹 Mode “vierge” → purge + pas de preview → pas de loader
-    if (activeListing.hide_claim_details) {
-      setIsLoadingClaim(false) // 🔧 important
-      lastPrefilledYmdRef.current = null
-      setIsGift(false)
+// --------- Pré-remplissage si jour en vente ---------
+useEffect(() => {
+  // 🔹 Pas de listing → pas de preview → pas de loader
+  if (!activeListing) { setIsLoadingClaim(false); return }
+
+  // 🔹 Mode “vierge” → purge + pas de preview → pas de loader
+  if (activeListing.hide_claim_details) {
+    setIsLoadingClaim(false)
+    lastPrefilledYmdRef.current = null
+    setIsGift(false)
+    setForm(f => ({
+      ...f,
+      display_name: '',
+      title: '',
+      message: '',
+      gifted_by: '',
+      link_url: '',
+      cert_style: 'neutral',
+      text_color: '#1A1F2A',
+    }))
+    setCustomBg(null)
+    setShow({ ownedBy: true, title: true, message: true, attestation: true, giftedBy: true })
+    return
+  }
+
+  // Listing classique : on hydrate avec la preview du claim
+  const ysel = ymdSelected
+  if (lastPrefilledYmdRef.current === ysel) return
+  lastPrefilledYmdRef.current = ysel
+
+  let cancelled = false
+  setIsLoadingClaim(true)
+  ;(async () => {
+    try {
+      const res = await fetch(`/api/claim/preview/by-ts/${encodeURIComponent(ysel)}`, { cache: 'no-store' })
+      if (!res.ok) throw new Error('bad status')
+      const j = await res.json()
+      const c = j?.claim
+      if (!c) return
+      if (cancelled || ymdSelected !== ysel) return
+
+      // Déplie le message : enlève attestation, récupère “Offert par / Gifted by” et le flag hide owned
+      const { message: msgUser, giftedBy, hideOwned } = unpackClaimMessage(String(c.message || ''))
+
+      // Style texte & thème
+      const nextStyle = (STYLE_IDS as readonly string[]).includes(String(c.cert_style || '').toLowerCase())
+        ? (String(c.cert_style).toLowerCase() as CertStyle)
+        : 'neutral'
+      const nextColor = (c.text_color && /^#[0-9a-f]{6}$/i.test(c.text_color)) ? c.text_color : '#1A1F2A'
+
+      // Fond custom s’il existe dans la preview
+      const bgUrl = c.custom_bg_data_url || c.custom_bg_url || c.bg_url || c.background_url || ''
+      if (nextStyle === 'custom' && bgUrl) {
+        // dimensions A4 par défaut pour la preview
+        setCustomBg({ url: bgUrl, dataUrl: bgUrl, w: 2480, h: 3508 })
+      } else {
+        setCustomBg(null)
+      }
+
+      // Met à jour le formulaire
       setForm(f => ({
         ...f,
-        display_name: '',
-        title: '',
-        message: '',
-        gifted_by: '',
-        link_url: '',
-        cert_style: 'neutral',
-        text_color: '#1A1F2A',
+        display_name: String(c.display_name || ''),
+        title: String(c.title || ''),
+        message: String(msgUser || ''),
+        gifted_by: String(giftedBy || ''),
+        link_url: String(c.link_url || ''),
+        cert_style: nextStyle,
+        text_color: nextColor,
       }))
-      setCustomBg(null)
-      setShow({ ownedBy: true, title: true, message: true, attestation: true, giftedBy: true })
-      return
+
+      // Logiques d’affichage
+      setIsGift(Boolean(giftedBy))
+      setShow({
+        ownedBy: hideOwned ? false : Boolean(c.display_name && String(c.display_name).trim()),
+        title: Boolean(c.title && String(c.title).trim()),
+        message: Boolean(msgUser && String(msgUser).trim()),
+        attestation: true,            // toujours présent dans la preview finale
+        giftedBy: Boolean(giftedBy),  // affiche le champ si detecté
+      })
+    } catch {
+      // no-op : on laissera l’état par défaut si la preview échoue
+    } finally {
+      if (!cancelled) setIsLoadingClaim(false)
     }
-  
-    // Listing classique : on hydrate avec la preview du claim
-    const ysel = ymdSelected
-    if (lastPrefilledYmdRef.current === ysel) return
-    lastPrefilledYmdRef.current = ysel
-  
-    let cancelled = false
-    setIsLoadingClaim(true)
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/claim/preview/by-ts/${encodeURIComponent(ysel)}`)
-        const j = await res.json()
-        if (!j?.claim) return
-        if (cancelled || ymdSelected !== ysel) return // garde-fou
-  
-        // ... (hydrate form + show comme avant)
-        // (inchangé)
-      } catch {
-        // no-op
-      } finally {
-        // Si on n'a pas annulé, on peut couper le loader ici.
-        if (!cancelled) setIsLoadingClaim(false)
-      }
-    })()
-  
-    // 🔹 Cleanup : si l’effet est annulé (on change de jour), on coupe le loader
-    return () => { cancelled = true; setIsLoadingClaim(false) }
-  }, [activeListing, ymdSelected])
+  })()
+
+  // cleanup en cas de changement de jour
+  return () => { cancelled = true; setIsLoadingClaim(false) }
+}, [activeListing, ymdSelected])
+
   
 
   // Quand la date n'est pas en vente → état par défaut
