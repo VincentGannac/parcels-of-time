@@ -36,7 +36,7 @@ function asTimeDisplay(v: unknown) {
 }
 
 /** Claim primaire après paiement */
-async function writeClaimFromSession(session: Stripe.Checkout.Session) {
+async function writeClaimFromSession(session: Stripe.Checkout.Session, secretSalt: string) {
   const tsISO = normIsoDay(String(session.metadata?.ts || ''))
   if (!tsISO) throw new Error('bad_ts')
 
@@ -144,8 +144,8 @@ async function writeClaimFromSession(session: Stripe.Checkout.Session) {
         ? createdRow.rows[0].created_at.toISOString()
         : new Date(createdRow.rows[0]?.created_at || Date.now()).toISOString()
 
-    const salt = process.env.SECRET_SALT || 'dev_salt'
-    const data = `${tsISO}|${createdRow.rows[0]?.owner_id || ownerId}|${price_cents}|${createdISO}|${salt}`
+    // SECRET_SALT passé en paramètre (obligatoire)
+    const data = `${tsISO}|${createdRow.rows[0]?.owner_id || ownerId}|${price_cents}|${createdISO}|${secretSalt}`
     const hash = crypto.createHash('sha256').update(data).digest('hex')
     const cert_url = `/api/cert/${encodeURIComponent(tsISO.slice(0,10))}`
     await client.query(
@@ -184,8 +184,11 @@ async function writeClaimFromSession(session: Stripe.Checkout.Session) {
 export async function POST(req: Request) {
   const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
   const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
-  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
-    return NextResponse.json({ ok: false, error: 'missing_env' }, { status: 500 })
+  const SECRET_SALT = process.env.SECRET_SALT ?? ''
+
+  // Guard: secrets requis (réponse générique)
+  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET || !SECRET_SALT) {
+    return NextResponse.json({ ok: false, error: 'server_misconfigured' }, { status: 500 })
   }
 
   const sig = req.headers.get('stripe-signature') || ''
@@ -195,8 +198,9 @@ export async function POST(req: Request) {
   let evt: Stripe.Event
   try {
     evt = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET)
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: 'invalid_signature', detail: String(e?.message || e) }, { status: 400 })
+  } catch {
+    // Erreur générique (pas de détail technique)
+    return NextResponse.json({ ok: false, error: 'invalid_signature' }, { status: 400 })
   }
 
   // Idempotence simple
@@ -211,6 +215,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ received: true, duplicate: true })
     }
   } catch (e: any) {
+    // Log de diagnostic serveur, réponse inchangée
     console.warn('[webhook] idempotence insert failed:', e?.message || e)
   }
 
@@ -238,19 +243,18 @@ export async function POST(req: Request) {
         if (session.payment_status && session.payment_status !== 'paid') break
 
         // Paiement primaire → création/MAJ du claim côté serveur
-        const _res = await writeClaimFromSession(session)
+        const _res = await writeClaimFromSession(session, SECRET_SALT)
 
-        // ✂️ Supprimé pour éviter d'invalider le code envoyé par /api/checkout/confirm
-        // (pas d'email, pas de génération de code ici)
-
+        // (Pas d'email / génération de code ici)
         break
       }
       default:
         break
     }
   } catch (e: any) {
+    // Log détaillé côté serveur, mais réponse générique côté client
     console.error('[webhook] handler error:', e?.message || e)
-    return NextResponse.json({ ok: false, error: 'handler_error', detail: String(e?.message || e) }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'internal_error' }, { status: 500 })
   }
 
   return NextResponse.json({ received: true })
