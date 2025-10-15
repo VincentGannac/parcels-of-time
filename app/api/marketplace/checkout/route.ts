@@ -205,7 +205,7 @@ export async function POST(req: Request) {
 
     // ✅ On repasse par la route confirm côté serveur pour appliquer tout de suite
     const successUrl = `${base}/api/marketplace/confirm?sid={CHECKOUT_SESSION_ID}&locale=${locale}&ts=${enc(tsYMD)}`
-    const cancelUrl  = `${base}/${locale}/m/${enc(tsYMD)}?buy=cancel`
+    const cancelUrl  = `${base}/${locale}/claim?ts=${enc(tsYMD)}&buy=cancel`
 
     let session
     try {

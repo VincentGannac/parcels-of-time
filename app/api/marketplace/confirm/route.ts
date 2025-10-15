@@ -72,12 +72,12 @@ export async function GET(req: Request) {
     if (tsISO) fallbackYMD = tsISO.slice(0, 10)
 
     if (!paid) {
-      // Paiement non confirmé → renvoi simple
-      return NextResponse.redirect(
-        fallbackYMD ? `${base}/${finalLocale}/m/${encodeURIComponent(fallbackYMD)}?buy=unpaid` : `${base}/`,
-        { status: 302 }
-      )
-    }
+        // Paiement non confirmé → retour au formulaire ClientClaim (éviter /m/[ts])
+        return NextResponse.redirect(
+          fallbackYMD ? `${base}/${finalLocale}/claim?ts=${encodeURIComponent(fallbackYMD)}&buy=unpaid` : `${base}/`,
+          { status: 302 }
+        )
+      }
 
     const listingId = Number(s.metadata?.listing_id || 0)
     const buyerEmail = String(s.customer_details?.email || s.metadata?.buyer_email || '').trim().toLowerCase()
@@ -375,13 +375,15 @@ export async function GET(req: Request) {
       return res
     } catch (err) {
       try { await pool.query('ROLLBACK') } catch {}
-      const ymd = fallbackYMD || '1970-01-01'
-      return NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(ymd)}?buy=pending`, { status: 302 })
+      const ymd = fallbackYMD || '1906-11-03'
+      // Erreur/état non final → retour ClientClaim
+      return NextResponse.redirect(`${base}/${finalLocale}/claim?ts=${encodeURIComponent(ymd)}&buy=pending`, { status: 302 })
     }
   } catch (e) {
-    if (fallbackYMD) {
-      return NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(fallbackYMD)}?buy=pending`, { status: 302 })
-    }
+        if (fallbackYMD) {
+          // Fallback global → ClientClaim
+          return NextResponse.redirect(`${base}/${finalLocale}/claim?ts=${encodeURIComponent(fallbackYMD)}&buy=pending`, { status: 302 })
+        }
     return NextResponse.redirect(`${base}/`, { status: 302 })
   }
 }
