@@ -323,6 +323,16 @@ export async function GET(req: Request) {
         )
       }
 
+      // 🧹 filet de sécurité : si une autre annonce reste "active|paused" pour ce jour, on l’annule
+      await client.query(
+        `update listings
+            set status='canceled', updated_at=now()
+          where date_trunc('day', ts) = $1::timestamptz
+            and status in ('active','paused')
+            and id <> $2`,
+        [tsISO, listingId]
+      )
+
       // 6) Journal secondaire (si table présente)
       const hasSecondary2 = await tableExists(client, 'secondary_sales')
       if (hasSecondary2) {

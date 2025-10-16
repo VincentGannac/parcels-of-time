@@ -1,9 +1,7 @@
 //app/api/marketplace/listing/route.ts
-export const runtime = 'nodejs'
-
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
-import { readSession, ownerIdForDay } from '@/lib/auth'
+import { readSession } from '@/lib/auth' // on n'utilise plus ownerIdForDay ici
 
 function normIsoDay(s: string) {
   const d = new Date(s); if (isNaN(d.getTime())) return null
@@ -11,6 +9,19 @@ function normIsoDay(s: string) {
   return { iso: d.toISOString(), ymd: d.toISOString().slice(0,10) }
 }
 
+// 👇 helper robuste: owner pour le JOUR (UTC minuit)
+async function ownerIdForDayDb(tsISO: string): Promise<string | null> {
+  try {
+    const { rows } = await pool.query(
+      `select owner_id
+         from claims
+        where date_trunc('day', ts) = $1::timestamptz
+        limit 1`,
+      [tsISO]
+    )
+    return rows[0]?.owner_id ?? null
+  } catch { return null }
+}
 
 export async function POST(req: Request) {
   const sess = await readSession()
@@ -24,8 +35,6 @@ export async function POST(req: Request) {
   let priceEuros = 0
   let currency = 'EUR'
   let locale: 'fr'|'en' = 'fr'
-
-  // 👇 nouveau
   let hideClaimDetails = false  // false = afficher infos ; true = “vierge”
 
   if (ctype.includes('application/x-www-form-urlencoded')) {
@@ -39,7 +48,6 @@ export async function POST(req: Request) {
     const loc = String(form.get('locale') || '')
     if (loc === 'en' || loc === 'fr') locale = loc
 
-    // 🔸 modes acceptés : display_mode=full|blank OU blank/hide_claim_details booléen
     const dm = String(form.get('display_mode') || '').toLowerCase()
     if (dm === 'blank') hideClaimDetails = true
     if (dm === 'full')  hideClaimDetails = false
@@ -66,8 +74,9 @@ export async function POST(req: Request) {
   const tsISO = norm.iso
   const tsYMD = norm.ymd
 
-  const ownerId = await ownerIdForDay(tsISO)
-  if (!ownerId || ownerId !== sess.ownerId) {
+  // ✅ ownership robuste sur le JOUR
+  const actualOwnerId = await ownerIdForDayDb(tsISO)
+  if (!actualOwnerId || actualOwnerId !== sess.ownerId) {
     const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
     return NextResponse.redirect(`${base}/${locale}/account?err=not_owner`, { status: 303 })
   }
@@ -77,15 +86,31 @@ export async function POST(req: Request) {
   try {
     await client.query('BEGIN')
 
+    // 🔒 on verrouille TOUTES les annonces de ce jour pour éviter les races
+    await client.query(`select id from listings where date_trunc('day', ts) = $1::timestamptz for update`, [tsISO])
+
+    // 🧹 si un reliquat "active|paused" existe pour ce jour mais d’un autre vendeur, on l’annule
+    await client.query(
+      `update listings
+          set status = 'canceled', updated_at = now()
+        where date_trunc('day', ts) = $1::timestamptz
+          and status in ('active','paused')
+          and seller_owner_id <> $2`,
+      [tsISO, sess.ownerId]
+    )
+
+    // Re-cherche d’une annonce existante pour CE vendeur (si réactivation)
     const { rows: existing } = await client.query(
       `select id, status from listings
-        where ts=$1 and seller_owner_id=$2
+        where date_trunc('day', ts) = $1::timestamptz
+          and seller_owner_id = $2
         order by id asc
         for update`,
       [tsISO, sess.ownerId]
     )
 
     if (existing.length) {
+      // réactive / met à jour le prix + mode d’affichage
       await client.query(
         `update listings
             set price_cents=$3, currency=$4, status='active',
@@ -94,9 +119,10 @@ export async function POST(req: Request) {
         [existing[0].id, price_cents, currency, hideClaimDetails]
       )
     } else {
+      // insert propre pour le nouveau propriétaire
       await client.query(
         `insert into listings (ts, seller_owner_id, price_cents, currency, status, hide_claim_details)
-         values ($1,$2,$3,$4,'active',$5)`,
+         values ($1, $2, $3, $4, 'active', $5)`,
         [tsISO, sess.ownerId, price_cents, currency, hideClaimDetails]
       )
     }
@@ -108,10 +134,11 @@ export async function POST(req: Request) {
       return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsYMD)}?listing=ok`, { status: 303 })
     }
     return NextResponse.json({ ok: true })
-  } catch (e:any) {
+  } catch (e: any) {
     try { await client.query('ROLLBACK') } catch {}
     const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
     if (ctype.includes('application/x-www-form-urlencoded')) {
+      // on garde la même sémantique pour l’UI
       return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsYMD)}?listing=err`, { status: 303 })
     }
     return NextResponse.json({ error: 'db_error', detail: String(e?.message || e) }, { status: 500 })
