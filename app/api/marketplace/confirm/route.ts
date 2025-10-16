@@ -359,8 +359,6 @@ export async function GET(req: Request) {
         }
       }
 
-      await client.query('COMMIT')
-
       // 7) Email best-effort (SECONDARY)
       try {
         const ymd = tsISO.slice(0, 10)
@@ -373,23 +371,21 @@ export async function GET(req: Request) {
         }).catch(()=>{})
       } catch {}
 
-      // 8) Redirection finale + cookie
+      await client.query('COMMIT')
+
+      // redirection finale
       const to = `${base}/${finalLocale}/m/${encodeURIComponent(tsISO.slice(0,10))}?buy=success`
       const res = NextResponse.redirect(to, { status: 303 })
-      setSessionCookieOnResponse(res, {
-        ownerId: buyerOwnerId,
-        email: buyerEmail,
-        displayName: null,
-        iat: Math.floor(Date.now()/1000),
-      })
+      setSessionCookieOnResponse(res, { ownerId: buyerOwnerId, email: buyerEmail, displayName: null, iat: Math.floor(Date.now()/1000) })
       return res
     } catch (err) {
-      try { await pool.query('ROLLBACK') } catch {}
+      try { await client.query('ROLLBACK') } catch {}
       const ymd = fallbackYMD || '1906-11-03'
-      // Erreur/état non final → retour ClientClaim
       return NextResponse.redirect(`${base}/${finalLocale}/claim?ts=${encodeURIComponent(ymd)}&buy=pending`, { status: 302 })
+    } finally {
+      client.release() // ✅ indispensable pour ne pas vider le pool
     }
-  } catch (e) {
+    } catch (e) {
         if (fallbackYMD) {
           // Fallback global → ClientClaim
           return NextResponse.redirect(`${base}/${finalLocale}/claim?ts=${encodeURIComponent(fallbackYMD)}&buy=pending`, { status: 302 })
