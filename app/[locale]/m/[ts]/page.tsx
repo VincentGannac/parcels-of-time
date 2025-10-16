@@ -442,8 +442,8 @@ export default async function Page({
                             <strong>{locale==='fr' ? 'Afficher les infos du certificat' : 'Show certificate details'}</strong><br/>
                             <small style={{opacity:.8}}>
                               {locale==='fr'
-                                ? 'Nom, titre et message visibles (date en jaune).'
-                                : 'Name, title and message visible (yellow date).'}
+                                ? 'Contenu du certificat visible'
+                                : 'Visible certificate content'}
                             </small>
                           </span>
                         </label>
@@ -453,8 +453,8 @@ export default async function Page({
                             <strong>{locale==='fr' ? 'Annonce “vierge”' : 'Blank listing'}</strong><br/>
                             <small style={{opacity:.8}}>
                               {locale==='fr'
-                                ? 'Affichage comme une date disponible (anonyme), mais en jaune + votre prix.'
-                                : 'Shown like an available (anonymous) day, but in yellow + your price.'}
+                                ? 'Affichage comme une date disponible (anonyme)'
+                                : 'Shown like an available (anonymous) day'}
                             </small>
                           </span>
                         </label>
