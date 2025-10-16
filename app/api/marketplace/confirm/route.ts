@@ -17,12 +17,12 @@ function normIsoDay(s: string): string | null {
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(s) &&
     !/[Z+-]\d{2}:?\d{2}$/.test(s)
   ) {
-    d = new Date(`${s}Z`)              // ISO sans fuseau → force UTC
+    d = new Date(`${s}Z`) // ISO sans fuseau → force UTC
   } else {
     d = new Date(s)
   }
   if (isNaN(d.getTime())) return null
-  d.setUTCHours(0,0,0,0)
+  d.setUTCHours(0, 0, 0, 0)
   return d.toISOString()
 }
 
@@ -44,7 +44,7 @@ async function getColumns(client: any, table: string) {
       where table_schema='public' and table_name=$1`,
     [table]
   )
-  return new Set<string>(rows.map((r:any)=>r.column_name))
+  return new Set<string>(rows.map((r: any) => r.column_name))
 }
 
 export async function GET(req: Request) {
@@ -56,7 +56,7 @@ export async function GET(req: Request) {
   const qpLocale = (url.searchParams.get('locale') || '').toLowerCase()
   let finalLocale: 'fr' | 'en' = qpLocale === 'en' ? 'en' : 'fr'
   const tsYParam = url.searchParams.get('ts') || ''
-  const chosenLocale: 'fr'|'en' = finalLocale
+  const chosenLocale: 'fr' | 'en' = finalLocale
   let fallbackYMD = ''
 
   try {
@@ -68,16 +68,15 @@ export async function GET(req: Request) {
 
     // Normalise jour ISO depuis metadata/URL
     const tsISO = normIsoDay(String(s.metadata?.ts || tsYParam || ''))
-
     if (tsISO) fallbackYMD = tsISO.slice(0, 10)
 
     if (!paid) {
-        // Paiement non confirmé → retour au formulaire ClientClaim (éviter /m/[ts])
-        return NextResponse.redirect(
-          fallbackYMD ? `${base}/${finalLocale}/claim?ts=${encodeURIComponent(fallbackYMD)}&buy=unpaid` : `${base}/`,
-          { status: 302 }
-        )
-      }
+      // Paiement non confirmé → retour au formulaire ClientClaim (éviter /m/[ts])
+      return NextResponse.redirect(
+        fallbackYMD ? `${base}/${finalLocale}/claim?ts=${encodeURIComponent(fallbackYMD)}&buy=unpaid` : `${base}/`,
+        { status: 302 }
+      )
+    }
 
     const listingId = Number(s.metadata?.listing_id || 0)
     const buyerEmail = String(s.customer_details?.email || s.metadata?.buyer_email || '').trim().toLowerCase()
@@ -113,26 +112,27 @@ export async function GET(req: Request) {
 
       // 1) Lock annonce
       const { rows: lrows } = await client.query(
-      `select id, ts, seller_owner_id, price_cents, currency, status,
-        coalesce(hide_claim_details,false) as hide_claim_details
+        `select id, ts, seller_owner_id, price_cents, currency, status,
+                coalesce(hide_claim_details,false) as hide_claim_details
            from listings
           where id=$1
           for update`,
         [listingId]
       )
 
-      const asNull = (v:any) => {
+      const asNull = (v: any) => {
         if (v === undefined || v === null) return null
         const s = String(v).trim()
         return s ? s : null
       }
-      const isHexColor = (s:any) => typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s)
-      const validStyle = (s:any) => {
+      const isHexColor = (s: any) => typeof s === 'string' && /^#[0-9a-f]{6}$/i.test(s)
+      const validStyle = (s: any) => {
         const v = String(s || '').toLowerCase()
-        return ['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'].includes(v) ? v : 'neutral'
+        return ['neutral', 'romantic', 'birthday', 'wedding', 'birth', 'christmas', 'newyear', 'graduation', 'custom'].includes(v)
+          ? v
+          : 'neutral'
       }
-      const validTime = (s:any) => (s === 'utc' || s === 'utc+local' || s === 'local+utc') ? s : 'local+utc'
-      
+      const validTime = (s: any) => (s === 'utc' || s === 'utc+local' || s === 'local+utc') ? s : 'local+utc'
 
       if (!lrows.length) throw new Error('listing_not_found')
       const L = lrows[0]
@@ -140,7 +140,7 @@ export async function GET(req: Request) {
       if (L.status !== 'active') {
         // évite un second transfert si une autre confirmation est passée entre-temps
         await client.query('ROLLBACK')
-        const ymd = tsISO.slice(0,10)
+        const ymd = tsISO.slice(0, 10)
         return NextResponse.redirect(`${base}/${finalLocale}/m/${encodeURIComponent(ymd)}?buy=already_sold`, { status: 303 })
       }
 
@@ -165,9 +165,9 @@ export async function GET(req: Request) {
       {
         const { rows: brow } = await client.query(
           `insert into owners(email)
-          values ($1)
-          on conflict (email) do nothing
-          returning id`,
+           values ($1)
+           on conflict (email) do nothing
+           returning id`,
           [buyerEmail]
         )
         if (brow.length) {
@@ -185,42 +185,42 @@ export async function GET(req: Request) {
       // 4) Appliquer modifs “comme Edit/confirm” + transfert owner
       const isBlankListing = !!L.hide_claim_details
 
-      // Pour une annonce “vierge”, on construit un payload qui remet à zéro
-      // tout ce qui n’est pas explicitement fourni par l’acheteur.
-      const PForUpdate: any = isBlankListing ? {
-        display_name: asNull(P.display_name),
-        title:        asNull(P.title),
-        message:      asNull(P.message),
-        link_url:     asNull(P.link_url),
-        cert_style:   validStyle(P.cert_style),
-       time_display: validTime(P.time_display),
-        local_date_only: (P.local_date_only === true || P.local_date_only === '1'),
-        text_color:   isHexColor(P.text_color) ? String(P.text_color).toLowerCase() : '#1a1f2a',
-        // Jamais d’auto-public pour une “vierge” sauf demande explicite de l’acheteur
-        title_public:   false,
-        message_public: false,
-        public_registry: !!P.public_registry,
-      } : P
+      // Pour une annonce “vierge”, payload qui remet à zéro tout ce qui n’est pas fourni par l’acheteur.
+      const PForUpdate: any = isBlankListing
+        ? {
+            display_name: asNull(P.display_name),
+            title: asNull(P.title),
+            message: asNull(P.message),
+            link_url: asNull(P.link_url),
+            cert_style: validStyle(P.cert_style),
+            time_display: validTime(P.time_display),
+            local_date_only: P.local_date_only === true || P.local_date_only === '1',
+            text_color: isHexColor(P.text_color) ? String(P.text_color).toLowerCase() : '#1a1f2a',
+            // Jamais d’auto-public pour une “vierge” sauf demande explicite
+            title_public: false,
+            message_public: false,
+            public_registry: !!P.public_registry,
+          }
+        : P
 
       const updates = normalizeClaimUpdates(PForUpdate)
       await applyClaimUpdatesLikeEdit(client, tsISO, updates, { newOwnerId: buyerOwnerId })
 
-      // Enforce : si “vierge”, on impose côté DB la nullification/default
-      // pour éviter toute persistance d’infos du vendeur.
+      // Enforce DB si “vierge” pour éviter toute persistance d’infos du vendeur
       if (isBlankListing) {
         await client.query(
           `update claims set
-             display_name   = $2,
-             title          = $3,
-             message        = $4,
-             link_url       = $5,
-             cert_style     = $6,
-             time_display   = $7,
-             local_date_only= $8,
-             text_color     = $9,
-             title_public   = false,
-             message_public = false
-             where date_trunc('day', ts) = $1::timestamptz`,
+             display_name    = $2,
+             title           = $3,
+             message         = $4,
+             link_url        = $5,
+             cert_style      = $6,
+             time_display    = $7,
+             local_date_only = $8,
+             text_color      = $9,
+             title_public    = false,
+             message_public  = false
+           where date_trunc('day', ts) = $1::timestamptz`,
           [
             tsISO,
             PForUpdate.display_name ?? null,
@@ -229,12 +229,12 @@ export async function GET(req: Request) {
             PForUpdate.link_url ?? null,
             PForUpdate.cert_style || 'neutral',
             validTime(PForUpdate.time_display),
-            (PForUpdate.local_date_only === true || PForUpdate.local_date_only === '1'),
+            PForUpdate.local_date_only === true || PForUpdate.local_date_only === '1',
             isHexColor(PForUpdate.text_color) ? String(PForUpdate.text_color).toLowerCase() : '#1a1f2a',
           ]
         )
       }
-      
+
       // 4bis) Mettre à jour prix/devise + champs secondaires si présents
       const cols = await getColumns(client, 'claims')
       const sets: string[] = []
@@ -289,14 +289,14 @@ export async function GET(req: Request) {
         }
       }
 
-      // Si “vierge” ET style non-custom : on supprime tout fond custom antérieur
+      // Si “vierge” ET style non-custom : supprimer tout fond custom antérieur
       if (isBlankListing && styleLower !== 'custom') {
         const hasPersist2 = await tableExists(client, 'claim_custom_bg')
         if (hasPersist2) {
           await client.query(`delete from claim_custom_bg where ts = $1::timestamptz`, [tsISO])
         }
       }
-      
+
       // 4quater) Registre public si demandé
       if (updates.public_registry === true) {
         await client.query(
@@ -323,7 +323,7 @@ export async function GET(req: Request) {
         )
       }
 
-      // 🧹 filet de sécurité : si une autre annonce reste "active|paused" pour ce jour, on l’annule
+      // 🧹 Filet de sécurité : s’il reste d’autres annonces active|paused pour ce jour, on les annule
       await client.query(
         `update listings
             set status='canceled', updated_at=now()
@@ -364,32 +364,45 @@ export async function GET(req: Request) {
         const ymd = tsISO.slice(0, 10)
         const pdfUrl = `${base}/api/cert/${encodeURIComponent(ymd)}.pdf`
         const publicUrl = `${base}/${finalLocale}/m/${encodeURIComponent(ymd)}`
-        import('@/lib/email').then(async ({ sendSecondarySaleEmails }) => {
-          await sendSecondarySaleEmails({
-            ts: ymd, buyerEmail, pdfUrl, publicUrl, sessionId: sid,locale: chosenLocale
+        import('@/lib/email')
+          .then(async ({ sendSecondarySaleEmails }) => {
+            await sendSecondarySaleEmails({
+              ts: ymd,
+              buyerEmail,
+              pdfUrl,
+              publicUrl,
+              sessionId: sid,
+              locale: chosenLocale,
+            })
           })
-        }).catch(()=>{})
+          .catch(() => {})
       } catch {}
 
       await client.query('COMMIT')
 
-      // redirection finale
-      const to = `${base}/${finalLocale}/m/${encodeURIComponent(tsISO.slice(0,10))}?buy=success`
+      // 8) Redirection finale + cookie
+      const to = `${base}/${finalLocale}/m/${encodeURIComponent(tsISO.slice(0, 10))}?buy=success`
       const res = NextResponse.redirect(to, { status: 303 })
-      setSessionCookieOnResponse(res, { ownerId: buyerOwnerId, email: buyerEmail, displayName: null, iat: Math.floor(Date.now()/1000) })
+      setSessionCookieOnResponse(res, {
+        ownerId: buyerOwnerId,
+        email: buyerEmail,
+        displayName: null,
+        iat: Math.floor(Date.now() / 1000),
+      })
       return res
     } catch (err) {
       try { await client.query('ROLLBACK') } catch {}
       const ymd = fallbackYMD || '1906-11-03'
+      // Erreur/état non final → retour ClientClaim
       return NextResponse.redirect(`${base}/${finalLocale}/claim?ts=${encodeURIComponent(ymd)}&buy=pending`, { status: 302 })
     } finally {
       client.release() // ✅ indispensable pour ne pas vider le pool
     }
-    } catch (e) {
-        if (fallbackYMD) {
-          // Fallback global → ClientClaim
-          return NextResponse.redirect(`${base}/${finalLocale}/claim?ts=${encodeURIComponent(fallbackYMD)}&buy=pending`, { status: 302 })
-        }
+  } catch (e) {
+    if (fallbackYMD) {
+      // Fallback global → ClientClaim
+      return NextResponse.redirect(`${base}/${finalLocale}/claim?ts=${encodeURIComponent(fallbackYMD)}&buy=pending`, { status: 302 })
+    }
     return NextResponse.redirect(`${base}/`, { status: 302 })
   }
 }
