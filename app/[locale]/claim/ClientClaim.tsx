@@ -264,8 +264,8 @@ function TEXTS(fr:boolean) {
       ? 'Je comprends que mes données (email, montant, pays) sont partagées avec Stripe pour le paiement sécurisé.'
       : 'I understand my data (email, amount, country) is shared with Stripe for secure payment.',
     imgRightsConsent: fr
-      ? 'En cas de publication dans le registre public, j’atteste disposer des droits nécessaires (ou d’une licence) pour l’image importée et qu’elle respecte notre charte de modération.'
-      : 'If publishing to the public registry, I confirm I have the necessary rights (or a license) for the uploaded image and that it complies with our content guidelines.',
+      ? 'En cas de publication dans le registre public, j’atteste disposer des droits nécessaires (ou d’une licence) pour l’image importée.'
+      : 'If publishing to the public registry, I confirm I have the necessary rights (or a license) for the uploaded image.',
     fullBreakdown: fr
       ? 'Le récapitulatif complet (prix, taxes le cas échéant) est affiché sur la page Stripe avant paiement.'
       : 'The full breakdown (price, taxes if any) is shown on Stripe before payment.',
