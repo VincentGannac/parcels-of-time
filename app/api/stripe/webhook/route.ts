@@ -1,4 +1,3 @@
-// app/api/stripe/webhook/route.ts
 export const runtime = 'nodejs'
 
 import Stripe from 'stripe'
@@ -19,9 +18,7 @@ function normIsoDay(s: string): string | null {
   d.setUTCHours(0, 0, 0, 0)
   return d.toISOString()
 }
-function asBool1(v: unknown) {
-  return String(v) === '1' || v === true
-}
+function asBool1(v: unknown) { return String(v) === '1' || v === true }
 function asHex(v: unknown, fallback = '#1a1f2a') {
   return /^#[0-9a-fA-F]{6}$/.test(String(v || '')) ? String(v).toLowerCase() : fallback
 }
@@ -137,17 +134,16 @@ async function writeClaimFromSession(session: Stripe.Checkout.Session, secretSal
       }
     }
 
-    // cert_hash + cert_url
+    // cert_hash + cert_url (toujours .pdf)
     const createdRow = await client.query('select owner_id, price_cents, created_at from claims where ts=$1::timestamptz', [tsISO])
     const createdISO =
       createdRow.rows[0]?.created_at instanceof Date
         ? createdRow.rows[0].created_at.toISOString()
         : new Date(createdRow.rows[0]?.created_at || Date.now()).toISOString()
 
-    // SECRET_SALT passé en paramètre (obligatoire)
     const data = `${tsISO}|${createdRow.rows[0]?.owner_id || ownerId}|${price_cents}|${createdISO}|${secretSalt}`
     const hash = crypto.createHash('sha256').update(data).digest('hex')
-    const cert_url = `/api/cert/${encodeURIComponent(tsISO.slice(0,10))}`
+    const cert_url = `/api/cert/${encodeURIComponent(tsISO.slice(0,10))}.pdf`
     await client.query(
       `update claims set cert_hash=$1, cert_url=$2 where ts=$3::timestamptz`,
       [hash, cert_url, tsISO]
@@ -172,7 +168,7 @@ async function writeClaimFromSession(session: Stripe.Checkout.Session, secretSal
 
     await client.query('COMMIT')
 
-    return { tsISO, email, display_name, cert_url, claim_id, cert_hash }
+    return { tsISO, email, claim_id, cert_hash }
   } catch (e) {
     try { await client.query('ROLLBACK') } catch {}
     throw e
@@ -185,8 +181,9 @@ export async function POST(req: Request) {
   const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
   const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
   const SECRET_SALT = process.env.SECRET_SALT ?? ''
+  const BASE = process.env.NEXT_PUBLIC_BASE_URL || ''
 
-  // Guard: secrets requis (réponse générique)
+  // Guard
   if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET || !SECRET_SALT) {
     return NextResponse.json({ ok: false, error: 'server_misconfigured' }, { status: 500 })
   }
@@ -199,7 +196,6 @@ export async function POST(req: Request) {
   try {
     evt = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET)
   } catch {
-    // Erreur générique (pas de détail technique)
     return NextResponse.json({ ok: false, error: 'invalid_signature' }, { status: 400 })
   }
 
@@ -215,12 +211,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ received: true, duplicate: true })
     }
   } catch (e: any) {
-    // Log de diagnostic serveur, réponse inchangée
     console.warn('[webhook] idempotence insert failed:', e?.message || e)
   }
 
   try {
-    // 🎯 Branche très tôt si "secondary"
+    // Branche marketplace (secondary) la plus tôt possible
     if (evt.type === 'checkout.session.completed' || evt.type === 'checkout.session.async_payment_succeeded') {
       const s = evt.data.object as Stripe.Checkout.Session
       const paid = !s.payment_status || s.payment_status === 'paid'
@@ -230,7 +225,6 @@ export async function POST(req: Request) {
           await applySecondarySaleFromSession(s)
         } catch (e) {
           console.error('[webhook][secondary] error:', (e as any)?.message || e)
-          // On laisse 200 pour ne pas retenter en boucle si erreur logique; adapte selon stratégie
         }
         return NextResponse.json({ received: true, secondary: true })
       }
@@ -242,17 +236,60 @@ export async function POST(req: Request) {
         const session = evt.data.object as Stripe.Checkout.Session
         if (session.payment_status && session.payment_status !== 'paid') break
 
-        // Paiement primaire → création/MAJ du claim côté serveur
-        const _res = await writeClaimFromSession(session, SECRET_SALT)
+        // Création/MAJ du claim
+        const res = await writeClaimFromSession(session, SECRET_SALT)
 
-        // (Pas d'email / génération de code ici)
+        // Fallback d’email **idempotent** (si la route /api/checkout/confirm n’a pas pu l’envoyer)
+        try {
+          const mailKey = `mail:claim_receipt:${session.id || (session as any).client_reference_id || res.tsISO}`
+          const ins = await pool.query(
+            `insert into stripe_events(id, type) values($1,$2) on conflict(id) do nothing`,
+            [mailKey, 'mail']
+          )
+          if (ins.rowCount === 1) {
+            // OK pour envoyer (premier)
+            const ymd = res.tsISO.slice(0,10)
+            const locale = (String(session.metadata?.locale || '') === 'en') ? 'en' : 'fr'
+            const publicUrl = BASE ? `${BASE}/${locale}/m/${encodeURIComponent(ymd)}` : `/${locale}/m/${encodeURIComponent(ymd)}`
+            const pdfUrl    = BASE ? `${BASE}/api/cert/${encodeURIComponent(ymd)}.pdf`   : `/api/cert/${encodeURIComponent(ymd)}.pdf`
+
+            const { createTransferTokenForClaim } = await import('@/lib/gift/transfer')
+            const { code } = await createTransferTokenForClaim(res.claim_id)
+
+            const recoverUrl = BASE
+              ? `${BASE}/${locale}/gift/recover?claim_id=${encodeURIComponent(res.claim_id)}&cert_hash=${encodeURIComponent(res.cert_hash)}`
+              : `/${locale}/gift/recover?claim_id=${encodeURIComponent(res.claim_id)}&cert_hash=${encodeURIComponent(res.cert_hash)}`
+            const instructionsPdfUrl = BASE
+              ? `${BASE}/api/claim/${encodeURIComponent(res.claim_id)}/transfer-guide.pdf?code=${encodeURIComponent(code)}&locale=${locale}`
+              : `/api/claim/${encodeURIComponent(res.claim_id)}/transfer-guide.pdf?code=${encodeURIComponent(code)}&locale=${locale}`
+
+            const { sendClaimReceiptEmail } = await import('@/lib/email')
+            await sendClaimReceiptEmail({
+              to: res.email,
+              ts: res.tsISO,
+              displayName: null,
+              publicUrl,
+              certUrl: pdfUrl,
+              transfer: {
+                claimId: res.claim_id,
+                hash: res.cert_hash,
+                code,
+                recoverUrl,
+                instructionsPdfUrl,
+                locale: locale as 'fr'|'en'
+              }
+            })
+          }
+        } catch (e:any) {
+          console.warn('[webhook] email fallback warn:', e?.message || e)
+        }
+
         break
       }
       default:
         break
     }
   } catch (e: any) {
-    // Log détaillé côté serveur, mais réponse générique côté client
     console.error('[webhook] handler error:', e?.message || e)
     return NextResponse.json({ ok: false, error: 'internal_error' }, { status: 500 })
   }

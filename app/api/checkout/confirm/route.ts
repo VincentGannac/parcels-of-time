@@ -1,13 +1,11 @@
-// app/api/checkout/confirm/route.ts
-export const runtime = 'nodejs';
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import crypto from 'node:crypto';
 import { pool } from '@/lib/db';
 import { setSessionCookieOnResponse } from '@/lib/auth';
-
-
 
 type CertStyle =
   | 'neutral' | 'romantic' | 'birthday' | 'wedding'
@@ -80,7 +78,7 @@ export async function GET(req: Request) {
     const custom_bg_key = String(s.metadata?.custom_bg_key || '');
     const payloadKey = String(s.metadata?.payload_key || '').trim();
 
-    // Valeurs par défaut (fallback rétro-compat si d’anciennes sessions avaient encore metadata longues)
+    // Valeurs par défaut (fallback rétro-compat)
     let display_name: string | null = (s.metadata?.display_name || '') || null;
     let title: string | null        = (s.metadata?.title || '') || null;
     let message: string | null      = (s.metadata?.message || '') || null;
@@ -98,7 +96,7 @@ export async function GET(req: Request) {
     let public_registry = safeBool(s.metadata?.public_registry);
     wantsAutopub = wantsAutopub || public_registry;
 
-    // ⛳️ NOUVEAU : si payload_key, on recharge le JSON complet depuis la table (préserve 100% du texte)
+    // ⛳️ recharge JSON complet si payload_key
     if (payloadKey) {
       const { rows: p } = await pool.query(
         `select data from checkout_payload_temp where key = $1`,
@@ -108,7 +106,7 @@ export async function GET(req: Request) {
         const d = p[0].data || {};
         display_name    = (d.display_name ?? display_name) || null;
         title           = (d.title ?? title) || null;
-        message         = (d.message ?? message) || null;   // ← sauts de ligne OK
+        message         = (d.message ?? message) || null;
         link_url        = (d.link_url ?? link_url) || null;
         cert_style      = safeStyle(d.cert_style ?? cert_style);
         time_display    = ((): any => {
@@ -117,13 +115,10 @@ export async function GET(req: Request) {
         })();
         local_date_only = (d.local_date_only !== undefined) ? safeBool(d.local_date_only) : local_date_only;
         text_color      = safeHex(d.text_color ?? text_color);
-        // ⚠️ IMPORTANT : caster proprement les booléens ('0' | '1' | true | false)
         title_public    = (d.title_public    !== undefined) ? safeBool(d.title_public)    : title_public;
         message_public  = (d.message_public  !== undefined) ? safeBool(d.message_public)  : message_public;
         public_registry = (d.public_registry !== undefined) ? safeBool(d.public_registry) : public_registry;
         wantsAutopub    = wantsAutopub || public_registry;
-
-        // hygiène : on supprime l’entrée tampon
         await pool.query(`delete from checkout_payload_temp where key = $1`, [payloadKey]);
       }
     }
@@ -145,11 +140,10 @@ export async function GET(req: Request) {
       const { rows: ownerRows } = await client.query(
           `insert into owners(email)
           values ($1)
-          on conflict (email) do update set email = excluded.email   -- no-op update to RETURNING
+          on conflict (email) do update set email = excluded.email
           returning id`,
           [email]
       )
-      
       const ownerId = ownerRows[0].id;
       outOwnerId = String(ownerId);
       outEmail = email;
@@ -169,14 +163,14 @@ export async function GET(req: Request) {
         }
       };
 
-      pushOpt('display_name', display_name)  // 👈 par-certificat
+      pushOpt('display_name', display_name)
       pushOpt('title',        title)
-      pushOpt('message', message);
-      pushOpt('link_url', link_url);
-      pushOpt('cert_style', cert_style);
+      pushOpt('message',      message);
+      pushOpt('link_url',     link_url);
+      pushOpt('cert_style',   cert_style);
       pushOpt('time_display', time_display);
       pushOpt('local_date_only', local_date_only);
-      pushOpt('text_color', text_color);
+      pushOpt('text_color',   text_color);
       pushOpt('title_public', title_public);
       pushOpt('message_public', message_public);
 
@@ -213,7 +207,7 @@ export async function GET(req: Request) {
         }
       }
 
-      // hash + cert_url
+      // hash + cert_url (toujours .pdf)
       const createdAtISO =
         claim.created_at instanceof Date ? claim.created_at.toISOString()
         : new Date(claim.created_at).toISOString();
@@ -248,19 +242,17 @@ export async function GET(req: Request) {
 
       await client.query('COMMIT');
 
-      // email après commit (non bloquant) — AVEC code + instructions
+      // email après commit (non bloquant)
       try {
         const ymd = ts.slice(0, 10)
-        const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ts)}`
+        const publicUrl = `${base}/${locale}/m/${encodeURIComponent(ymd)}`
         const pdfUrl    = `${base}/api/cert/${encodeURIComponent(ymd)}.pdf`
 
-        // Récupère un pseudo "compte" si dispo
         const { rows } = await pool.query(
           `select username from owners where email=$1 limit 1`, [email]
         )
         const accountName = rows[0]?.username || null
 
-        // ✅ crée un code de transfert (révoque un éventuel précédent non utilisé)
         const { createTransferTokenForClaim } = await import('@/lib/gift/transfer')
         const { rows: idRow } = await pool.query(
           `select id, cert_hash from claims where ts=$1::timestamptz limit 1`,
@@ -268,10 +260,8 @@ export async function GET(req: Request) {
         )
         const claimId: string = String(idRow[0].id)
         const certHash: string = String(idRow[0].cert_hash)
-
         const { code } = await createTransferTokenForClaim(claimId)
 
-        // Liens “récupération cadeau” + PDF d’instructions
         const recoverUrl = `${base}/${locale}/gift/recover?claim_id=${encodeURIComponent(claimId)}&cert_hash=${encodeURIComponent(certHash)}`
         const instructionsPdfUrl = `${base}/api/claim/${encodeURIComponent(claimId)}/transfer-guide.pdf?code=${encodeURIComponent(code)}&locale=${locale}`
 
@@ -285,7 +275,7 @@ export async function GET(req: Request) {
           transfer: {
             claimId,
             hash: certHash,
-            code,                       // 👈 le fameux code à 5 caractères
+            code,
             recoverUrl,
             instructionsPdfUrl,
             locale: locale as 'fr' | 'en'
@@ -295,15 +285,23 @@ export async function GET(req: Request) {
         console.warn('[confirm] email warn:', (e as any)?.message || e)
       }
 
+      // 🔸 Warm-up best-effort du PDF (non bloquant)
+      try {
+        const ymd = ts.slice(0,10)
+        fetch(`${base}/api/cert/${encodeURIComponent(ymd)}.pdf?warmup=1`, { cache: 'no-store' })
+          .catch(()=>{})
+      } catch {}
+
     } catch (e:any) {
       try { await pool.query('ROLLBACK') } catch {}
       console.error('[confirm] db_error:', e?.message || e);
       // On laisse le webhook Stripe compléter si besoin
     }
 
-    // Redirection finale
+    // Redirection finale (toujours YMD)
     {
-      const to = new URL(`${base}/${locale}/m/${encodeURIComponent(tsForRedirect)}`);
+      const ymd = (tsForRedirect || '').slice(0,10)
+      const to = new URL(`${base}/${locale}/m/${encodeURIComponent(ymd)}?buy=success`);
       if (wantsAutopub) to.searchParams.set('autopub', '1');
       const res = NextResponse.redirect(to.toString(), { status: 303 });
       if (outOwnerId && outEmail) {
