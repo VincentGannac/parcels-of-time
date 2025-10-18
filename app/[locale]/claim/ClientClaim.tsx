@@ -1376,8 +1376,13 @@ useEffect(() => {
     }
   }
 
+
   let attestLabelTop:number|null = null
   const attestLineTops:number[] = []
+
+  let linkLabelTop: number | null = null
+  const linkLineTops: number[] = []
+
   if (attestLines.length) {
     y -= gapSection
     attestLabelTop = toTopPx(y - (labelSize + 2), labelSize)
@@ -1387,6 +1392,7 @@ useEffect(() => {
       y -= lineHMsg
     }
   }
+
 
   const topBrand = toTopPx(yBrand, brandSize)
   const topCert  = toTopPx(yCert,  subSize)
