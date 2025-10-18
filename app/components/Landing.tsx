@@ -1146,7 +1146,7 @@ function CollectorThemesCarousel() {
 }
 
 /* =========================================================
-   FEATURE BAND — 2 carrousels alignés + 4 bullets (responsive)
+   FEATURE BAND — mobile: 2 carrousels puis 4 bullets en 2x2
    ========================================================= */
    function FeatureBand() {
     const pathname = usePathname() || '/'
@@ -1200,8 +1200,38 @@ function CollectorThemesCarousel() {
       </div>
     )
   
-    const leftSpan = isNarrow ? 'span 12' : 'span 7'
-    const rightSpan = isNarrow ? 'span 12' : 'span 5'
+    /* ====== MOBILE LAYOUT (nouveau) ====== */
+    if (isNarrow) {
+      const bulletsAll = [...bulletsTop, ...bulletsBottom] // → 4 bullets
+      return (
+        <section>
+          <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <SectionEyebrow>{isFR ? 'Dates convoitées' : 'Sought-after dates'}</SectionEyebrow>
+            </div>
+  
+            {/* 2 carrousels empilés */}
+            <div style={{ gridColumn: 'span 12' }}>
+              <EmotionalThemesCarousel />
+            </div>
+            <div style={{ gridColumn: 'span 12' }}>
+              <CollectorThemesCarousel />
+            </div>
+  
+            {/* 4 bullets en 2 colonnes (2x2) */}
+            {bulletsAll.map((b, i) => (
+              <div key={i} style={{ gridColumn: 'span 6' }}>
+                <BulletCard {...b} />
+              </div>
+            ))}
+          </Container>
+        </section>
+      )
+    }
+  
+    /* ====== DESKTOP / TABLET LAYOUT (inchangé) ====== */
+    const leftSpan = 'span 7'
+    const rightSpan = 'span 5'
   
     return (
       <section>
@@ -1216,10 +1246,10 @@ function CollectorThemesCarousel() {
             <EmotionalThemesCarousel />
           </div>
           <div style={{ gridColumn: rightSpan, gridRow: '2', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
-            <div style={{ gridColumn: isNarrow ? 'span 12' : 'span 6' }}>
+            <div style={{ gridColumn: 'span 6' }}>
               <BulletCard {...bulletsTop[0]} />
             </div>
-            <div style={{ gridColumn: isNarrow ? 'span 12' : 'span 6' }}>
+            <div style={{ gridColumn: 'span 6' }}>
               <BulletCard {...bulletsTop[1]} />
             </div>
           </div>
@@ -1229,10 +1259,10 @@ function CollectorThemesCarousel() {
             <CollectorThemesCarousel />
           </div>
           <div style={{ gridColumn: rightSpan, gridRow: '3', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
-            <div style={{ gridColumn: isNarrow ? 'span 12' : 'span 6' }}>
+            <div style={{ gridColumn: 'span 6' }}>
               <BulletCard {...bulletsBottom[0]} />
             </div>
-            <div style={{ gridColumn: isNarrow ? 'span 12' : 'span 6' }}>
+            <div style={{ gridColumn: 'span 6' }}>
               <BulletCard {...bulletsBottom[1]} />
             </div>
           </div>
@@ -1240,6 +1270,7 @@ function CollectorThemesCarousel() {
       </section>
     )
   }
+  
   
 
 
