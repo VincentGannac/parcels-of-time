@@ -104,6 +104,21 @@ async function readOwnerProfile(ownerId: string): Promise<OwnerProfile | null> {
   return rows[0] || null
 }
 
+// Renvoie l'ensemble des YYYY-MM-DD présents dans minute_public
+async function listPublicYmd(ymds: string[]): Promise<Set<string>> {
+  if (!ymds || ymds.length === 0) return new Set()
+  const { rows } = await q<{ ymd: string }>(
+    `select to_char(date_trunc('day', ts) at time zone 'UTC', 'YYYY-MM-DD') as ymd
+       from minute_public
+      where to_char(date_trunc('day', ts) at time zone 'UTC', 'YYYY-MM-DD') = ANY($1::text[])`,
+    [ymds]
+  )
+  return new Set(rows.map(r => String(r.ymd)))
+}
+
+
+
+
 async function q<T = any>(text: string, params?: any[]) {
   try {
     // @ts-ignore
@@ -293,6 +308,10 @@ export default async function Page({
   const claimsErr  = claimsRes.status === 'rejected'
   const listsErr   = listingsRes.status === 'rejected'
   let merchErr     = merchantRes.status === 'rejected'
+
+  // Jours (YYYY-MM-DD) publics parmi mes certificats
+  const claimYmds = claims.map(c => c.ts)
+  const publicYmd = await listPublicYmd(claimYmds)
 
   const connectParam = firstString(sp?.connect)
   const needsSync = connectParam === 'done'
@@ -734,6 +753,23 @@ export default async function Page({
                             {t.onSale}
                           </span>
                         )}
+
+                        {/* ⇩⇩ NOUVEAU : badge public/privé en haut à droite ⇩⇩ */}
+                          {(() => {
+                            const isPublic = publicYmd.has(c.ts)
+                            return (
+                              <span style={{
+                                position:'absolute', top:8, right:8,
+                                padding:'6px 10px',
+                                borderRadius:999,
+                                background: isPublic ? 'rgba(14,170,80,.18)' : 'rgba(120,130,150,.18)',
+                                border: '1px solid var(--color-border)',
+                                fontSize:12
+                              }}>
+                                {locale === 'fr' ? (isPublic ? 'Public' : 'Privé') : (isPublic ? 'Public' : 'Private')}
+                              </span>
+                            )
+                          })()}
                         <div style={{textAlign:'center', lineHeight:1.06}}>
                           <div style={{fontFamily:'Fraunces, serif', fontWeight:900, fontSize:32}}>
                             {c.ts}
