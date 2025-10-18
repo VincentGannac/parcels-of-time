@@ -1213,9 +1213,9 @@ useEffect(() => {
   const mainTime = chosenDateStr // AAAA-MM-JJ ou YYYY-MM-DD
 
   // tailles PDF
-  const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5, linkSize = 10.5
+  const tsSize = 26, labelSize = 11, nameSize = 15, msgSize = 12.5
   const gapSection = 14, gapSmall = 8
-  const lineHMsg = 16, lineHLink = 14
+  const lineHMsg = 16
 
   // safe area & colonnes en points
   const SA = getSafeArea(form.cert_style)
@@ -1271,16 +1271,10 @@ useEffect(() => {
   const remainingForAttest = Math.max(0, TOTAL_TEXT_LINES - msgLines.length)
   const attestLines = attestLinesAll.slice(0, remainingForAttest)
 
-  const linkLinesAll = form.link_url ? meas.wrap(form.link_url, linkSize, COLW, false) : []
-
-  const maxMsgLines = Math.max(0, Math.floor((afterTitleSpace - (form.link_url ? (gapSection + lineHLink) : 0)) / lineHMsg))
+  const maxMsgLines = Math.max(0, Math.floor(afterTitleSpace / lineHMsg))
   const NAME_MAX  = 40
   const GIFT_MAX  = 40
   const TITLE_MAX = 80
-
-  const afterMsgSpace = afterTitleSpace - (msgLines.length ? (gapSection + msgLines.length * lineHMsg) : 0)
-  const maxLinkLines = Math.min(2, Math.max(0, Math.floor(afterMsgSpace / lineHLink)))
-  const linkLines = linkLinesAll.slice(0, maxLinkLines)
 
   const blockH =
     fixedTop
@@ -1289,9 +1283,6 @@ useEffect(() => {
     + (attestLines.length ? (gapSection + attestLines.length * lineHMsg) : 0)
 
   let y = contentTopMax
-
-  const TOTAL_MSG_LINES = maxMsgLines
-  const attestExtraBlank = (show.attestation ? 1 : 0) // (réservé si besoin)
 
   async function parseErrorResponse(res: Response) {
     const ct = res.headers.get('content-type') || ''
@@ -1397,18 +1388,6 @@ useEffect(() => {
     }
   }
 
-  let linkLabelTop:number|null = null
-  const linkLineTops:number[] = []
-  if (linkLines.length) {
-    y -= gapSection
-    linkLabelTop = toTopPx(y - (labelSize + 2), labelSize)
-    y -= (labelSize + 6)
-    for (const _ of linkLines) {
-      linkLineTops.push(toTopPx(y - lineHLink, linkSize))
-      y -= lineHLink
-    }
-  }
-
   const topBrand = toTopPx(yBrand, brandSize)
   const topCert  = toTopPx(yCert,  subSize)
 
@@ -1438,8 +1417,6 @@ useEffect(() => {
   attestLabelTop          = push(attestLabelTop)
   for (let i=0;i<attestLineTops.length;i++) attestLineTops[i] = attestLineTops[i] + contentOffsetPx
   for (let i=0;i<msgLineTops.length;i++) msgLineTops[i] = msgLineTops[i] + contentOffsetPx
-  linkLabelTop            = push(linkLabelTop)
-  for (let i=0;i<linkLineTops.length;i++) linkLineTops[i] = linkLineTops[i] + contentOffsetPx
   
 
   const Preview: React.FC = () => (
@@ -1552,7 +1529,7 @@ useEffect(() => {
             transform: 'translateX(-50%)',
             textAlign: 'center',
             top: toTopPx(yBrand, 18),
-            fontWeight: 800,
+            fontWeight: 700,
             fontSize: 18 * scale,
             color: form.text_color,
           }}
@@ -1771,44 +1748,6 @@ useEffect(() => {
                   whiteSpace: 'pre',
                   wordBreak: 'normal',
                   color: form.text_color,
-                }}
-              >
-                {line}
-              </div>
-            ))}
-          </>
-        )}
-  
-        {/* Link */}
-        {linkLines.length > 0 && (
-          <>
-            <div
-              style={{
-                position: 'absolute',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                textAlign: 'center',
-                top: linkLabelTop!,
-                fontWeight: 400,
-                fontSize: 11 * scale,
-                color: subtleColor,
-              }}
-            >
-              {L.link}
-            </div>
-            {linkLines.map((line, i) => (
-              <div
-                key={i}
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  textAlign: 'center',
-                  top: linkLineTops[i],
-                  fontSize: 10.5 * scale,
-                  color: mixColorForLink(form.text_color),
-                  whiteSpace: 'pre',
-                  wordBreak: 'normal',
                 }}
               >
                 {line}
@@ -2636,11 +2575,4 @@ useEffect(() => {
       </section>
     </main>
   )
-
-  function mixColorForLink(hex:string){
-    const {r,g,b} = hexToRgb(hex)
-    const mixc = (a:number,b:number,t:number)=> Math.round(a*(1-t)+b*t)
-    const rr = mixc(r, 51, 0.3), gg = mixc(g, 51, 0.3), bb = mixc(b, 179, 0.3)
-    return `rgb(${rr},${gg},${bb})`
-  }
 }
