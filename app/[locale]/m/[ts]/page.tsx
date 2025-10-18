@@ -464,7 +464,6 @@ export default async function Page({
                           pattern="[0-9]*"
                           placeholder="10"
                           required
-                          list="price-suggestions"
                           aria-describedby="price-help"
                           aria-invalid={hasPriceError ? true : undefined}
                           title={locale==='fr' ? 'Entier, minimum 3 €' : 'Integer, minimum €3'}
@@ -480,18 +479,12 @@ export default async function Page({
                             outline: hasPriceError ? '2px solid rgba(210,38,38,.6)' : undefined
                           }}
                         />
-                        <datalist id="price-suggestions">
-                          <option value="3" />
-                          <option value="5" />
-                          <option value="10" />
-                          <option value="20" />
-                        </datalist>
                       </div>
 
                       <small id="price-help" style={{opacity:.75}}>
                         {locale==='fr'
-                          ? 'Montant en euros, sans centimes (ex. 5, 10, 20). Minimum 3 €.'
-                          : 'Whole euros only (e.g., 5, 10, 20). Minimum €3.'}
+                          ? 'Montant en euros, sans centimes. Minimum 3 €.'
+                          : 'Whole euros only. Minimum €3.'}
                       </small>
                     </div>
 
@@ -574,8 +567,6 @@ export default async function Page({
               </section>
             )}
             {/* badges état */}
-
-
             {isOwner && (sp.listing === 'ok' || myListingForThisDay) && (
               <div style={{
                 padding:'10px 12px',
