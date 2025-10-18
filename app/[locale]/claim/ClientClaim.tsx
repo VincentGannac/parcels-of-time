@@ -44,15 +44,6 @@ function getSafeArea(style: CertStyle){
 
 const CERT_BG_HEX = '#F4F1EC'
 
-/* === Mobile breakpoint — n'impacte pas le desktop === */
-const [isSmall, setIsSmall] = useState(false)
-useEffect(() => {
-  const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
-  onResize()
-  window.addEventListener('resize', onResize)
-  return () => window.removeEventListener('resize', onResize)
-}, [])
-
 /** ------- Utils ------- **/
 const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
 function safeDecode(value: string): string {
@@ -340,7 +331,14 @@ export default function ClientClaim({ prefillEmail }: { prefillEmail?: string })
   const styleParam = (params.get('style') || '').toLowerCase()
   const giftParam = params.get('gift')
   const initialGift = giftParam === '1' || giftParam === 'true'
-
+  /* === Mobile breakpoint — n'impacte pas le desktop === */
+  const [isSmall, setIsSmall] = useState(false)
+  useEffect(() => {
+    const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
   // Locale
   const loc = useMemo(() => {
     try {
