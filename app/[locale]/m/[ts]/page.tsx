@@ -821,7 +821,6 @@ export default async function Page({
             </div>
           </details>
         </section>
-
         <DangerRelease locale={locale} tsYMD={tsYMD!} />
       </section>
     </main>

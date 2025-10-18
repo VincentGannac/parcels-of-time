@@ -1,4 +1,4 @@
-//app/api/marketplace/listing/route.ts
+// app/api/marketplace/listing/route.ts
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { readSession } from '@/lib/auth' // on n'utilise plus ownerIdForDay ici
@@ -113,8 +113,8 @@ export async function POST(req: Request) {
       // réactive / met à jour le prix + mode d’affichage
       await client.query(
         `update listings
-            set price_cents=$3, currency=$4, status='active',
-                hide_claim_details=$5, updated_at=now()
+            set price_cents=$2, currency=$3, status='active'::listing_status,
+                hide_claim_details=$4, updated_at=now()
           where id=$1`,
         [existing[0].id, price_cents, currency, hideClaimDetails]
       )
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
       // insert propre pour le nouveau propriétaire
       await client.query(
         `insert into listings (ts, seller_owner_id, price_cents, currency, status, hide_claim_details)
-         values ($1, $2, $3, $4, 'active', $5)`,
+         values ($1, $2, $3, $4, 'active'::listing_status, $5)`,
         [tsISO, sess.ownerId, price_cents, currency, hideClaimDetails]
       )
     }
@@ -136,6 +136,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     try { await client.query('ROLLBACK') } catch {}
+    console.error('[listing POST] error:', e?.message || e)
     const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
     if (ctype.includes('application/x-www-form-urlencoded')) {
       // on garde la même sémantique pour l’UI
