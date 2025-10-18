@@ -8,6 +8,10 @@ function normIsoDay(s: string) {
   d.setUTCHours(0,0,0,0)
   return { iso: d.toISOString(), ymd: d.toISOString().slice(0,10) }
 }
+// Type guard pour affiner le type et satisfaire TS
+function isGoodPrice(p: unknown): p is number {
+  return typeof p === 'number' && Number.isInteger(p) && p >= 3
+}
 
 // 👇 helper robuste: owner pour le JOUR (UTC minuit)
 async function ownerIdForDayDb(tsISO: string): Promise<string | null> {
@@ -32,17 +36,15 @@ export async function POST(req: Request) {
 
   const ctype = (req.headers.get('content-type') || '').toLowerCase()
   let tsInput = ''
-  let priceEuros = 0
   let currency = 'EUR'
   let locale: 'fr'|'en' = 'fr'
   let hideClaimDetails = false  // false = afficher infos ; true = “vierge”
+  let parsedPrice: number | null = null  // <-- prix en euros entiers
 
-  if (ctype.includes('application/x-www-form-urlencoded')) {
+  // ---- lecture & parsing prix (entier ≥ 3) ----
+  const parsePriceFromForm = async () => {
     const form = await req.formData()
     tsInput = String(form.get('ts') || '')
-    const p = Number(form.get('price') || 0)
-    const pc = Number(form.get('price_cents') || 0)
-    priceEuros = isFinite(p) && p > 0 ? p : Math.floor(pc/100)
     const cur = String(form.get('currency') || '').toUpperCase()
     if (cur) currency = cur
     const loc = String(form.get('locale') || '')
@@ -53,12 +55,25 @@ export async function POST(req: Request) {
     if (dm === 'full')  hideClaimDetails = false
     const b = String(form.get('blank') || form.get('hide_claim_details') || '').toLowerCase()
     if (['1','true','yes','on'].includes(b)) hideClaimDetails = true
-  } else {
+
+    // Prix prioritaire: "price" (euros entiers)
+    const priceRaw = String(form.get('price') ?? '').trim()
+    if (priceRaw !== '' && /^\d+$/.test(priceRaw)) {
+      parsedPrice = parseInt(priceRaw, 10)
+    }
+
+    // Fallback strict: "price_cents" (multiple de 100 >= 300)
+    if (parsedPrice === null) {
+      const pc = Number(form.get('price_cents') || 0)
+      if (Number.isInteger(pc) && pc >= 300 && pc % 100 === 0) {
+        parsedPrice = pc / 100
+      }
+    }
+  }
+
+  const parsePriceFromJSON = async () => {
     const body = await req.json().catch(() => ({} as any))
     tsInput = String(body.ts || '')
-    const p = Number(body.price || 0)
-    const pc = Number(body.price_cents || 0)
-    priceEuros = isFinite(p) && p > 0 ? p : Math.floor(pc/100)
     currency = String(body.currency || 'EUR').toUpperCase()
     const loc = String(body.locale || '')
     if (loc === 'en' || loc === 'fr') locale = loc
@@ -67,8 +82,30 @@ export async function POST(req: Request) {
     if (dm === 'blank') hideClaimDetails = true
     if (dm === 'full')  hideClaimDetails = false
     if (body.blank === true || body.hide_claim_details === true) hideClaimDetails = true
+
+    // Prix prioritaire: "price" (doit être entier)
+    if (Number.isInteger(body.price)) {
+      parsedPrice = Number(body.price)
+    } else if (typeof body.price === 'string' && /^\d+$/.test(body.price)) {
+      parsedPrice = parseInt(body.price, 10)
+    }
+
+    // Fallback strict: "price_cents"
+    if (parsedPrice === null) {
+      const pc = Number(body.price_cents || 0)
+      if (Number.isInteger(pc) && pc >= 300 && pc % 100 === 0) {
+        parsedPrice = pc / 100
+      }
+    }
   }
 
+  if (ctype.includes('application/x-www-form-urlencoded')) {
+    await parsePriceFromForm()
+  } else {
+    await parsePriceFromJSON()
+  }
+
+  // Normalisation TS
   const norm = normIsoDay(tsInput)
   if (!norm) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
   const tsISO = norm.iso
@@ -81,9 +118,19 @@ export async function POST(req: Request) {
     return NextResponse.redirect(`${base}/${locale}/account?err=not_owner`, { status: 303 })
   }
 
-  const price_cents = Math.max(100, Math.floor((priceEuros || 0) * 100)) // min 1 €
-  const client = await pool.connect()
-  try {
+    // ✅ validations prix : entier et ≥ 3
+    if (!isGoodPrice(parsedPrice)) {
+      const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
+      if (ctype.includes('application/x-www-form-urlencoded')) {
+        return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsYMD)}?listing=err&reason=price`, { status: 303 })
+      }
+      return NextResponse.json({ error: 'bad_price', detail: 'price must be an integer number of euros >= 3' }, { status: 400 })
+    }
+
+    const price_cents = parsedPrice * 100 // OK: parsedPrice est bien un number ici
+
+    const client = await pool.connect()
+    try {
     await client.query('BEGIN')
 
     // 🔒 on verrouille TOUTES les annonces de ce jour pour éviter les races
@@ -139,7 +186,7 @@ export async function POST(req: Request) {
     console.error('[listing POST] error:', e?.message || e)
     const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
     if (ctype.includes('application/x-www-form-urlencoded')) {
-      // on garde la même sémantique pour l’UI
+      // on garde la même sémantique pour l’UI (avec raison explicite)
       return NextResponse.redirect(`${base}/${locale}/m/${encodeURIComponent(tsYMD)}?listing=err`, { status: 303 })
     }
     return NextResponse.json({ error: 'db_error', detail: String(e?.message || e) }, { status: 500 })

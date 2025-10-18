@@ -17,6 +17,7 @@ type SearchParams = {
   debug?: string
   listing?: string
   reg?: 'pub' | 'priv'
+  reason?: string            // <— pour afficher une erreur de prix
 }
 
 function safeDecode(v: string) { try { return decodeURIComponent(v) } catch { return v } }
@@ -258,8 +259,10 @@ export default async function Page({
     merchant = await readMerchant(session.ownerId)
   }
 
-  const myListingForThisDay = isOwner ? myListings.find(l => (ymdSafe(l.ts) === tsYMD)) : null
+  const myListingForThisDay: MyListing | null =
+  isOwner ? (myListings.find(l => (ymdSafe(l.ts) === tsYMD)) ?? null) : null
   const isPublic = await getPublicStateDb(tsISO!)
+  const hasPriceError = sp.listing === 'err' && sp.reason === 'price'
 
   // claim data
   const meta = await getClaimMeta(tsISO!)
@@ -419,49 +422,113 @@ export default async function Page({
                 <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>
                   {locale==='fr' ? 'Revendre ce certificat (Marketplace)' : 'Resell this certificate (Marketplace)'}
                 </div>
-                <form method="post" action="/api/marketplace/listing">
+
+                {hasPriceError && (
+                  <div
+                    role="alert"
+                    style={{
+                      marginBottom:12,
+                      padding:'10px 12px',
+                      border:'1px solid rgba(210,38,38,.4)',
+                      background:'rgba(210,38,38,.12)',
+                      borderRadius:10,
+                      fontSize:14
+                    }}
+                  >
+                    {locale==='fr'
+                      ? 'Le prix doit être un entier en euros, minimum 3 €.'
+                      : 'Price must be a whole number in euros, minimum €3.'}
+                  </div>
+                )}
+
+                <form method="post" action="/api/marketplace/listing" noValidate>
                   <input type="hidden" name="ts" value={tsYMD!} />
                   <input type="hidden" name="locale" value={locale} />
-                  <div style={{display:'grid', gap:12}}>
-                    <div style={{display:'flex', gap:16, alignItems:'center', flexWrap:'wrap'}}>
-                      <label style={{display:'flex', alignItems:'center', gap:8}}>
+
+                  <div style={{display:'grid', gap:16}}>
+                    {/* Prix (€) — entier, min 3 */}
+                    <div style={{display:'grid', gap:8}}>
+                      <label htmlFor="resale-price" style={{display:'flex', alignItems:'center', gap:8}}>
                         <span style={{opacity:.85}}>{locale==='fr' ? 'Prix (€)' : 'Price (€)'}</span>
-                        <input name="price" type="number" min={1} step={1} required
-                               style={{padding:'10px 12px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}} />
                       </label>
+
+                      <div style={{ position:'relative', maxWidth: 260 }}>
+                        <span aria-hidden style={{ position:'absolute', left:10, top:10, fontWeight:800, opacity:.9 }}>€</span>
+                        <input
+                          id="resale-price"
+                          name="price"
+                          type="number"
+                          min={3}
+                          step={1}
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          placeholder="10"
+                          required
+                          list="price-suggestions"
+                          aria-describedby="price-help"
+                          aria-invalid={hasPriceError ? true : undefined}
+                          title={locale==='fr' ? 'Entier, minimum 3 €' : 'Integer, minimum €3'}
+                          style={{
+                            width:'100%',
+                            padding:'10px 12px 10px 28px',
+                            border:'1px solid var(--color-border)',
+                            borderRadius:10,
+                            background:'transparent',
+                            color:'var(--color-text)',
+                            fontWeight:800,
+                            letterSpacing:.2,
+                            outline: hasPriceError ? '2px solid rgba(210,38,38,.6)' : undefined
+                          }}
+                        />
+                        <datalist id="price-suggestions">
+                          <option value="3" />
+                          <option value="5" />
+                          <option value="10" />
+                          <option value="20" />
+                        </datalist>
+                      </div>
+
+                      <small id="price-help" style={{opacity:.75}}>
+                        {locale==='fr'
+                          ? 'Montant en euros, sans centimes (ex. 5, 10, 20). Minimum 3 €.'
+                          : 'Whole euros only (e.g., 5, 10, 20). Minimum €3.'}
+                      </small>
                     </div>
 
+                    {/* Affichage marketplace */}
                     <fieldset style={{border:'1px solid var(--color-border)', borderRadius:12, padding:12}}>
                       <legend style={{padding:'0 6px', fontSize:12, color:'var(--color-muted)'}}>
                         {locale==='fr' ? 'Affichage sur la marketplace' : 'Marketplace display'}
                       </legend>
                       <div style={{display:'grid', gap:10}}>
-                        <label style={{display:'flex', gap:10, alignItems:'flex-start'}}>
+                        <label style={{display:'flex', gap:10, alignItems:'flex-start', cursor:'pointer'}}>
                           <input type="radio" name="display_mode" value="full" defaultChecked />
                           <span>
                             <strong>{locale==='fr' ? 'Afficher les infos du certificat' : 'Show certificate details'}</strong><br/>
                             <small style={{opacity:.8}}>
                               {locale==='fr'
-                                ? 'Contenu du certificat visible'
-                                : 'Visible certificate content'}
+                                ? 'Contenu du certificat visible (titre, message, style, etc.).'
+                                : 'Certificate content visible (title, message, style, etc.).'}
                             </small>
                           </span>
                         </label>
-                        <label style={{display:'flex', gap:10, alignItems:'flex-start'}}>
+
+                        <label style={{display:'flex', gap:10, alignItems:'flex-start', cursor:'pointer'}}>
                           <input type="radio" name="display_mode" value="blank" />
                           <span>
                             <strong>{locale==='fr' ? 'Annonce “vierge”' : 'Blank listing'}</strong><br/>
                             <small style={{opacity:.8}}>
                               {locale==='fr'
-                                ? 'Affichage comme une date disponible (anonyme)'
-                                : 'Shown like an available (anonymous) day'}
+                                ? 'Affiché comme une date disponible, informations masquées jusqu’à l’achat.'
+                                : 'Shown like an available day, details hidden until purchase.'}
                             </small>
                           </span>
                         </label>
                       </div>
                     </fieldset>
 
-                    <div style={{display:'grid', gap:6, fontSize:12}}>
+                    {/* Consentements vendeurs */}
+                    <div style={{display:'grid', gap:8, fontSize:12}}>
                       <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                         <input type="checkbox" name="seller_terms" required />
                         <span>
@@ -470,6 +537,7 @@ export default async function Page({
                             : <>I accept the <a href={`/${locale}/legal/seller`} style={{color:'var(--color-text)'}}>Seller Terms</a> (15% fee min €1) and the <a href={`/${locale}/legal/terms`} style={{color:'var(--color-text)'}}>Terms</a>.</>}
                         </span>
                       </label>
+
                       <label style={{display:'inline-flex', alignItems:'flex-start', gap:8}}>
                         <input type="checkbox" name="seller_rights" required />
                         <span>
@@ -480,22 +548,34 @@ export default async function Page({
                       </label>
                     </div>
 
-                    <div>
-                      <button type="submit"
-                        style={{padding:'12px 14px', borderRadius:12, border:'1px solid var(--color-border)', background:'var(--color-primary)', color:'var(--color-on-primary)', fontWeight:800}}
-                      >{locale==='fr' ? 'Mettre en vente' : 'List for sale'}</button>
+                    {/* CTA + frais */}
+                    <div style={{display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}>
+                      <button
+                        type="submit"
+                        style={{
+                          padding:'12px 14px',
+                          borderRadius:12,
+                          border:'1px solid var(--color-border)',
+                          background:'var(--color-primary)',
+                          color:'var(--color-on-primary)',
+                          fontWeight:800
+                        }}
+                      >
+                        {locale==='fr' ? 'Mettre en vente' : 'List for sale'}
+                      </button>
+                      <span style={{fontSize:12, opacity:.7}}>
+                        {locale==='fr'
+                          ? 'Commission 15% (min 1 €) prélevée lors de la vente.'
+                          : '15% fee (min €1) charged on sale.'}
+                      </span>
                     </div>
                   </div>
-                  <p style={{fontSize:12, opacity:.7, marginTop:8}}>
-                    {locale==='fr'
-                      ? 'Commission 15% (min 1 €) lors de la vente.'
-                      : '15% fee (min €1) at sale time.'}
-                  </p>
                 </form>
               </section>
             )}
-
             {/* badges état */}
+
+
             {isOwner && (sp.listing === 'ok' || myListingForThisDay) && (
               <div style={{
                 padding:'10px 12px',
@@ -658,31 +738,31 @@ export default async function Page({
                   style={{
                     padding: '6px 10px',
                     borderRadius: 999,
-                    background: (await getPublicStateDb(tsISO!)) ? 'rgba(14,170,80,.18)' : 'rgba(120,130,150,.18)',
+                    background: isPublic ? 'rgba(14,170,80,.18)' : 'rgba(120,130,150,.18)',
                     border: '1px solid var(--color-border)',
                     fontSize: 12,
                   }}
                 >
-                  {locale==='fr' ? 'Statut' : 'Status'} : <strong>{(await getPublicStateDb(tsISO!)) ? 'Public' : 'Privé'}</strong>
+                  {locale==='fr' ? 'Statut' : 'Status'} : <strong>{isPublic ? 'Public' : 'Privé'}</strong>
                 </span>
               </div>
               {isOwner && (
                 <form action={togglePublic} style={{ display: 'flex', gap: 10 }}>
                   <input type="hidden" name="ts" value={tsYMD!} />
-                  <input type="hidden" name="next" value={(await getPublicStateDb(tsISO!)) ? '0' : '1'} />
+                  <input type="hidden" name="next" value={isPublic ? '0' : '1'} />
                   <button
                     type="submit"
                     style={{
                       padding: '10px 12px',
                       borderRadius: 10,
-                      background: (await getPublicStateDb(tsISO!)) ? 'var(--color-surface)' : 'var(--color-primary)',
-                      color: (await getPublicStateDb(tsISO!)) ? 'var(--color-text)' : 'var(--color-on-primary)',
+                      background: isPublic ? 'var(--color-surface)' : 'var(--color-primary)',
+                      color: isPublic ? 'var(--color-text)' : 'var(--color-on-primary)',
                       border: '1px solid var(--color-border)',
                       fontWeight: 800,
                       cursor: 'pointer',
                     }}
                   >
-                    {(await getPublicStateDb(tsISO!)) ? (locale==='fr' ? 'Rendre privé' : 'Make private') : (locale==='fr' ? 'Rendre public' : 'Make public')}
+                    {isPublic ? (locale==='fr' ? 'Rendre privé' : 'Make private') : (locale==='fr' ? 'Rendre public' : 'Make public')}
                   </button>
                   <a
                     href={`/${locale}/explore`}
