@@ -1180,9 +1180,10 @@ useEffect(() => {
     if (!el) return
   
     const compute = () => {
-      const w = el.getBoundingClientRect().width // 👈 plus précis que clientWidth
+      // ⚠️ clientWidth exclut la bordure → scale identique à l’ancienne version
+      const w = el.clientWidth
       const s = w / A4_W_PT
-      setScale(s > 0 ? Number(s.toFixed(6)) : 1) // 👈 stabilité
+      setScale(s || 1)
     }
   
     compute()
@@ -1423,7 +1424,6 @@ useEffect(() => {
   attestLabelTop          = push(attestLabelTop)
   for (let i=0;i<attestLineTops.length;i++) attestLineTops[i] = attestLineTops[i] + contentOffsetPx
   for (let i=0;i<msgLineTops.length;i++) msgLineTops[i] = msgLineTops[i] + contentOffsetPx
-  
 
   const Preview: React.FC = () => (
     <aside
