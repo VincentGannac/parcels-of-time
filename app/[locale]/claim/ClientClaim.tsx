@@ -44,6 +44,15 @@ function getSafeArea(style: CertStyle){
 
 const CERT_BG_HEX = '#F4F1EC'
 
+/* === Mobile breakpoint — n'impacte pas le desktop === */
+const [isSmall, setIsSmall] = useState(false)
+useEffect(() => {
+  const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+  onResize()
+  window.addEventListener('resize', onResize)
+  return () => window.removeEventListener('resize', onResize)
+}, [])
+
 /** ------- Utils ------- **/
 const range = (a:number, b:number) => Array.from({length:b-a+1},(_,i)=>a+i)
 function safeDecode(value: string): string {
@@ -1447,155 +1456,303 @@ useEffect(() => {
           <div style={{fontSize:12, color:'var(--color-muted)'}}>{T.securePayment}<strong>Stripe</strong></div>
         </div>
 
-        <header style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:16, marginBottom:14}}>
-          <h1 style={{fontFamily:'Fraunces, serif', fontSize:40, lineHeight:'48px', margin:0}}>
-            {isGift ? T.headerGift : T.headerReserve}
-          </h1>
-          <button onClick={()=>setIsGift(v=>!v)} style={{background:'var(--color-surface)', color:'var(--color-text)', border:'1px solid var(--color-border)', padding:'8px 12px', borderRadius:10, cursor:'pointer'}} aria-pressed={isGift}>
-            {isGift ? T.giftOn : T.giftOff}
-          </button>
-        </header>
+            <header
+              style={{
+                display: isSmall ? 'grid' : 'flex',
+                alignItems: isSmall ? 'start' : 'baseline',
+                justifyContent: isSmall ? 'stretch' : 'space-between',
+                gap: 16,
+                marginBottom: isSmall ? 10 : 14,
+              }}
+            >
+              <h1
+                style={{
+                  fontFamily: 'Fraunces, serif',
+                  fontSize: isSmall ? 30 : 40,
+                  lineHeight: isSmall ? '36px' : '48px',
+                  margin: 0,
+                }}
+              >
+                {isGift ? T.headerGift : T.headerReserve}
+              </h1>
 
-        <div style={{display:'grid', gridTemplateColumns:'1.1fr 0.9fr', gap:18, alignItems:'start'}}>
-          {/* ---------- FORM COLUMN ---------- */}
-          <form
-            onSubmit={onSubmit}
-            onKeyDown={(e)=>{
-              if (e.defaultPrevented) return
-              if (e.key === 'Enter') {
-                const t = e.target as HTMLElement
-                const tag = (t?.tagName || '').toLowerCase()
-                const type = (t as HTMLInputElement)?.type?.toLowerCase?.()
-                const isTextarea = tag === 'textarea'
-                const isSubmit = tag === 'button' || (tag === 'input' && type === 'submit')
-                if (!isTextarea && !isSubmit) e.preventDefault()
-              }
+              <button
+                onClick={() => setIsGift(v => !v)}
+                style={{
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  width: isSmall ? '100%' : 'auto',
+                }}
+                aria-pressed={isGift}
+              >
+                {isGift ? T.giftOn : T.giftOff}
+              </button>
+            </header>
+
+            <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: isSmall ? '1fr' : '1.1fr 0.9fr',
+        gap: isSmall ? 14 : 18,
+        alignItems: 'start',
+      }}
+    >
+      {/* ---------- FORM COLUMN ---------- */}
+      <form
+        onSubmit={onSubmit}
+        onKeyDown={(e) => {
+          if (e.defaultPrevented) return
+          if (e.key === 'Enter') {
+            const t = e.target as HTMLElement
+            const tag = (t?.tagName || '').toLowerCase()
+            const type = (t as HTMLInputElement)?.type?.toLowerCase?.()
+            const isTextarea = tag === 'textarea'
+            const isSubmit = tag === 'button' || (tag === 'input' && type === 'submit')
+            if (!isTextarea && !isSubmit) e.preventDefault()
+          }
+        }}
+        style={{ display: 'grid', gap: 14 }}
+      >
+        {/* Step 1 — Journée (mobile: grille 2 colonnes, Jour sur toute la largeur) */}
+        <div
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 16,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 14,
+              textTransform: 'uppercase',
+              letterSpacing: 1,
+              color: 'var(--color-muted)',
+              marginBottom: 8,
             }}
-            style={{display:'grid', gap:14}}
           >
-            {/* Step 1 — Journée */}
-            <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
-              <div style={{fontSize:14, textTransform:'uppercase', letterSpacing:1, color:'var(--color-muted)', marginBottom:8}}>{T.step1}</div>
+            {T.step1}
+          </div>
 
-              <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8}}>
-                {/* Année */}
-                <label style={{display:'grid', gap:6}}>
-                  <span>{T.year}</span>
-                  <select value={Y} onChange={e=>setY(parseInt(e.target.value))}
-                    style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                    {range(1900, MAX_Y).map(y=> <option key={y} value={y} style={{color:'#000'}}>{y}</option>)}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isSmall ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+              gap: 8,
+            }}
+          >
+            {/* Année */}
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>{T.year}</span>
+              <select
+                value={Y}
+                onChange={(e) => setY(parseInt(e.target.value))}
+                style={{
+                  padding: '12px 10px',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 10,
+                  background: 'transparent',
+                  color: 'var(--color-text)',
+                }}
+              >
+                {range(1900, MAX_Y).map((y) => (
+                  <option key={y} value={y} style={{ color: '#000' }}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {/* Mois */}
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>{T.month}</span>
+              {(() => {
+                const maxMonthForYear = Y === MAX_Y ? MAX_M : 12
+                return (
+                  <select
+                    value={M}
+                    onChange={(e) => setM(parseInt(e.target.value))}
+                    style={{
+                      padding: '12px 10px',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 10,
+                      background: 'transparent',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    {Array.from({ length: maxMonthForYear }, (_, i) => i + 1).map((v) => (
+                      <option key={v} value={v} style={{ color: '#000' }}>
+                        {String(v).padStart(2, '0')}
+                      </option>
+                    ))}
                   </select>
-                </label>
+                )
+              })()}
+            </label>
 
-                {/* Mois */}
-                <label style={{display:'grid', gap:6}}>
-                  <span>{T.month}</span>
-                  {(() => {
-                    const maxMonthForYear = (Y === MAX_Y) ? MAX_M : 12
-                    return (
-                      <select value={M} onChange={e=>setM(parseInt(e.target.value))}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}>
-                        {Array.from({length:maxMonthForYear},(_,i)=>i+1).map(v=>(
-                          <option key={v} value={v} style={{color:'#000'}}>{String(v).padStart(2,'0')}</option>
-                        ))}
-                      </select>
-                    )
-                  })()}
-                </label>
+            {/* Jour (⚠️ mobile: span sur 2 colonnes) */}
+            <label
+              style={{
+                display: 'grid',
+                gap: 6,
+                gridColumn: isSmall ? '1 / -1' : undefined,
+              }}
+            >
+              <span>
+                {T.day}{' '}
+                {isLoadingDays && (
+                  <em style={{ fontSize: 12, opacity: 0.7 }}>{T.updating}</em>
+                )}
+                {isLoadingClaim && (
+                  <em style={{ fontSize: 12, opacity: 0.7, marginLeft: 6 }}>
+                    {T.loadingCert}
+                  </em>
+                )}
+              </span>
+              {(() => {
+                const dim = daysInMonth(Y, M)
+                const maxDayForThisMonth =
+                  Y === MAX_Y && M === MAX_M ? Math.min(dim, MAX_D) : dim
+                const days = Array.from({ length: maxDayForThisMonth }, (_, i) => i + 1)
+                const setRed = new Set(unavailableDays)
+                const setYellow = new Set(forSaleDays)
+                return (
+                  <select
+                    key={`${Y}-${M}`}
+                    value={D}
+                    onChange={(e) => setD(parseInt(e.target.value))}
+                    aria-busy={isLoadingDays || undefined}
+                    style={{
+                      padding: '12px 10px',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 10,
+                      background: 'transparent',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    {days.map((d) => {
+                      const unavailable = setRed.has(d)
+                      const onSale = setYellow.has(d)
+                      const labelBase = d.toString().padStart(2, '0')
+                      const suffix = unavailable
+                        ? T.daySuffix.unavailable
+                        : onSale
+                        ? T.daySuffix.onSale
+                        : T.daySuffix.available
+                      const label = labelBase + suffix
+                      return (
+                        <option
+                          key={d}
+                          value={d}
+                          disabled={unavailable}
+                          aria-disabled={unavailable}
+                          style={{
+                            color: unavailable
+                              ? '#ff4d4d'
+                              : onSale
+                              ? '#e0a800'
+                              : '#000',
+                          }}
+                        >
+                          {(unavailable ? '⛔ ' : onSale ? '🟡 ' : '') + label}
+                        </option>
+                      )
+                    })}
+                  </select>
+                )
+              })()}
+            </label>
+          </div>
 
-                {/* Jour */}
-                <label style={{display:'grid', gap:6}}>
-                  <span>
-                    {T.day} {isLoadingDays && <em style={{fontSize:12, opacity:.7}}>{T.updating}</em>}
-                    {isLoadingClaim && <em style={{fontSize:12, opacity:.7, marginLeft:6}}>{T.loadingCert}</em>}
-                  </span>
-                  {(() => {
-                    const dim = daysInMonth(Y, M)
-                    const maxDayForThisMonth = (Y === MAX_Y && M === MAX_M) ? Math.min(dim, MAX_D) : dim
-                    const days = Array.from({length: maxDayForThisMonth}, (_,i)=>i+1)
-                    const setRed = new Set(unavailableDays)
-                    const setYellow = new Set(forSaleDays)
-                    return (
-                      <select
-                        key={`${Y}-${M}`}
-                        value={D}
-                        onChange={e=>setD(parseInt(e.target.value))}
-                        aria-busy={isLoadingDays || undefined}
-                        style={{padding:'12px 10px', border:'1px solid var(--color-border)', borderRadius:10, background:'transparent', color:'var(--color-text)'}}
-                      >
-                        {days.map(d=>{
-                          const unavailable = setRed.has(d)
-                          const onSale = setYellow.has(d)
-                          const labelBase = d.toString().padStart(2,'0')
-                          const suffix = unavailable ? T.daySuffix.unavailable : onSale ? T.daySuffix.onSale : T.daySuffix.available
-                          const label = labelBase + suffix
-                          return (
-                            <option
-                              key={d}
-                              value={d}
-                              disabled={unavailable}
-                              aria-disabled={unavailable}
-                              style={{ color: unavailable ? '#ff4d4d' : onSale ? '#e0a800' : '#000' }}
-                            >
-                              {(unavailable ? '⛔ ' : onSale ? '🟡 ' : '') + label}
-                            </option>
-                          )
-                        })}
-                      </select>
-                    )
-                  })()}
-                </label>
-              </div>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#ff8a8a' }}>{T.redHint}</div>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#e0a800' }}>
+            {T.yellowHint}
+          </div>
+        </div>
 
-              <div style={{marginTop:8, fontSize:12, color:'#ff8a8a'}}>
-                {T.redHint}
-              </div>
-              <div style={{marginTop:8, fontSize:12, color:'#e0a800'}}>
-                {T.yellowHint}
-              </div>
-            </div>
-
-            {/* Prix courant */}
-            {(() => {
-              const currentListing = saleLookup[D]
-              const isUnavailable = unavailableDays.includes(D)
-              const isOnSale = !!currentListing
-              const pill = (txt:string, bg:string, bd:string, fg:string) => (
-                <span style={{
-                  fontSize:11, padding:'4px 8px', borderRadius:999,
-                  background:bg, border:`1px solid ${bd}`, color:fg
-                }}>{txt}</span>
-              )
-              return (
+        {/* Prix courant */}
+        {(() => {
+          const currentListing = saleLookup[D]
+          const isUnavailable = unavailableDays.includes(D)
+          const isOnSale = !!currentListing
+          const pill = (txt: string, bg: string, bd: string, fg: string) => (
+            <span
+              style={{
+                fontSize: 11,
+                padding: '4px 8px',
+                borderRadius: 999,
+                background: bg,
+                border: `1px solid ${bd}`,
+                color: fg,
+              }}
+            >
+              {txt}
+            </span>
+          )
+          return (
+            <div
+              aria-live="polite"
+              style={{
+                padding: '10px 12px',
+                borderRadius: 12,
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
                 <div
-                  aria-live="polite"
                   style={{
-                    padding:'10px 12px',
-                    borderRadius:12,
-                    background:'var(--color-surface)',
-                    border:'1px solid var(--color-border)',
+                    fontSize: 12,
+                    letterSpacing: 1,
+                    textTransform: 'uppercase',
+                    color: 'var(--color-muted)',
                   }}
                 >
-                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-                    <div style={{fontSize:12, letterSpacing:1, textTransform:'uppercase', color:'var(--color-muted)'}}>
-                      {T.price}
-                    </div>
-                    {isUnavailable
-                      ? pill(T.pill.unavailable,'rgba(255,122,122,.10)','#ff7a7a','#ffb2b2')
-                      : isOnSale
-                        ? pill(T.pill.marketplace,'rgba(255,209,71,.12)','#E4B73D','var(--color-primary)')
-                        : pill(T.pill.available,'rgba(11,216,122,.10)','#0BBF6A','#0BBF6A')}
-                  </div>
-
-                  <div style={{display:'flex', alignItems:'baseline', gap:8, marginTop:4}}>
-                    <div style={{fontSize:18, fontWeight:900}}>
-                      {isOnSale ? (currentListing.price_cents/100).toFixed(0) : 29} €
-                    </div>
-                    {isOnSale && <div style={{fontSize:12, opacity:.75}}>{T.sellerNote}</div>}
-                  </div>
+                  {T.price}
                 </div>
-              )
-            })()}
+                {isUnavailable
+                  ? pill(
+                      T.pill.unavailable,
+                      'rgba(255,122,122,.10)',
+                      '#ff7a7a',
+                      '#ffb2b2'
+                    )
+                  : isOnSale
+                  ? pill(
+                      T.pill.marketplace,
+                      'rgba(255,209,71,.12)',
+                      '#E4B73D',
+                      'var(--color-primary)'
+                    )
+                  : pill(
+                      T.pill.available,
+                      'rgba(11,216,122,.10)',
+                      '#0BBF6A',
+                      '#0BBF6A'
+                    )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+                <div style={{ fontSize: 18, fontWeight: 900 }}>
+                  {isOnSale ? (currentListing.price_cents / 100).toFixed(0) : 29} €
+                </div>
+                {isOnSale && (
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{T.sellerNote}</div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
             {/* Step 2 — Infos */}
             <div style={{background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:16}}>
@@ -2027,127 +2184,253 @@ useEffect(() => {
             </div>
           </form>
 
-          {/* ---------- PREVIEW COLUMN ---------- */}
-          <aside aria-label={T.asideLabel}
-            style={{position:'sticky', top:24, background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:16, padding:12, boxShadow:'var(--shadow-elev1)'}}>
-            <div ref={previewWrapRef} style={{position:'relative', width:'100%', aspectRatio: `${A4_W_PT}/${A4_H_PT}`, borderRadius:12, overflow:'hidden', border:'1px solid var(--color-border)'}}>
-
+        {/* ---------- PREVIEW COLUMN ---------- */}
+        <aside
+            aria-label={T.asideLabel}
+            style={{
+              position: isSmall ? 'static' : 'sticky',
+              top: isSmall ? undefined : 24,
+              marginTop: isSmall ? 12 : 0,
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 16,
+              padding: 12,
+              boxShadow: 'var(--shadow-elev1)',
+            }}
+          >
+            <div
+              ref={previewWrapRef}
+              style={{
+                position: 'relative',
+                width: '100%',
+                aspectRatio: `${A4_W_PT}/${A4_H_PT}`,
+                borderRadius: 12,
+                overflow: 'hidden',
+                border: '1px solid var(--color-border)',
+              }}
+            >
               {isLoadingClaim && (
                 <div
                   aria-live="polite"
                   style={{
-                    position:'absolute', inset:0, zIndex:2,
-                    background:'rgba(0,0,0,.28)',
-                    display:'grid', placeItems:'center'
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 2,
+                    background: 'rgba(0,0,0,.28)',
+                    display: 'grid',
+                    placeItems: 'center',
                   }}
                 >
-                  <div style={{
-                    padding:'10px 12px', borderRadius:12,
-                    border:'1px solid var(--color-border)',
-                    background:'var(--color-surface)', color:'var(--color-text)', fontSize:13
-                  }}>
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      border: '1px solid var(--color-border)',
+                      background: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      fontSize: 13,
+                    }}
+                  >
                     {T.loadingCertificate}
                   </div>
                 </div>
               )}
 
               <img
-                key={(form.cert_style==='custom' ? customBg?.url : form.cert_style) || 'none'}
-                src={form.cert_style==='custom' ? (customBg?.url || '/cert_bg/neutral.png') : `/cert_bg/${form.cert_style}.png`}
+                key={(form.cert_style === 'custom' ? customBg?.url : form.cert_style) || 'none'}
+                src={
+                  form.cert_style === 'custom'
+                    ? customBg?.url || '/cert_bg/neutral.png'
+                    : `/cert_bg/${form.cert_style}.png`
+                }
                 alt={T.bgAltPrefix + form.cert_style}
-                style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', background:'#0E1017'}}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  objectPosition: 'center',
+                  background: '#0E1017',
+                }}
               />
 
               {/* Filigrane */}
-              <div aria-hidden style={{position:'absolute', inset:0, pointerEvents:'none', display:'grid', placeItems:'center', transform:'rotate(-22deg)', opacity:.14, mixBlendMode:'multiply'}}>
-                <div style={{fontWeight:900, fontSize:'min(18vw, 120px)', letterSpacing:2, color:'#1a1f2a'}}>PARCELS OF TIME — PREVIEW</div>
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  pointerEvents: 'none',
+                  display: 'grid',
+                  placeItems: 'center',
+                  transform: 'rotate(-22deg)',
+                  opacity: 0.14,
+                  mixBlendMode: 'multiply',
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 900,
+                    fontSize: 'min(18vw, 120px)',
+                    letterSpacing: 2,
+                    color: '#1a1f2a',
+                  }}
+                >
+                  PARCELS OF TIME — PREVIEW
+                </div>
               </div>
 
+              {/* ---- tout le reste du contenu de la preview (texte positionné) est inchangé ---- */}
+              {/* (Conserve exactement les mêmes éléments calculés + styles en-dessous) */}
+
               {/* Header (brand + title) */}
-              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yBrand, 18), fontWeight:800, fontSize: 18*scale, color: form.text_color }}>{L.brand}</div>
-              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: toTopPx(yCert, 12), fontWeight:400, fontSize: 12*scale, color: subtleColor }}>{L.title}</div>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: toTopPx(yBrand, 18),
+                  fontWeight: 800,
+                  fontSize: 18 * scale,
+                  color: form.text_color,
+                }}
+              >
+                {L.brand}
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: toTopPx(yCert, 12),
+                  fontWeight: 400,
+                  fontSize: 12 * scale,
+                  color: subtleColor,
+                }}
+              >
+                {L.title}
+              </div>
 
               {/* Date principale */}
-              <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: topMainTime2, fontWeight:800, fontSize: tsSize*scale, color: form.text_color }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: topMainTime2,
+                  fontWeight: 800,
+                  fontSize: tsSize * scale,
+                  color: form.text_color,
+                }}
+              >
                 {mainTime}
               </div>
 
-              {/* Owned by */}
+              {/* ... (garde tout ce qui suit dans l'aside identique à l’original) ... */}
+              {/* Owned by / Gifted by / Title / Message / Attestation / Link / Footer / QR : inchangés */}
               {showOwned && (
                 <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: ownedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      textAlign: 'center',
+                      top: ownedLabelTop!,
+                      fontWeight: 400,
+                      fontSize: 11 * scale,
+                      color: subtleColor,
+                    }}
+                  >
                     {ownedByLabel}
                   </div>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: ownedNameTop!, fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      textAlign: 'center',
+                      top: ownedNameTop!,
+                      fontWeight: 800,
+                      fontSize: 15 * scale,
+                      color: form.text_color,
+                    }}
+                  >
                     {nameForPreview}
                   </div>
                 </>
               )}
 
-              {/* Gifted by */}
               {showGifted && (
                 <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: giftedLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      textAlign: 'center',
+                      top: giftedLabelTop!,
+                      fontWeight: 400,
+                      fontSize: 11 * scale,
+                      color: subtleColor,
+                    }}
+                  >
                     {giftLabel}
                   </div>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: giftedNameTop!, fontWeight:800, fontSize: 15*scale, color: form.text_color }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      textAlign: 'center',
+                      top: giftedNameTop!,
+                      fontWeight: 800,
+                      fontSize: 15 * scale,
+                      color: form.text_color,
+                    }}
+                  >
                     {giftedByStr}
                   </div>
                 </>
               )}
 
-              {/* Title */}
               {titleForPreview && (
                 <>
-                  <div style={{ ...centerStyle, top: titleLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      textAlign: 'center',
+                      top: titleLabelTop!,
+                      fontWeight: 400,
+                      fontSize: 11 * scale,
+                      color: subtleColor,
+                      whiteSpace: 'pre',
+                      wordBreak: 'normal',
+                    }}
+                  >
                     {titleLabel}
                   </div>
-                  {titleLines.map((line, i)=>(
-                    <div key={i} style={{ ...centerStyle, top: titleLineTops[i], fontWeight:800, fontSize: 15*scale }}>
-                      {line}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Message */}
-              {msgLines.length>0 && (
-                <>
-                  <div style={{ ...centerStyle, top: msgLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
-                    {messageLabel}
-                  </div>
-                  {msgLines.map((line, i)=>(
-                    <div key={i} style={{ ...centerStyle, top: msgLineTops[i], fontSize: 12.5*scale }}>
-                      {line}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Attestation */}
-              {attestLines.length>0 && (
-                <>
-                  <div style={{ ...centerStyle, top: attestLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
-                    {L.attestationLabel}
-                  </div>
-                  {attestLines.map((line, i)=>(
-                    <div key={i} style={{ ...centerStyle, top: attestLineTops[i], fontSize: 12.5*scale }}>
-                      {line}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Lien */}
-              {linkLines.length>0 && (
-                <>
-                  <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', textAlign:'center', top: linkLabelTop!, fontWeight:400, fontSize: 11*scale, color: subtleColor }}>
-                    {L.link}
-                  </div>
-                  {linkLines.map((line, i)=>(
+                  {titleLines.map((line, i) => (
                     <div
                       key={i}
-                      style={{ ...centerStyle, top: linkLineTops[i], fontSize: 10.5*scale, color: mixColorForLink(form.text_color) }}
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        textAlign: 'center',
+                        top: titleLineTops[i],
+                        fontWeight: 800,
+                        fontSize: 15 * scale,
+                        whiteSpace: 'pre',
+                        wordBreak: 'normal',
+                        color: form.text_color,
+                      }}
                     >
                       {line}
                     </div>
@@ -2155,29 +2438,168 @@ useEffect(() => {
                 </>
               )}
 
-              {/* Footer: meta & QR */}
-              <div style={{position:'absolute', left: EDGE_PT*scale, bottom: EDGE_PT*scale, width: (A4_W_PT/2)*scale, height: META_H_PT*scale, color: subtleColor, fontSize: 11*scale, lineHeight: 1.2}}>
-                <div style={{opacity:.9}}>{T.footerCertId}</div>
-                <div style={{marginTop:6, fontWeight:800, color: form.text_color, fontSize: 10.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
-                <div style={{marginTop:8, opacity:.9}}>{T.footerIntegrity}</div>
-                <div style={{marginTop:6, color: form.text_color, fontSize: 9.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
-                <div style={{marginTop:4, color: form.text_color, fontSize: 9.5*scale}}>••••••••••••••••••••••••••••••••••••••</div>
+              {msgLines.length > 0 && (
+                <>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      textAlign: 'center',
+                      top: msgLabelTop!,
+                      fontWeight: 400,
+                      fontSize: 11 * scale,
+                      color: subtleColor,
+                      whiteSpace: 'pre',
+                      wordBreak: 'normal',
+                    }}
+                  >
+                    {messageLabel}
+                  </div>
+                  {msgLines.map((line, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        textAlign: 'center',
+                        top: msgLineTops[i],
+                        fontSize: 12.5 * scale,
+                        whiteSpace: 'pre',
+                        wordBreak: 'normal',
+                        color: form.text_color,
+                      }}
+                    >
+                      {line}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {attestLines.length > 0 && (
+                <>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      textAlign: 'center',
+                      top: attestLabelTop!,
+                      fontWeight: 400,
+                      fontSize: 11 * scale,
+                      color: subtleColor,
+                      whiteSpace: 'pre',
+                      wordBreak: 'normal',
+                    }}
+                  >
+                    {L.attestationLabel}
+                  </div>
+                  {attestLines.map((line, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        textAlign: 'center',
+                        top: attestLineTops[i],
+                        fontSize: 12.5 * scale,
+                        whiteSpace: 'pre',
+                        wordBreak: 'normal',
+                        color: form.text_color,
+                      }}
+                    >
+                      {line}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {linkLines.length > 0 && (
+                <>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      textAlign: 'center',
+                      top: linkLabelTop!,
+                      fontWeight: 400,
+                      fontSize: 11 * scale,
+                      color: subtleColor,
+                    }}
+                  >
+                    {L.link}
+                  </div>
+                  {linkLines.map((line, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        textAlign: 'center',
+                        top: linkLineTops[i],
+                        fontSize: 10.5 * scale,
+                        color: mixColorForLink(form.text_color),
+                        whiteSpace: 'pre',
+                        wordBreak: 'normal',
+                      }}
+                    >
+                      {line}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Footer: meta & QR (inchangés) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: EDGE_PT * scale,
+                  bottom: EDGE_PT * scale,
+                  width: (A4_W_PT / 2) * scale,
+                  height: META_H_PT * scale,
+                  color: subtleColor,
+                  fontSize: 11 * scale,
+                  lineHeight: 1.2,
+                }}
+              >
+                <div style={{ opacity: 0.9 }}>{T.footerCertId}</div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontWeight: 800,
+                    color: form.text_color,
+                    fontSize: 10.5 * scale,
+                  }}
+                >
+                  ••••••••••••••••••••••••••••••••••••••
+                </div>
+                <div style={{ marginTop: 8, opacity: 0.9 }}>{T.footerIntegrity}</div>
+                <div style={{ marginTop: 6, color: form.text_color, fontSize: 9.5 * scale }}>
+                  ••••••••••••••••••••••••••••••••••••••
+                </div>
+                <div style={{ marginTop: 4, color: form.text_color, fontSize: 9.5 * scale }}>
+                  ••••••••••••••••••••••••••••••••••••••
+                </div>
               </div>
 
               <div
                 style={{
-                  position:'absolute',
-                  right: EDGE_PT*scale,
-                  bottom: EDGE_PT*scale,
-                  width: QR_SIZE_PT*scale,
-                  height: QR_SIZE_PT*scale,
-                  border:'1px dashed rgba(26,31,42,.45)',
-                  borderRadius:8,
-                  display:'grid',
-                  placeItems:'center',
-                  fontSize: 12*scale,
+                  position: 'absolute',
+                  right: EDGE_PT * scale,
+                  bottom: EDGE_PT * scale,
+                  width: QR_SIZE_PT * scale,
+                  height: QR_SIZE_PT * scale,
+                  border: '1px dashed rgba(26,31,42,.45)',
+                  borderRadius: 8,
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontSize: 12 * scale,
                   color: 'rgba(26,31,42,.85)',
-                  background:'rgba(255,255,255,.08)'
+                  background: 'rgba(255,255,255,.08)',
                 }}
                 aria-label="QR placeholder"
               >
@@ -2185,7 +2607,7 @@ useEffect(() => {
               </div>
             </div>
 
-            <div style={{marginTop:10, fontSize:12, color:'var(--color-muted)'}}>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-muted)' }}>
               {isFR
                 ? 'Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées. '
                 : 'The final PDF is generated server-side: sharp text, real QR code, signed metadata. '}
