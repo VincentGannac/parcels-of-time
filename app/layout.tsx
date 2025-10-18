@@ -1,6 +1,7 @@
 // app/layout.tsx
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+import type { Viewport } from 'next'
 
 import type { Metadata } from 'next'
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -12,6 +13,12 @@ export const metadata: Metadata = {
   description: 'Claim a unique day in UTC with a signed certificate.',
   // Pas d’ENV publique ici : on fige sur l’hôte canonique (www)
   metadataBase: new URL('https://www.parcelsoftime.com'),
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

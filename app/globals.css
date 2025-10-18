@@ -25,3 +25,51 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+:root{
+  --maxw: 1200px;
+  --pad-x: clamp(12px, 4vw, 24px);
+  --gap: 16px;
+  --bp-md: 980px;   /* ton break actuel */
+  --bp-sm: 640px;
+}
+
+/* Container fluide réutilisable */
+.container{
+  max-width: var(--maxw);
+  margin-inline: auto;
+  padding-inline: var(--pad-x);
+}
+
+/* Grille 12 colonnes + colonnes responsives via variables CSS */
+.grid-12{
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0,1fr));
+  gap: var(--gap);
+}
+
+/* Par défaut span défini par --span, sinon 12 */
+.col{
+  grid-column: span var(--span, 12);
+}
+@media (max-width: 980px){
+  .col{ grid-column: span var(--span-sm, 12); }
+}
+
+/* Affichages conditionnels sans JS */
+.show-desktop{ display: block; }
+.show-mobile{ display: none; }
+@media (max-width: 980px){
+  .show-desktop{ display: none; }
+  .show-mobile{ display: block; }
+}
+
+/* Typo fluide légère (optionnel mais recommandé) */
+.h1-fluid{ font-size: clamp(28px, 6vw, 52px); line-height: 1.15; }
+.h2-fluid{ font-size: clamp(20px, 3.2vw, 36px); line-height: 1.25; }
+
+/* Petits raffinements mobiles */
+@media (max-width: 640px){
+  .card{ border-radius: 14px; }
+  .touch-space{ padding: 12px 14px; min-height: 44px; }
+}

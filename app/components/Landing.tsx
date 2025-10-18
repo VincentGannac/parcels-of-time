@@ -861,54 +861,75 @@ function CertificatePreview({
   
 
 /* =========================================================
-   HERO
+   HERO — responsive sans impacter le desktop
    ========================================================= */
-function Hero({ href }: { href: (p: string) => string }) {
-  const { t } = useT()
-  return (
-    <section style={{ borderBottom: '1px solid var(--color-border)', background: 'radial-gradient(60% 40% at 70% -10%, rgba(140,214,255,.10), transparent 60%)' }}>
-      <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 24, alignItems: 'center' }}>
-        <div style={{ gridColumn: 'span 6', color: 'var(--color-text)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <img src="/logo.svg" alt="" width={40} height={40} />
-            <span style={{ fontFamily: 'Fraunces, serif', fontSize: 20 }}>Parcels of Time</span>
+   function Hero({ href }: { href: (p: string) => string }) {
+    const { t } = useT()
+    const [isSmall, setIsSmall] = useState(false)
+  
+    useEffect(() => {
+      const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+      onResize()
+      window.addEventListener('resize', onResize)
+      return () => window.removeEventListener('resize', onResize)
+    }, [])
+  
+    return (
+      <section style={{ borderBottom: '1px solid var(--color-border)', background: 'radial-gradient(60% 40% at 70% -10%, rgba(140,214,255,.10), transparent 60%)' }}>
+        <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: isSmall ? 16 : 24, alignItems: 'center' }}>
+          <div style={{ gridColumn: isSmall ? 'span 12' : 'span 6', color: 'var(--color-text)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <img src="/logo.svg" alt="" width={40} height={40} />
+              <span style={{ fontFamily: 'Fraunces, serif', fontSize: 20 }}>Parcels of Time</span>
+            </div>
+            <h1
+              style={{
+                fontFamily: 'Fraunces, serif',
+                fontSize: isSmall ? 34 : 52,              // mobile ↓ sans toucher le desktop
+                lineHeight: isSmall ? '42px' : '60px',
+                margin: '6px 0 10px',
+              }}
+            >
+              {t('hero.h1')}
+            </h1>
+            <p style={{ fontSize: isSmall ? 16 : 18, lineHeight: isSmall ? '26px' : '28px', maxWidth: 560 }}>
+              {t('hero.subtitle')}
+            </p>
+  
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
+              <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>
+                {t('cta.claim')}
+              </Button>
+              <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>
+                🎁 {t('cta.gift')}
+              </Button>
+            </div>
+  
+            <div style={{ marginTop: 12, fontSize: 14, color: 'var(--color-muted)' }}>{t('hero.unique')}</div>
+  
+            {/* TRUST BAR */}
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 16, fontSize: 12, color: 'var(--color-muted)' }}>
+              <span>🔒 {t('trust.stripe')}</span>
+              <span>🧾 {t('trust.sha')}</span>
+            </div>
           </div>
-          <h1 style={{ fontFamily: 'Fraunces, serif', fontSize: 52, lineHeight: '60px', margin: '6px 0 10px' }}>{t('hero.h1')}</h1>
-          <p style={{ fontSize: 18, lineHeight: '28px', maxWidth: 560 }}>{t('hero.subtitle')}</p>
-
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
-            <Button href={href('/claim')} variant="primary" ariaLabel={t('cta.claim')}>
-              {t('cta.claim')}
-            </Button>
-            <Button href={href('/claim?gift=1')} variant="secondary" ariaLabel={t('cta.gift')}>
-              🎁 {t('cta.gift')}
-            </Button>
+  
+          <div style={{ gridColumn: isSmall ? 'span 12' : 'span 6' }}>
+            <HeroSlideshow
+              interval={2000}
+              slides={[
+                { src: '/hero/love.png', alt: 'Love — couple at sunset', focal: 'center 40%' },
+                { src: '/hero/birth.png', alt: 'Birth — soft light' },
+                { src: '/hero/birthday.png', alt: 'Birthday — candles & confetti' },
+                { src: '/hero/graduation.png', alt: 'Graduation — tossing caps' },
+              ]}
+            />
           </div>
-
-          <div style={{ marginTop: 12, fontSize: 14, color: 'var(--color-muted)' }}>{t('hero.unique')}</div>
-
-          {/* TRUST BAR */}
-          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 16, fontSize: 12, color: 'var(--color-muted)' }}>
-            <span>🔒 {t('trust.stripe')}</span>
-            <span>🧾 {t('trust.sha')}</span>
-          </div>
-        </div>
-
-        <div style={{ gridColumn: 'span 6' }}>
-          <HeroSlideshow
-            interval={2000}
-            slides={[
-              { src: '/hero/love.png', alt: 'Love — couple at sunset', focal: 'center 40%' },
-              { src: '/hero/birth.png', alt: 'Birth — soft light' },
-              { src: '/hero/birthday.png', alt: 'Birthday — candles & confetti' },
-              { src: '/hero/graduation.png', alt: 'Graduation — tossing caps' },
-            ]}
-          />
-        </div>
-      </Container>
-    </section>
-  )
-}
+        </Container>
+      </section>
+    )
+  }
+  
 
 /* -------------------- Carrousel 1 — Émotions & souvenirs -------------------- */
 function EmotionalThemesCarousel() {
@@ -1125,100 +1146,101 @@ function CollectorThemesCarousel() {
 }
 
 /* =========================================================
-   FEATURE BAND — 2 carrousels alignés + 4 bullets (sans boutons)
+   FEATURE BAND — 2 carrousels alignés + 4 bullets (responsive)
    ========================================================= */
-function FeatureBand() {
-  const pathname = usePathname() || '/'
-  const isFR = /^\/fr(\/|$)/.test(pathname)
-  const [isNarrow, setIsNarrow] = useState(false)
-
-  useEffect(() => {
-    const onResize = () => setIsNarrow(typeof window !== 'undefined' && window.innerWidth < 980)
-    onResize()
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
-  const bulletsTop = (isFR
-    ? [
-        { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code scannable menant à votre page souvenir.' },
-        { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, instantané.' },
-      ]
-    : [
-        { icon: '🔒', title: 'Authentic', text: 'Integrity fingerprint (SHA-256) + scannable QR to your memory page.' },
-        { icon: '🎁', title: 'Perfect gift', text: 'Original, customizable, near-instant delivery.' },
-      ]) as Array<{ icon: string; title: string; text: string }>
-
-  const bulletsBottom = (isFR
-    ? [
-        { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois.' },
-        { icon: '💎', title: 'Collector', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
-      ]
-    : [
-        { icon: '✨', title: 'One-of-a-kind', text: 'Each date is sold only once.' },
-        { icon: '💎', title: 'Collectible', text: 'A rare object you can resell on our marketplace (Stripe Connect).' },
-      ]) as Array<{ icon: string; title: string; text: string }>
-
-  const BulletCard = ({ icon, title, text }: { icon: string; title: string; text: string }) => (
-    <div
-      style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-lg)',
-        padding: 14,
-        minHeight: 112,
-        boxShadow: 'var(--shadow-1)',
-        height: '100%',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span aria-hidden style={{ fontSize: 18 }}>{icon}</span>
-        <strong style={{ lineHeight: 1.2 }}>{title}</strong>
+   function FeatureBand() {
+    const pathname = usePathname() || '/'
+    const isFR = /^\/fr(\/|$)/.test(pathname)
+    const [isNarrow, setIsNarrow] = useState(false)
+  
+    useEffect(() => {
+      const onResize = () => setIsNarrow(typeof window !== 'undefined' && window.innerWidth < 980)
+      onResize()
+      window.addEventListener('resize', onResize)
+      return () => window.removeEventListener('resize', onResize)
+    }, [])
+  
+    const bulletsTop = (isFR
+      ? [
+          { icon: '🔒', title: 'Authentique', text: 'Empreinte d’intégrité (SHA-256) + QR code scannable menant à votre page souvenir.' },
+          { icon: '🎁', title: 'Cadeau idéal', text: 'Original, personnalisable, instantané.' },
+        ]
+      : [
+          { icon: '🔒', title: 'Authentic', text: 'Integrity fingerprint (SHA-256) + scannable QR to your memory page.' },
+          { icon: '🎁', title: 'Perfect gift', text: 'Original, customizable, near-instant delivery.' },
+        ]) as Array<{ icon: string; title: string; text: string }>
+  
+    const bulletsBottom = (isFR
+      ? [
+          { icon: '✨', title: 'Unique', text: 'Chaque date est vendue une seule fois.' },
+          { icon: '💎', title: 'Collector', text: 'Objet rare, revendable sur notre marketplace (Stripe Connect).' },
+        ]
+      : [
+          { icon: '✨', title: 'One-of-a-kind', text: 'Each date is sold only once.' },
+          { icon: '💎', title: 'Collectible', text: 'A rare object you can resell on our marketplace (Stripe Connect).' },
+        ]) as Array<{ icon: string; title: string; text: string }>
+  
+    const BulletCard = ({ icon, title, text }: { icon: string; title: string; text: string }) => (
+      <div
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)',
+          padding: 14,
+          minHeight: 112,
+          boxShadow: 'var(--shadow-1)',
+          height: '100%',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span aria-hidden style={{ fontSize: 18 }}>{icon}</span>
+          <strong style={{ lineHeight: 1.2 }}>{title}</strong>
+        </div>
+        <div style={{ opacity: 0.92 }}>{text}</div>
       </div>
-      <div style={{ opacity: 0.92 }}>{text}</div>
-    </div>
-  )
-
-  const leftSpan = isNarrow ? 'span 12' : 'span 7'
-  const rightSpan = isNarrow ? 'span 12' : 'span 5'
-
-  return (
-    <section>
-      <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16, alignItems: 'stretch' }}>
-        {/* Eyebrow sur toute la largeur */}
-        <div style={{ gridColumn: '1 / -1' }}>
-          <SectionEyebrow>{isFR ? 'Dates convoitées' : 'Sought-after dates'}</SectionEyebrow>
-        </div>
-
-        {/* Row 1 : Carrousel émotions + bullets Authentique / Cadeau */}
-        <div style={{ gridColumn: leftSpan, gridRow: '2' }}>
-          <EmotionalThemesCarousel />
-        </div>
-        <div style={{ gridColumn: rightSpan, gridRow: '2', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
-          <div style={{ gridColumn: 'span 6' }}>
-            <BulletCard {...bulletsTop[0]} />
+    )
+  
+    const leftSpan = isNarrow ? 'span 12' : 'span 7'
+    const rightSpan = isNarrow ? 'span 12' : 'span 5'
+  
+    return (
+      <section>
+        <Container style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16, alignItems: 'stretch' }}>
+          {/* Eyebrow sur toute la largeur */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <SectionEyebrow>{isFR ? 'Dates convoitées' : 'Sought-after dates'}</SectionEyebrow>
           </div>
-          <div style={{ gridColumn: 'span 6' }}>
-            <BulletCard {...bulletsTop[1]} />
+  
+          {/* Row 1 : Carrousel émotions + bullets Authentique / Cadeau */}
+          <div style={{ gridColumn: leftSpan, gridRow: '2' }}>
+            <EmotionalThemesCarousel />
           </div>
-        </div>
-
-        {/* Row 2 : Carrousel collectionneurs + bullets Unique / Collector */}
-        <div style={{ gridColumn: leftSpan, gridRow: '3' }}>
-          <CollectorThemesCarousel />
-        </div>
-        <div style={{ gridColumn: rightSpan, gridRow: '3', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
-          <div style={{ gridColumn: 'span 6' }}>
-            <BulletCard {...bulletsBottom[0]} />
+          <div style={{ gridColumn: rightSpan, gridRow: '2', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
+            <div style={{ gridColumn: isNarrow ? 'span 12' : 'span 6' }}>
+              <BulletCard {...bulletsTop[0]} />
+            </div>
+            <div style={{ gridColumn: isNarrow ? 'span 12' : 'span 6' }}>
+              <BulletCard {...bulletsTop[1]} />
+            </div>
           </div>
-          <div style={{ gridColumn: 'span 6' }}>
-            <BulletCard {...bulletsBottom[1]} />
+  
+          {/* Row 2 : Carrousel collectionneurs + bullets Unique / Collector */}
+          <div style={{ gridColumn: leftSpan, gridRow: '3' }}>
+            <CollectorThemesCarousel />
           </div>
-        </div>
-      </Container>
-    </section>
-  )
-}
+          <div style={{ gridColumn: rightSpan, gridRow: '3', display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
+            <div style={{ gridColumn: isNarrow ? 'span 12' : 'span 6' }}>
+              <BulletCard {...bulletsBottom[0]} />
+            </div>
+            <div style={{ gridColumn: isNarrow ? 'span 12' : 'span 6' }}>
+              <BulletCard {...bulletsBottom[1]} />
+            </div>
+          </div>
+        </Container>
+      </section>
+    )
+  }
+  
 
 
 
@@ -1369,211 +1391,225 @@ function GoldCTA({ href, children, ariaLabel }: { href: string; children: React.
   )
 }
 
-function RegistryShowcase() {
-  const href = useLocaleHref()
-  const { t } = useT()
-  const [entries, setEntries] = useState<PublicRegistryRow[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/registry?v=${Date.now()}`, { cache: 'no-store' })
-        if (!res.ok) throw new Error('HTTP ' + res.status)
-        const data: PublicRegistryRow[] = (await res.json()) || []
-        if (!cancelled) {
-          const random3 = shuffle(data).slice(0, 3)
-          setEntries(random3)
-          setLoading(false)
-        }
-      } catch {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // Fallback ultra-léger si fetch KO
-  const fallback: PublicRegistryRow[] = [
-    { ts: '2018-07-19', owner: 'Clara & Sam', title: 'Premier baiser', message: null, style: 'romantic' },
-    { ts: '2023-03-02', owner: 'Nora & Mehdi', title: 'Bienvenue, Aïcha', message: null, style: 'birth' },
-    { ts: '2024-07-20', owner: 'Inès & Hugo', title: 'Nos deux “oui”', message: null, style: 'wedding' },
-  ]
-
-  const list = entries.length ? entries : fallback
-
-  return (
-    <section id="registry" aria-labelledby="registry-title" style={{ borderBottom: '1px solid var(--color-border)' }}>
-      <Container>
-        <SectionEyebrow>{t('registry.eyebrow')}</SectionEyebrow>
-        <H2 id="registry-title">{t('registry.title')}</H2>
-        <p style={{ margin: '6px 0 16px', color: 'var(--color-text)', opacity: 0.92, maxWidth: 760 }}>
-          {t('registry.paragraph')}
-        </p>
-
-        {/* 3 vignettes A4 réelles */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
-          {(loading ? Array.from({ length: 3 }) : list).map((it: any, i: number) => (
-            <div key={i} style={{ gridColumn: 'span 4' }}>
-              {loading ? (
-                <div
-                  style={{
-                    width: '100%',
-                    aspectRatio: '595/842',
-                    borderRadius: 'var(--radius-lg)',
-                    background:
-                      'linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.08), rgba(255,255,255,.04))',
-                    backgroundSize: '200% 100%',
-                    animation: 'shimmer 1.4s infinite',
-                    border: '1px solid var(--color-border)',
-                  }}
-                />
-              ) : (
-                <PublicCertThumb ts={it.ts} owner={it.owner} title={it.title} href={href('/explore')} />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* CTA + informations */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <GoldCTA href={href('/explore')} ariaLabel={t('registry.cta')}>
-             {t('registry.cta')}
-          </GoldCTA>
-          <Pill tone="success">{t('registry.moderation')}</Pill>
-          <Pill>{t('registry.visibility')}</Pill>
-        </div>
-      </Container>
-
-      {/* shimmer keyframes */}
-      <style>{`
-        @keyframes shimmer {
-          0% { background-position: 0% 0%; }
-          100% { background-position: -200% 0%; }
-        }
-      `}</style>
-    </section>
-  )
-}
-
-
 /* =========================================================
-   WHAT YOU RECEIVE — Démos (version émotion) — UPDATED
+   REGISTRE PUBLIC — responsive (grille 3 → 1 en mobile)
    ========================================================= */
-   
+   function RegistryShowcase() {
+    const href = useLocaleHref()
+    const { t } = useT()
+    const [entries, setEntries] = useState<PublicRegistryRow[]>([])
+    const [loading, setLoading] = useState(true)
+    const [isSmall, setIsSmall] = useState(false)
+  
+    useEffect(() => {
+      const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+      onResize()
+      window.addEventListener('resize', onResize)
+      return () => window.removeEventListener('resize', onResize)
+    }, [])
+  
+    useEffect(() => {
+      let cancelled = false
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/registry?v=${Date.now()}`, { cache: 'no-store' })
+          if (!res.ok) throw new Error('HTTP ' + res.status)
+          const data: PublicRegistryRow[] = (await res.json()) || []
+          if (!cancelled) {
+            const random3 = shuffle(data).slice(0, 3)
+            setEntries(random3)
+            setLoading(false)
+          }
+        } catch {
+          if (!cancelled) setLoading(false)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
+    }, [])
+  
+    const fallback: PublicRegistryRow[] = [
+      { ts: '2018-07-19', owner: 'Clara & Sam', title: 'Premier baiser', message: null, style: 'romantic' },
+      { ts: '2023-03-02', owner: 'Nora & Mehdi', title: 'Bienvenue, Aïcha', message: null, style: 'birth' },
+      { ts: '2024-07-20', owner: 'Inès & Hugo', title: 'Nos deux “oui”', message: null, style: 'wedding' },
+    ]
+  
+    const list = entries.length ? entries : fallback
+  
+    return (
+      <section id="registry" aria-labelledby="registry-title" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <Container>
+          <SectionEyebrow>{t('registry.eyebrow')}</SectionEyebrow>
+          <H2 id="registry-title">{t('registry.title')}</H2>
+          <p style={{ margin: '6px 0 16px', color: 'var(--color-text)', opacity: 0.92, maxWidth: 760 }}>
+            {t('registry.paragraph')}
+          </p>
+  
+          {/* 3 vignettes A4 réelles */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
+            {(loading ? Array.from({ length: 3 }) : list).map((it: any, i: number) => (
+              <div key={i} style={{ gridColumn: isSmall ? 'span 12' : 'span 4' }}>
+                {loading ? (
+                  <div
+                    style={{
+                      width: '100%',
+                      aspectRatio: '595/842',
+                      borderRadius: 'var(--radius-lg)',
+                      background:
+                        'linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.08), rgba(255,255,255,.04))',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.4s infinite',
+                      border: '1px solid var(--color-border)',
+                    }}
+                  />
+                ) : (
+                  <PublicCertThumb ts={it.ts} owner={it.owner} title={it.title} href={href('/explore')} />
+                )}
+              </div>
+            ))}
+          </div>
+  
+          {/* CTA + informations */}
+          <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+            <GoldCTA href={href('/explore')} ariaLabel={t('registry.cta')}>
+              {t('registry.cta')}
+            </GoldCTA>
+            <Pill tone="success">{t('registry.moderation')}</Pill>
+            <Pill>{t('registry.visibility')}</Pill>
+          </div>
+        </Container>
+  
+        <style>{`
+          @keyframes shimmer {
+            0% { background-position: 0% 0%; }
+            100% { background-position: -200% 0%; }
+          }
+        `}</style>
+      </section>
+    )
+  }
+  
+/* =========================================================
+   WHAT YOU RECEIVE — Démos (version émotion) — responsive
+   ========================================================= */
    function ReceiveShowcase() {
     const href = useLocaleHref()
     const pathname = usePathname() || '/'
     const isFR = /^\/fr(\/|$)/.test(pathname)
+    const [isSmall, setIsSmall] = useState(false)
+  
+    useEffect(() => {
+      const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+      onResize()
+      window.addEventListener('resize', onResize)
+      return () => window.removeEventListener('resize', onResize)
+    }, [])
   
     // 🔁 wording synchronisé avec le PDF et le preview
     const giftLabel = isFR ? 'Offert par' : 'Gifted by'
   
     const copy = isFR
-    ? {
-        eyebrow: 'Ce que vous recevez',
-        title: 'Gardez une journée qui compte',
-        lead:
-          'Un certificat HD (PDF/JPG) prêt à imprimer, unique et vérifiable — à votre nom. ' +
-          'Chaque date est vendue une seule fois.',
-        note:
-          'Chaque certificat inclut un QR scannable vers votre page souvenir et une empreinte d’intégrité (SHA-256).',
-        cards: [
-          {
-            style: 'romantic' as PreviewStyle,
-            owner: 'Sam',
-            title: 'Notre pique-nique sous l’averse',
-            ts: '2018-07-19',
-            msg:
-  `On s’est pris la pluie en plein pique-nique, et toi qui chantes faux juste pour me faire rire, comme pour qu’il pleuve encore plus. On était trempés, mais heureux.
-  Ce moment n’a rien d’exceptionnel, et c’est sûrement pour ça qu’il ne me lâche pas.
-  Le 19/07/2018 est devenu notre point de départ. Je te l’offre pour que, les jours de doute, on se rappelle qu’on sait déjà traverser les averses.
-  
-  ${giftLabel} : Eva`,
-            cta: '/claim?style=romantic',
-          },
-          {
-            style: 'birth' as PreviewStyle,
-            owner: 'Zoé',
-            title: 'Bienvenue, Zoé',
-            ts: '2023-03-02',
-            msg:
-  `Un cri minuscule. Ce 2 mars 2023, tu es arrivée, et nous sommes devenus trois.
-  J’acquiers symboliquement ce jour pour qu’il nous appartienne toujours.
-  
-  ${giftLabel} : Maman & Papa`,
-            cta: '/claim?style=birth',
-          },
-          {
-            style: 'birthday' as PreviewStyle,
-            owner: 'Mathieu',
-            title: '18 ans',
-            ts: '2025-09-15',
-            msg:
-  `Bon anniversaire mon fils, déjà 18 ans. Tu parles d’études, de musique, d’ailleurs…
-  Rien n’est décidé mais tout est possible.
-  Je réserve symboliquement cette date pour qu’elle te rappelle que la première marche, tu l’as déjà montée,
-  et que je crois en la suite.
-  
-  ${giftLabel} : Maman`,
-            cta: '/claim?style=birthday',
-          },
-        ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
-      }
-    : {
-        eyebrow: 'What you receive',
-        title: 'Keep a day that matters',
-        lead:
-          'A print-ready, HD certificate (PDF/JPG) — unique, verifiable, and in your name. ' +
-          'Each date is sold only once.',
-        note:
-          'Every certificate includes a scannable QR to your memory page and an integrity fingerprint (SHA-256).',
-        cards: [
-          {
-            style: 'romantic' as PreviewStyle,
-            owner: 'Sam',
-            title: 'Our picnic in the rain',
-            ts: '2018-07-19',
-            msg:
-  `We got caught in the rain mid-picnic, and you sang off-key just to make me laugh — as if it could make the clouds pour harder. We were soaked, and happy.
-  It wasn’t extraordinary, and maybe that’s why it sticks.
-  07/19/2018 became our beginning. I’m giving you this so that, on doubtful days, we remember we already know how to walk through storms.
-  
-  ${giftLabel}: Eva`,
-            cta: '/claim?style=romantic',
-          },
-          {
-            style: 'birth' as PreviewStyle,
-            owner: 'Zoé',
-            title: 'Welcome, Zoé',
-            ts: '2023-03-02',
-            msg:
-  `A tiny cry. On 2023-03-02, you arrived, and we became three.
-  I’m claiming this day for us, so it will always be ours.
-  
-  ${giftLabel}: Mom & Dad`,
-            cta: '/claim?style=birth',
-          },
-          {
-            style: 'birthday' as PreviewStyle,
-            owner: 'Mathieu',
-            title: '18',
-            ts: '2025-09-15',
-            msg:
-  `Happy birthday my son, eighteen already. You talk about studies, music, somewhere else…
-  Nothing’s decided, but everything’s possible.
-  I’m reserving this date to remind you the first step is already behind you —
-  and that I believe in what comes next.
-  
-  ${giftLabel}: Mom`,
-            cta: '/claim?style=birthday',
-          },
-        ] as Array<{style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string}>,
-      }
-  
+      ? {
+          eyebrow: 'Ce que vous recevez',
+          title: 'Gardez une journée qui compte',
+          lead:
+            'Un certificat HD (PDF/JPG) prêt à imprimer, unique et vérifiable — à votre nom. ' +
+            'Chaque date est vendue une seule fois.',
+          note:
+            'Chaque certificat inclut un QR scannable vers votre page souvenir et une empreinte d’intégrité (SHA-256).',
+          cards: [
+            {
+              style: 'romantic' as PreviewStyle,
+              owner: 'Sam',
+              title: 'Notre pique-nique sous l’averse',
+              ts: '2018-07-19',
+              msg:
+                `On s’est pris la pluie en plein pique-nique, et toi qui chantes faux juste pour me faire rire, comme pour qu’il pleuve encore plus. On était trempés, mais heureux.
+    Ce moment n’a rien d’exceptionnel, et c’est sûrement pour ça qu’il ne me lâche pas.
+    Le 19/07/2018 est devenu notre point de départ. Je te l’offre pour que, les jours de doute, on se rappelle qu’on sait déjà traverser les averses.
+    
+    ${giftLabel} : Eva`,
+              cta: '/claim?style=romantic',
+            },
+            {
+              style: 'birth' as PreviewStyle,
+              owner: 'Zoé',
+              title: 'Bienvenue, Zoé',
+              ts: '2023-03-02',
+              msg:
+                `Un cri minuscule. Ce 2 mars 2023, tu es arrivée, et nous sommes devenus trois.
+    J’acquiers symboliquement ce jour pour qu’il nous appartienne toujours.
+    
+    ${giftLabel} : Maman & Papa`,
+              cta: '/claim?style=birth',
+            },
+            {
+              style: 'birthday' as PreviewStyle,
+              owner: 'Mathieu',
+              title: '18 ans',
+              ts: '2025-09-15',
+              msg:
+                `Bon anniversaire mon fils, déjà 18 ans. Tu parles d’études, de musique, d’ailleurs…
+    Rien n’est décidé mais tout est possible.
+    Je réserve symboliquement cette date pour qu’elle te rappelle que la première marche, tu l’as déjà montée,
+    et que je crois en la suite.
+    
+    ${giftLabel} : Maman`,
+              cta: '/claim?style=birthday',
+            },
+          ] as Array<{ style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string }>,
+        }
+      : {
+          eyebrow: 'What you receive',
+          title: 'Keep a day that matters',
+          lead:
+            'A print-ready, HD certificate (PDF/JPG) — unique, verifiable, and in your name. ' +
+            'Each date is sold only once.',
+          note:
+            'Every certificate includes a scannable QR to your memory page and an integrity fingerprint (SHA-256).',
+          cards: [
+            {
+              style: 'romantic' as PreviewStyle,
+              owner: 'Sam',
+              title: 'Our picnic in the rain',
+              ts: '2018-07-19',
+              msg:
+                `We got caught in the rain mid-picnic, and you sang off-key just to make me laugh — as if it could make the clouds pour harder. We were soaked, and happy.
+    It wasn’t extraordinary, and maybe that’s why it sticks.
+    07/19/2018 became our beginning. I’m giving you this so that, on doubtful days, we remember we already know how to walk through storms.
+    
+    ${giftLabel}: Eva`,
+              cta: '/claim?style=romantic',
+            },
+            {
+              style: 'birth' as PreviewStyle,
+              owner: 'Zoé',
+              title: 'Welcome, Zoé',
+              ts: '2023-03-02',
+              msg:
+                `A tiny cry. On 2023-03-02, you arrived, and we became three.
+    I’m claiming this day for us, so it will always be ours.
+    
+    ${giftLabel}: Mom & Dad`,
+              cta: '/claim?style=birth',
+            },
+            {
+              style: 'birthday' as PreviewStyle,
+              owner: 'Mathieu',
+              title: '18',
+              ts: '2025-09-15',
+              msg:
+                `Happy birthday my son, eighteen already. You talk about studies, music, somewhere else…
+    Nothing’s decided, but everything’s possible.
+    I’m reserving this date to remind you the first step is already behind you —
+    and that I believe in what comes next.
+    
+    ${giftLabel}: Mom`,
+              cta: '/claim?style=birthday',
+            },
+          ] as Array<{ style: PreviewStyle; owner: string; title: string; ts: string; msg: string; cta: string }>,
+        }
   
     return (
       <section>
@@ -1586,7 +1622,7 @@ function RegistryShowcase() {
   
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
             {copy.cards.map((c, idx) => (
-              <div key={idx} style={{ gridColumn: 'span 4' }}>
+              <div key={idx} style={{ gridColumn: isSmall ? 'span 12' : 'span 4' }}>
                 <CertificatePreview
                   styleId={c.style}
                   owner={c.owner}
@@ -1623,81 +1659,129 @@ function RegistryShowcase() {
   }
   
   
-  
-  
 /* =========================================================
-   HOW IT WORKS / TESTIMONIALS / FAQ
+   HOW IT WORKS — steps responsive 3 → 1 en mobile
    ========================================================= */
-function HowItWorks() {
-  const pathname = usePathname() || '/'
-  const isFR = /^\/fr(\/|$)/.test(pathname)
-  const eyebrow = isFR ? 'Comment ça marche' : 'How it works'
-  const steps = isFR
-    ? [
-        ['①', 'Choisissez date & heure', ''],
-        ['②', 'Personnalisez', 'Propriétaire, message, style, photo.'],
-        ['③', 'Réservez & recevez', 'Certificat + QR immédiatement. ⏱ < 2 min.'],
-      ]
-    : [
-        ['①', 'Choose date & time', ''],
-        ['②', 'Personalize', 'Owner, message, style, photo.'],
-        ['③', 'Reserve & receive', 'Certificate + QR instantly. ⏱ < 2 min.'],
-      ]
-  return (
-    <section>
-      <Container>
-        <SectionEyebrow>{eyebrow}</SectionEyebrow>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
-          {steps.map(([n, t, d], i) => (
-            <div key={i} style={{ gridColumn: 'span 4', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
-              <div style={{ fontSize: 28 }}>{n}</div>
-              <strong>{t}</strong>
-              {d && <p style={{ margin: '6px 0 0' }}>{d}</p>}
-            </div>
-          ))}
-        </div>
-      </Container>
-    </section>
-  )
-}
+   function HowItWorks() {
+    const pathname = usePathname() || '/'
+    const isFR = /^\/fr(\/|$)/.test(pathname)
+    const [isSmall, setIsSmall] = useState(false)
+  
+    useEffect(() => {
+      const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+      onResize()
+      window.addEventListener('resize', onResize)
+      return () => window.removeEventListener('resize', onResize)
+    }, [])
+  
+    const eyebrow = isFR ? 'Comment ça marche' : 'How it works'
+    const steps = isFR
+      ? [
+          ['①', 'Choisissez date & heure', ''],
+          ['②', 'Personnalisez', 'Propriétaire, message, style, photo.'],
+          ['③', 'Réservez & recevez', 'Certificat + QR immédiatement. ⏱ < 2 min.'],
+        ]
+      : [
+          ['①', 'Choose date & time', ''],
+          ['②', 'Personalize', 'Owner, message, style, photo.'],
+          ['③', 'Reserve & receive', 'Certificate + QR instantly. ⏱ < 2 min.'],
+        ]
+    return (
+      <section>
+        <Container>
+          <SectionEyebrow>{eyebrow}</SectionEyebrow>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
+            {steps.map(([n, t, d], i) => (
+              <div
+                key={i}
+                style={{
+                  gridColumn: isSmall ? 'span 12' : 'span 4',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 16,
+                }}
+              >
+                <div style={{ fontSize: 28 }}>{n}</div>
+                <strong>{t}</strong>
+                {d && <p style={{ margin: '6px 0 0' }}>{d}</p>}
+              </div>
+            ))}
+          </div>
+        </Container>
+      </section>
+    )
+  }
+  
 
-function Testimonials() {
-  const pathname = usePathname() || '/'
-  const isFR = /^\/fr(\/|$)/.test(pathname)
-  const eyebrow = isFR ? 'Témoignages' : 'Testimonials'
-  const items = isFR
-    ? [
-        { q: '“Nous avons revendiqué la journée de la naissance d’Aïcha… frissons à chaque fois !”', a: 'Mathilde' },
-        { q: '“Mon cadeau préféré : la journée de notre rencontre.”', a: 'Thomas' },
-        { q: '“La journée du diplôme de ma sœur. Simple, mémorable, classe.”', a: 'Mina' },
-      ]
-    : [
-        { q: '“We claimed the day our daughter Aïcha was born… chills every time!”', a: 'Camille' },
-        { q: '“My favorite gift: the day of our first date.”', a: 'Thomas' },
-        { q: '“My sister’s graduation day. Simple, memorable, classy.”', a: 'Mina' },
-      ]
-  return (
-    <section>
-      <Container>
-        <SectionEyebrow>{eyebrow}</SectionEyebrow>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
-          {items.map((t, i) => (
-            <blockquote key={i} style={{ gridColumn: 'span 4', margin: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
-              <p style={{ margin: '0 0 8px', fontStyle: 'italic' }}>{t.q}</p>
-              <footer style={{ opacity: 0.8 }}>— {t.a}</footer>
-            </blockquote>
-          ))}
-        </div>
-      </Container>
-    </section>
-  )
-}
+/* =========================================================
+   TESTIMONIALS — responsive 3 → 1 en mobile
+   ========================================================= */
+   function Testimonials() {
+    const pathname = usePathname() || '/'
+    const isFR = /^\/fr(\/|$)/.test(pathname)
+    const [isSmall, setIsSmall] = useState(false)
+  
+    useEffect(() => {
+      const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+      onResize()
+      window.addEventListener('resize', onResize)
+      return () => window.removeEventListener('resize', onResize)
+    }, [])
+  
+    const eyebrow = isFR ? 'Témoignages' : 'Testimonials'
+    const items = isFR
+      ? [
+          { q: '“Nous avons revendiqué la journée de la naissance d’Aïcha… frissons à chaque fois !”', a: 'Mathilde' },
+          { q: '“Mon cadeau préféré : la journée de notre rencontre.”', a: 'Thomas' },
+          { q: '“La journée du diplôme de ma sœur. Simple, mémorable, classe.”', a: 'Mina' },
+        ]
+      : [
+          { q: '“We claimed the day our daughter Aïcha was born… chills every time!”', a: 'Camille' },
+          { q: '“My favorite gift: the day of our first date.”', a: 'Thomas' },
+          { q: '“My sister’s graduation day. Simple, memorable, classy.”', a: 'Mina' },
+        ]
+    return (
+      <section>
+        <Container>
+          <SectionEyebrow>{eyebrow}</SectionEyebrow>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 16 }}>
+            {items.map((t, i) => (
+              <blockquote
+                key={i}
+                style={{
+                  gridColumn: isSmall ? 'span 12' : 'span 4',
+                  margin: 0,
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 16,
+                }}
+              >
+                <p style={{ margin: '0 0 8px', fontStyle: 'italic' }}>{t.q}</p>
+                <footer style={{ opacity: 0.8 }}>— {t.a}</footer>
+              </blockquote>
+            ))}
+          </div>
+        </Container>
+      </section>
+    )
+  }
+  
 
-/* =============== FAQ (FR/EN) =============== */
+/* =============== FAQ (FR/EN) — responsive 2 → 1 en mobile =============== */
 function FAQ() {
   const pathname = usePathname() || '/'
   const href = useLocaleHref()
   const isFR = /^\/fr(\/|$)/.test(pathname)
+  const [isSmall, setIsSmall] = useState(false)
+
+  useEffect(() => {
+    const onResize = () => setIsSmall(typeof window !== 'undefined' && window.innerWidth < 980)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const rowsFR = [
     {
@@ -1790,7 +1874,16 @@ For resales, collection and payouts go through Stripe Connect.`,
         <SectionEyebrow>{isFR ? 'FAQ' : 'FAQ'}</SectionEyebrow>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gap: 12 }}>
           {rows.map((r, i) => (
-            <details key={i} style={{ gridColumn: 'span 6', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: 14 }}>
+            <details
+              key={i}
+              style={{
+                gridColumn: isSmall ? 'span 12' : 'span 6',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius)',
+                padding: 14,
+              }}
+            >
               <summary style={{ cursor: 'pointer', fontWeight: 700, lineHeight: 1.2 }}>{r.q}</summary>
               <p style={{ margin: '10px 0 0', whiteSpace: 'pre-wrap' }}>{r.a}</p>
             </details>
@@ -1815,6 +1908,7 @@ For resales, collection and payouts go through Stripe Connect.`,
     </section>
   )
 }
+
 
 /* =========================================================
    FINAL CTA
