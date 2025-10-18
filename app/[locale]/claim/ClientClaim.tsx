@@ -1421,6 +1421,438 @@ useEffect(() => {
     ? ((form.title || '').slice(0, TITLE_MAX) || undefined)
     : undefined
 
+    const Preview: React.FC = () => (
+      <aside
+        aria-label={T.asideLabel}
+        style={{
+          position: isSmall ? 'static' : 'sticky',
+          top: isSmall ? undefined : 24,
+          marginTop: isSmall ? 12 : 0,
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 16,
+          padding: 12,
+          boxShadow: 'var(--shadow-elev1)',
+        }}
+      >
+        <div
+          ref={previewWrapRef}
+          style={{
+            position: 'relative',
+            width: '100%',
+            aspectRatio: `${A4_W_PT}/${A4_H_PT}`,
+            borderRadius: 12,
+            overflow: 'hidden',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          {isLoadingClaim && (
+            <div
+              aria-live="polite"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 2,
+                background: 'rgba(0,0,0,.28)',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontSize: 13,
+                }}
+              >
+                {T.loadingCertificate}
+              </div>
+            </div>
+          )}
+    
+          <img
+            key={(form.cert_style === 'custom' ? customBg?.url : form.cert_style) || 'none'}
+            src={
+              form.cert_style === 'custom'
+                ? customBg?.url || '/cert_bg/neutral.png'
+                : `/cert_bg/${form.cert_style}.png`
+            }
+            alt={T.bgAltPrefix + form.cert_style}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center',
+              background: '#0E1017',
+            }}
+          />
+    
+          {/* Filigrane */}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              pointerEvents: 'none',
+              display: 'grid',
+              placeItems: 'center',
+              transform: 'rotate(-22deg)',
+              opacity: 0.14,
+              mixBlendMode: 'multiply',
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 900,
+                fontSize: 'min(18vw, 120px)',
+                letterSpacing: 2,
+                color: '#1a1f2a',
+              }}
+            >
+              PARCELS OF TIME — PREVIEW
+            </div>
+          </div>
+    
+          {/* === Contenu texte de la preview (inchangé) === */}
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              textAlign: 'center',
+              top: toTopPx(yBrand, 18),
+              fontWeight: 800,
+              fontSize: 18 * scale,
+              color: form.text_color,
+            }}
+          >
+            {L.brand}
+          </div>
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              textAlign: 'center',
+              top: toTopPx(yCert, 12),
+              fontWeight: 400,
+              fontSize: 12 * scale,
+              color: subtleColor,
+            }}
+          >
+            {L.title}
+          </div>
+    
+          {/* Date principale */}
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              textAlign: 'center',
+              top: topMainTime2,
+              fontWeight: 800,
+              fontSize: tsSize * scale,
+              color: form.text_color,
+            }}
+          >
+            {mainTime}
+          </div>
+    
+          {/* Owned by */}
+          {showOwned && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: ownedLabelTop!,
+                  fontWeight: 400,
+                  fontSize: 11 * scale,
+                  color: subtleColor,
+                }}
+              >
+                {ownedByLabel}
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: ownedNameTop!,
+                  fontWeight: 800,
+                  fontSize: 15 * scale,
+                  color: form.text_color,
+                }}
+              >
+                {nameForPreview}
+              </div>
+            </>
+          )}
+    
+          {/* Gifted by */}
+          {isGift && showGifted && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: giftedLabelTop!,
+                  fontWeight: 400,
+                  fontSize: 11 * scale,
+                  color: subtleColor,
+                }}
+              >
+                {giftLabel}
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: giftedNameTop!,
+                  fontWeight: 800,
+                  fontSize: 15 * scale,
+                  color: form.text_color,
+                }}
+              >
+                {giftedByStr}
+              </div>
+            </>
+          )}
+    
+          {/* Titre */}
+          {titleForPreview && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: titleLabelTop!,
+                  fontWeight: 400,
+                  fontSize: 11 * scale,
+                  color: subtleColor,
+                  whiteSpace: 'pre',
+                  wordBreak: 'normal',
+                }}
+              >
+                {titleLabel}
+              </div>
+              {titleLines.map((line, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    textAlign: 'center',
+                    top: titleLineTops[i],
+                    fontWeight: 800,
+                    fontSize: 15 * scale,
+                    whiteSpace: 'pre',
+                    wordBreak: 'normal',
+                    color: form.text_color,
+                  }}
+                >
+                  {line}
+                </div>
+              ))}
+            </>
+          )}
+    
+          {/* Message */}
+          {msgLines.length > 0 && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: msgLabelTop!,
+                  fontWeight: 400,
+                  fontSize: 11 * scale,
+                  color: subtleColor,
+                  whiteSpace: 'pre',
+                  wordBreak: 'normal',
+                }}
+              >
+                {messageLabel}
+              </div>
+              {msgLines.map((line, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    textAlign: 'center',
+                    top: msgLineTops[i],
+                    fontSize: 12.5 * scale,
+                    whiteSpace: 'pre',
+                    wordBreak: 'normal',
+                    color: form.text_color,
+                  }}
+                >
+                  {line}
+                </div>
+              ))}
+            </>
+          )}
+    
+          {/* Attestation */}
+          {attestLines.length > 0 && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: attestLabelTop!,
+                  fontWeight: 400,
+                  fontSize: 11 * scale,
+                  color: subtleColor,
+                  whiteSpace: 'pre',
+                  wordBreak: 'normal',
+                }}
+              >
+                {L.attestationLabel}
+              </div>
+              {attestLines.map((line, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    textAlign: 'center',
+                    top: attestLineTops[i],
+                    fontSize: 12.5 * scale,
+                    whiteSpace: 'pre',
+                    wordBreak: 'normal',
+                    color: form.text_color,
+                  }}
+                >
+                  {line}
+                </div>
+              ))}
+            </>
+          )}
+    
+          {/* Link */}
+          {linkLines.length > 0 && (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  top: linkLabelTop!,
+                  fontWeight: 400,
+                  fontSize: 11 * scale,
+                  color: subtleColor,
+                }}
+              >
+                {L.link}
+              </div>
+              {linkLines.map((line, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    textAlign: 'center',
+                    top: linkLineTops[i],
+                    fontSize: 10.5 * scale,
+                    color: mixColorForLink(form.text_color),
+                    whiteSpace: 'pre',
+                    wordBreak: 'normal',
+                  }}
+                >
+                  {line}
+                </div>
+              ))}
+            </>
+          )}
+    
+          {/* Footer meta + QR */}
+          <div
+            style={{
+              position: 'absolute',
+              left: EDGE_PT * scale,
+              bottom: EDGE_PT * scale,
+              width: (A4_W_PT / 2) * scale,
+              height: META_H_PT * scale,
+              color: subtleColor,
+              fontSize: 11 * scale,
+              lineHeight: 1.2,
+            }}
+          >
+            <div style={{ opacity: 0.9 }}>{T.footerCertId}</div>
+            <div
+              style={{
+                marginTop: 6,
+                fontWeight: 800,
+                color: form.text_color,
+                fontSize: 10.5 * scale,
+              }}
+            >
+              ••••••••••••••••••••••••••••••••••••••
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.9 }}>{T.footerIntegrity}</div>
+            <div style={{ marginTop: 6, color: form.text_color, fontSize: 9.5 * scale }}>
+              ••••••••••••••••••••••••••••••••••••••
+            </div>
+            <div style={{ marginTop: 4, color: form.text_color, fontSize: 9.5 * scale }}>
+              ••••••••••••••••••••••••••••••••••••••
+            </div>
+          </div>
+    
+          <div
+            style={{
+              position: 'absolute',
+              right: EDGE_PT * scale,
+              bottom: EDGE_PT * scale,
+              width: QR_SIZE_PT * scale,
+              height: QR_SIZE_PT * scale,
+              border: '1px dashed rgba(26,31,42,.45)',
+              borderRadius: 8,
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 12 * scale,
+              color: 'rgba(26,31,42,.85)',
+              background: 'rgba(255,255,255,.08)',
+            }}
+            aria-label="QR placeholder"
+          >
+            QR
+          </div>
+        </div>
+    
+        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-muted)' }}>
+          {isFR
+            ? 'Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées. '
+            : 'The final PDF is generated server-side: sharp text, real QR code, signed metadata. '}
+          {T.asideTip(ownedByLabel, titleLabel, messageLabel)}
+        </div>
+      </aside>
+    );    
   const push = (v:number|null) => (v==null ? v : v + contentOffsetPx)
   const topMainTime2      = topMainTime + contentOffsetPx
   ownedLabelTop           = push(ownedLabelTop)
@@ -2015,6 +2447,9 @@ useEffect(() => {
               </div>
             </div>
 
+            {/* --- PREVIEW mobile : avant le registre public --- */}
+            {isSmall && <Preview />}
+
             {/* Publication dans le registre (bloc bilingue autonome) */}
             {(() => {
               const isFRloc = loc === 'fr'
@@ -2182,436 +2617,8 @@ useEffect(() => {
             </div>
           </form>
 
-        {/* ---------- PREVIEW COLUMN ---------- */}
-        <aside
-            aria-label={T.asideLabel}
-            style={{
-              position: isSmall ? 'static' : 'sticky',
-              top: isSmall ? undefined : 24,
-              marginTop: isSmall ? 12 : 0,
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 16,
-              padding: 12,
-              boxShadow: 'var(--shadow-elev1)',
-            }}
-          >
-            <div
-              ref={previewWrapRef}
-              style={{
-                position: 'relative',
-                width: '100%',
-                aspectRatio: `${A4_W_PT}/${A4_H_PT}`,
-                borderRadius: 12,
-                overflow: 'hidden',
-                border: '1px solid var(--color-border)',
-              }}
-            >
-              {isLoadingClaim && (
-                <div
-                  aria-live="polite"
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    zIndex: 2,
-                    background: 'rgba(0,0,0,.28)',
-                    display: 'grid',
-                    placeItems: 'center',
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      border: '1px solid var(--color-border)',
-                      background: 'var(--color-surface)',
-                      color: 'var(--color-text)',
-                      fontSize: 13,
-                    }}
-                  >
-                    {T.loadingCertificate}
-                  </div>
-                </div>
-              )}
-
-              <img
-                key={(form.cert_style === 'custom' ? customBg?.url : form.cert_style) || 'none'}
-                src={
-                  form.cert_style === 'custom'
-                    ? customBg?.url || '/cert_bg/neutral.png'
-                    : `/cert_bg/${form.cert_style}.png`
-                }
-                alt={T.bgAltPrefix + form.cert_style}
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center',
-                  background: '#0E1017',
-                }}
-              />
-
-              {/* Filigrane */}
-              <div
-                aria-hidden
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  pointerEvents: 'none',
-                  display: 'grid',
-                  placeItems: 'center',
-                  transform: 'rotate(-22deg)',
-                  opacity: 0.14,
-                  mixBlendMode: 'multiply',
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: 900,
-                    fontSize: 'min(18vw, 120px)',
-                    letterSpacing: 2,
-                    color: '#1a1f2a',
-                  }}
-                >
-                  PARCELS OF TIME — PREVIEW
-                </div>
-              </div>
-
-              {/* ---- tout le reste du contenu de la preview (texte positionné) est inchangé ---- */}
-              {/* (Conserve exactement les mêmes éléments calculés + styles en-dessous) */}
-
-              {/* Header (brand + title) */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  textAlign: 'center',
-                  top: toTopPx(yBrand, 18),
-                  fontWeight: 800,
-                  fontSize: 18 * scale,
-                  color: form.text_color,
-                }}
-              >
-                {L.brand}
-              </div>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  textAlign: 'center',
-                  top: toTopPx(yCert, 12),
-                  fontWeight: 400,
-                  fontSize: 12 * scale,
-                  color: subtleColor,
-                }}
-              >
-                {L.title}
-              </div>
-
-              {/* Date principale */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  textAlign: 'center',
-                  top: topMainTime2,
-                  fontWeight: 800,
-                  fontSize: tsSize * scale,
-                  color: form.text_color,
-                }}
-              >
-                {mainTime}
-              </div>
-
-              {/* ... (garde tout ce qui suit dans l'aside identique à l’original) ... */}
-              {/* Owned by / Gifted by / Title / Message / Attestation / Link / Footer / QR : inchangés */}
-              {showOwned && (
-                <>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      textAlign: 'center',
-                      top: ownedLabelTop!,
-                      fontWeight: 400,
-                      fontSize: 11 * scale,
-                      color: subtleColor,
-                    }}
-                  >
-                    {ownedByLabel}
-                  </div>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      textAlign: 'center',
-                      top: ownedNameTop!,
-                      fontWeight: 800,
-                      fontSize: 15 * scale,
-                      color: form.text_color,
-                    }}
-                  >
-                    {nameForPreview}
-                  </div>
-                </>
-              )}
-
-              {showGifted && (
-                <>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      textAlign: 'center',
-                      top: giftedLabelTop!,
-                      fontWeight: 400,
-                      fontSize: 11 * scale,
-                      color: subtleColor,
-                    }}
-                  >
-                    {giftLabel}
-                  </div>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      textAlign: 'center',
-                      top: giftedNameTop!,
-                      fontWeight: 800,
-                      fontSize: 15 * scale,
-                      color: form.text_color,
-                    }}
-                  >
-                    {giftedByStr}
-                  </div>
-                </>
-              )}
-
-              {titleForPreview && (
-                <>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      textAlign: 'center',
-                      top: titleLabelTop!,
-                      fontWeight: 400,
-                      fontSize: 11 * scale,
-                      color: subtleColor,
-                      whiteSpace: 'pre',
-                      wordBreak: 'normal',
-                    }}
-                  >
-                    {titleLabel}
-                  </div>
-                  {titleLines.map((line, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        position: 'absolute',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        textAlign: 'center',
-                        top: titleLineTops[i],
-                        fontWeight: 800,
-                        fontSize: 15 * scale,
-                        whiteSpace: 'pre',
-                        wordBreak: 'normal',
-                        color: form.text_color,
-                      }}
-                    >
-                      {line}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {msgLines.length > 0 && (
-                <>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      textAlign: 'center',
-                      top: msgLabelTop!,
-                      fontWeight: 400,
-                      fontSize: 11 * scale,
-                      color: subtleColor,
-                      whiteSpace: 'pre',
-                      wordBreak: 'normal',
-                    }}
-                  >
-                    {messageLabel}
-                  </div>
-                  {msgLines.map((line, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        position: 'absolute',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        textAlign: 'center',
-                        top: msgLineTops[i],
-                        fontSize: 12.5 * scale,
-                        whiteSpace: 'pre',
-                        wordBreak: 'normal',
-                        color: form.text_color,
-                      }}
-                    >
-                      {line}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {attestLines.length > 0 && (
-                <>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      textAlign: 'center',
-                      top: attestLabelTop!,
-                      fontWeight: 400,
-                      fontSize: 11 * scale,
-                      color: subtleColor,
-                      whiteSpace: 'pre',
-                      wordBreak: 'normal',
-                    }}
-                  >
-                    {L.attestationLabel}
-                  </div>
-                  {attestLines.map((line, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        position: 'absolute',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        textAlign: 'center',
-                        top: attestLineTops[i],
-                        fontSize: 12.5 * scale,
-                        whiteSpace: 'pre',
-                        wordBreak: 'normal',
-                        color: form.text_color,
-                      }}
-                    >
-                      {line}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {linkLines.length > 0 && (
-                <>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      textAlign: 'center',
-                      top: linkLabelTop!,
-                      fontWeight: 400,
-                      fontSize: 11 * scale,
-                      color: subtleColor,
-                    }}
-                  >
-                    {L.link}
-                  </div>
-                  {linkLines.map((line, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        position: 'absolute',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        textAlign: 'center',
-                        top: linkLineTops[i],
-                        fontSize: 10.5 * scale,
-                        color: mixColorForLink(form.text_color),
-                        whiteSpace: 'pre',
-                        wordBreak: 'normal',
-                      }}
-                    >
-                      {line}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Footer: meta & QR (inchangés) */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: EDGE_PT * scale,
-                  bottom: EDGE_PT * scale,
-                  width: (A4_W_PT / 2) * scale,
-                  height: META_H_PT * scale,
-                  color: subtleColor,
-                  fontSize: 11 * scale,
-                  lineHeight: 1.2,
-                }}
-              >
-                <div style={{ opacity: 0.9 }}>{T.footerCertId}</div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontWeight: 800,
-                    color: form.text_color,
-                    fontSize: 10.5 * scale,
-                  }}
-                >
-                  ••••••••••••••••••••••••••••••••••••••
-                </div>
-                <div style={{ marginTop: 8, opacity: 0.9 }}>{T.footerIntegrity}</div>
-                <div style={{ marginTop: 6, color: form.text_color, fontSize: 9.5 * scale }}>
-                  ••••••••••••••••••••••••••••••••••••••
-                </div>
-                <div style={{ marginTop: 4, color: form.text_color, fontSize: 9.5 * scale }}>
-                  ••••••••••••••••••••••••••••••••••••••
-                </div>
-              </div>
-
-              <div
-                style={{
-                  position: 'absolute',
-                  right: EDGE_PT * scale,
-                  bottom: EDGE_PT * scale,
-                  width: QR_SIZE_PT * scale,
-                  height: QR_SIZE_PT * scale,
-                  border: '1px dashed rgba(26,31,42,.45)',
-                  borderRadius: 8,
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontSize: 12 * scale,
-                  color: 'rgba(26,31,42,.85)',
-                  background: 'rgba(255,255,255,.08)',
-                }}
-                aria-label="QR placeholder"
-              >
-                QR
-              </div>
-            </div>
-
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-muted)' }}>
-              {isFR
-                ? 'Le PDF final est généré côté serveur : texte net, QR code réel, métadonnées signées. '
-                : 'The final PDF is generated server-side: sharp text, real QR code, signed metadata. '}
-              {T.asideTip(ownedByLabel, titleLabel, messageLabel)}
-            </div>
-          </aside>
+          {/* ---------- PREVIEW COLUMN (desktop only) ---------- */}
+          {!isSmall && <Preview />}
         </div>
       </section>
     </main>
