@@ -24,7 +24,7 @@ function normIsoDay(s: string): string | null {
 }
 
 /** Map legacy time_display -> timeLabelMode */
-function toTimeLabelMode(td?: string) {
+function toTimeLabelMode(td?: string): 'utc' | 'utc_plus_local' | 'local_plus_utc' {
   const v = String(td || 'local+utc')
   if (v === 'utc+local') return 'utc_plus_local'
   if (v === 'local+utc') return 'local_plus_utc'
@@ -124,6 +124,13 @@ function toCertStyle(s: string, hasCustomBg: boolean): CertStyle {
   return CERT_STYLES.has(v) ? v : 'neutral'
 }
 
+/** ---------- ArrayBuffer helper (évite ArrayBufferLike/SharedArrayBuffer) ---------- */
+function toPlainArrayBuffer(u8: Uint8Array): ArrayBuffer {
+  const ab = new ArrayBuffer(u8.byteLength)
+  new Uint8Array(ab).set(u8)
+  return ab
+}
+
 /** ---------- Handler ---------- */
 export async function GET(req: Request, ctx: any) {
   // Param "YYYY-MM-DD[.pdf]"
@@ -153,7 +160,8 @@ export async function GET(req: Request, ctx: any) {
   const ttlMs = isPublicish ? 5 * 60_000 : 0
   const cached = getCached(key)
   if (cached) {
-    return new Response(new Blob([cached], { type: 'application/pdf' }), {
+    const ab = toPlainArrayBuffer(cached)
+    return new Response(ab, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0,10))}.pdf"`,
@@ -202,7 +210,7 @@ export async function GET(req: Request, ctx: any) {
           public_url: publicUrl,
           style: safeStyle,
           locale,
-          timeLabelMode: toTimeLabelMode(claim.time_display) as any,
+          timeLabelMode: toTimeLabelMode(claim.time_display),
           localDateOnly: !!claim.local_date_only,
           textColorHex: (/^#[0-9a-f]{6}$/i.test(claim.text_color || '') ? String(claim.text_color).toLowerCase() : '#1a1f2a'),
           customBgDataUrl,
@@ -210,7 +218,7 @@ export async function GET(req: Request, ctx: any) {
           hideMeta,
         })
 
-        // pdfBytes est déjà un Uint8Array (pdf-lib)
+        // pdfBytes est un Uint8Array (pdf-lib)
         return pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes as any)
       }
 
@@ -225,7 +233,8 @@ export async function GET(req: Request, ctx: any) {
     inflight.delete(key)
     if (ttlMs > 0) putCache(key, body, ttlMs)
 
-    return new Response(new Blob([body], { type: 'application/pdf' }), {
+    const ab = toPlainArrayBuffer(body)
+    return new Response(ab, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0,10))}.pdf"`,
