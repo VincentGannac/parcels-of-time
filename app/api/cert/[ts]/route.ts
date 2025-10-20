@@ -6,7 +6,6 @@ export const preferredRegion = ['cdg1','fra1']
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { generateCertificatePDF, type CertStyle } from '@/lib/cert'
-import { Buffer } from 'node:buffer'
 
 /** ---------- Utils date ---------- */
 function normIsoDay(s: string): string | null {
@@ -105,6 +104,7 @@ async function loadClaimRow(tsISO: string) {
 }
 
 async function loadCustomBg(tsISO: string): Promise<string | undefined> {
+  // exact match, puis fallback day-trunc (compat anciens enregistrements)
   const ex1 = await pool.query(`select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`, [tsISO])
   if (ex1.rows[0]?.data_url) return ex1.rows[0].data_url as string
   const ex2 = await pool.query(
@@ -132,10 +132,11 @@ export async function GET(req: Request, ctx: any) {
   const tsISO = normIsoDay(decoded)
   if (!tsISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
 
-  // Locale déduite (pour QR) + options d’affichage
+  // Locale pour l’URL publique (QR)
   const accLang = (req.headers.get('accept-language') || '').toLowerCase()
   const locale: 'fr' | 'en' = accLang.startsWith('fr') ? 'fr' : 'en'
 
+  // Options d’affichage
   const url = new URL(req.url)
   const hideQr =
     url.searchParams.has('public') ||
@@ -147,12 +148,12 @@ export async function GET(req: Request, ctx: any) {
 
   const key = makeKey(tsISO, locale, hideQr, hideMeta)
 
-  // Cache (surtout utile pour les rendus publics/iframes)
+  // Cache public (soulage les rafales d’iframes)
   const isPublicish = hideQr || hideMeta || url.searchParams.get('public') === '1'
   const ttlMs = isPublicish ? 5 * 60_000 : 0
   const cached = getCached(key)
   if (cached) {
-    return new Response(cached, {
+    return new Response(new Blob([cached], { type: 'application/pdf' }), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0,10))}.pdf"`,
@@ -162,24 +163,23 @@ export async function GET(req: Request, ctx: any) {
     })
   }
 
-  // Single-flight: si déjà en génération → on attend la même promesse
+  // Single-flight (une seule génération par clé)
   let p = inflight.get(key)
   if (!p) {
     p = withSemaphore(async () => {
       const tryOnce = async () => {
-        // Charge le claim le plus récent
         const claim = await loadClaimRow(tsISO)
         if (!claim) throw new Error('not_found')
 
-        // Style + custom bg
-        const raw = String(claim.cert_style || 'neutral')
-        let customBgDataUrl: string | undefined = undefined
-        if (raw.toLowerCase() === 'custom') {
+        // Style + fond custom
+        const rawStyle = String(claim.cert_style || 'neutral')
+        let customBgDataUrl: string | undefined
+        if (rawStyle.toLowerCase() === 'custom') {
           customBgDataUrl = await loadCustomBg(tsISO)
         }
-        const safeStyle: CertStyle = toCertStyle(raw, !!customBgDataUrl)
+        const safeStyle: CertStyle = toCertStyle(rawStyle, !!customBgDataUrl)
 
-        // Public URL (pour QR)
+        // URL publique (QR)
         const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
         const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0,10))}`
 
@@ -200,27 +200,23 @@ export async function GET(req: Request, ctx: any) {
           claim_id: String(claim.claim_id),
           hash: claim.cert_hash || 'no-hash',
           public_url: publicUrl,
-          style: safeStyle,                    // ✅ CertStyle
+          style: safeStyle,
           locale,
           timeLabelMode: toTimeLabelMode(claim.time_display) as any,
           localDateOnly: !!claim.local_date_only,
           textColorHex: (/^#[0-9a-f]{6}$/i.test(claim.text_color || '') ? String(claim.text_color).toLowerCase() : '#1a1f2a'),
-          customBgDataUrl,                     // fourni si "custom" + dispo
+          customBgDataUrl,
           hideQr,
           hideMeta,
         })
 
-        return new Uint8Array(Buffer.from(pdfBytes))
+        // pdfBytes est déjà un Uint8Array (pdf-lib)
+        return pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes as any)
       }
 
-      try {
-        return await tryOnce()
-      } catch {
-        await delay(200) // backoff court
-        return await tryOnce()
-      }
+      try { return await tryOnce() }
+      catch { await delay(200); return await tryOnce() } // petit backoff pour assets/froid
     })
-
     inflight.set(key, p)
   }
 
@@ -229,7 +225,7 @@ export async function GET(req: Request, ctx: any) {
     inflight.delete(key)
     if (ttlMs > 0) putCache(key, body, ttlMs)
 
-    return new Response(body, {
+    return new Response(new Blob([body], { type: 'application/pdf' }), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0,10))}.pdf"`,
@@ -240,9 +236,7 @@ export async function GET(req: Request, ctx: any) {
   } catch (e: any) {
     inflight.delete(key)
     const msg = String(e?.message || e)
-    if (msg === 'not_found') {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
-    }
+    if (msg === 'not_found') return NextResponse.json({ error: 'not_found' }, { status: 404 })
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }
