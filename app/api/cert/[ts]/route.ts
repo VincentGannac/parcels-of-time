@@ -1,31 +1,30 @@
 // app/api/cert/[ts]/route.ts
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const preferredRegion = ['cdg1','fra1']
 
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
-import { generateCertificatePDF } from '@/lib/cert'
+import { generateCertificatePDF, type CertStyle } from '@/lib/cert'
 import { Buffer } from 'node:buffer'
 
+/** ---------- Utils date ---------- */
 function normIsoDay(s: string): string | null {
   if (!s) return null
   let d: Date
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
     d = new Date(`${s}T00:00:00.000Z`)
-  } else if (
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(s) &&
-    !/[Z+-]\d{2}:?\d{2}$/.test(s)
-  ) {
-    d = new Date(`${s}Z`) // ← force UTC si pas de fuseau
+  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(s) && !/[Z+-]\d{2}:?\d{2}$/.test(s)) {
+    d = new Date(`${s}Z`)
   } else {
     d = new Date(s)
   }
   if (isNaN(d.getTime())) return null
-  d.setUTCHours(0,0,0,0)
+  d.setUTCHours(0, 0, 0, 0)
   return d.toISOString()
 }
 
-
-/** Map legacy time_display -> timeLabelMode (conservé pour compat) */
+/** Map legacy time_display -> timeLabelMode */
 function toTimeLabelMode(td?: string) {
   const v = String(td || 'local+utc')
   if (v === 'utc+local') return 'utc_plus_local'
@@ -33,25 +32,54 @@ function toTimeLabelMode(td?: string) {
   return 'utc'
 }
 
-export async function GET(req: Request, ctx: any) {
-  // Param dynamique : "YYYY-MM-DD" (+optionnellement suffixe ".pdf" que l’on retire)
-  const rawParam = String(ctx?.params?.ts || '')
-  const decoded = decodeURIComponent(rawParam).replace(/\.pdf$/i, '')
-  const tsISO = normIsoDay(decoded)
-  if (!tsISO) {
-    return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
+/** ---------- Single-flight + concurrency gate + tiny cache ---------- */
+type Key = string
+type CacheEntry = { at: number; buf: Uint8Array; ttl: number }
+const inflight = new Map<Key, Promise<Uint8Array>>()
+const cache = new Map<Key, CacheEntry>()
+const MAX_CACHE = 96
+
+let active = 0
+const waiters: Array<() => void> = []
+const MAX_CONCURRENCY = 2
+
+function makeKey(tsISO: string, locale: 'fr'|'en', hideQr: boolean, hideMeta: boolean) {
+  return [tsISO.slice(0,10), locale, hideQr ? 'q1' : 'q0', hideMeta ? 'm1' : 'm0'].join('|')
+}
+function getCached(key: Key): Uint8Array | null {
+  const now = Date.now()
+  const ent = cache.get(key)
+  if (!ent) return null
+  if (now - ent.at > ent.ttl) { cache.delete(key); return null }
+  return ent.buf
+}
+function putCache(key: Key, buf: Uint8Array, ttlMs: number) {
+  if (ttlMs <= 0) return
+  if (cache.size >= MAX_CACHE) {
+    const first = cache.keys().next().value
+    if (first) cache.delete(first)
   }
+  cache.set(key, { at: Date.now(), buf, ttl: ttlMs })
+}
+async function withSemaphore<T>(fn: () => Promise<T>): Promise<T> {
+  if (active >= MAX_CONCURRENCY) {
+    await new Promise<void>(resolve => waiters.push(resolve))
+  }
+  active++
+  try { return await fn() }
+  finally {
+    active = Math.max(0, active - 1)
+    const next = waiters.shift()
+    if (next) next()
+  }
+}
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-  try {
-    // Locale (QR/public URL)
-    const accLang = (req.headers.get('accept-language') || '').toLowerCase()
-    const locale: 'fr' | 'en' = accLang.startsWith('fr') ? 'fr' : 'en'
-    const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
-
-    // Claim le plus récent pour ce jour
-    const { rows } = await pool.query(
-      `
-        select
+/** ---------- DB helpers ---------- */
+async function loadClaimRow(tsISO: string) {
+  const { rows } = await pool.query(
+    `
+      select
         c.id as claim_id,
         c.ts,
         c.title,
@@ -70,82 +98,151 @@ export async function GET(req: Request, ctx: any) {
       where date_trunc('day', c.ts) = $1::timestamptz
       order by c.ts desc
       limit 1
-      `,
-      [tsISO]
-    )
-    if (!rows.length) {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
-    }
-    const claim = rows[0]
+    `,
+    [tsISO]
+  )
+  return rows[0] || null
+}
 
-    // Fond custom STRICTEMENT lié à ce ts (pas de fallback par jour)
-    let customBgDataUrl: string | undefined
-    if (String(claim.cert_style || '').toLowerCase() === 'custom') {
-      const dayISO = tsISO
-      const ex1 = await pool.query(
-        `select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`,
-        [dayISO]
-      )
-      customBgDataUrl = ex1.rows[0]?.data_url ?? undefined
-      if (!customBgDataUrl) {
-        const ex2 = await pool.query(
-          `select data_url from claim_custom_bg
-            where date_trunc('day', ts) = $1::timestamptz
-            limit 1`,
-          [dayISO]
-        )
-        customBgDataUrl = ex2.rows[0]?.data_url || null || undefined
-      }
-    }
+async function loadCustomBg(tsISO: string): Promise<string | undefined> {
+  const ex1 = await pool.query(`select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`, [tsISO])
+  if (ex1.rows[0]?.data_url) return ex1.rows[0].data_url as string
+  const ex2 = await pool.query(
+    `select data_url from claim_custom_bg where date_trunc('day', ts) = $1::timestamptz limit 1`,
+    [tsISO]
+  )
+  return ex2.rows[0]?.data_url || undefined
+}
 
+/** ---------- Style normalizer (→ CertStyle) ---------- */
+const CERT_STYLES = new Set<CertStyle>([
+  'neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'
+])
+function toCertStyle(s: string, hasCustomBg: boolean): CertStyle {
+  const v = String(s || '').toLowerCase() as CertStyle
+  if (v === 'custom') return hasCustomBg ? 'custom' : 'neutral'
+  return CERT_STYLES.has(v) ? v : 'neutral'
+}
 
-    // Options d’affichage (ex: /api/cert/2024-01-01?public=1&hide_meta=1)
-    const url = new URL(req.url)
-    const hideQr =
-      url.searchParams.has('public') ||
-      url.searchParams.get('public') === '1' ||
-      url.searchParams.get('hide_qr') === '1'
-    const hideMeta =
-      url.searchParams.get('hide_meta') === '1' ||
-      url.searchParams.has('hide_meta')
+/** ---------- Handler ---------- */
+export async function GET(req: Request, ctx: any) {
+  // Param "YYYY-MM-DD[.pdf]"
+  const rawParam = String(ctx?.params?.ts || '')
+  const decoded = decodeURIComponent(rawParam).replace(/\.pdf$/i, '')
+  const tsISO = normIsoDay(decoded)
+  if (!tsISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
 
-    // URL publique
-    const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0,10))}`
+  // Locale déduite (pour QR) + options d’affichage
+  const accLang = (req.headers.get('accept-language') || '').toLowerCase()
+  const locale: 'fr' | 'en' = accLang.startsWith('fr') ? 'fr' : 'en'
 
-    // Génération PDF (interface legacy)
-    const pdfBytes = await generateCertificatePDF({
-      ts: tsISO,
-      display_name: claim.claim_display_name
-      || claim.owner_username
-      || claim.owner_legacy_display_name
-      || (locale === 'fr' ? 'Anonyme' : 'Anonymous'),
-      title: claim.title,
-      message: claim.message,
-      link_url: claim.link_url || '',
-      claim_id: String(claim.claim_id),
-      hash: claim.cert_hash || 'no-hash',
-      public_url: publicUrl,
-      style: claim.cert_style || 'neutral',
-      locale,
-      timeLabelMode: toTimeLabelMode(claim.time_display) as any, // compat
-      localDateOnly: !!claim.local_date_only,
-      textColorHex: claim.text_color || '#1a1f2a',
-      customBgDataUrl, // ← lié exactement à ce ts
-      hideQr,
-      hideMeta,
-    })
+  const url = new URL(req.url)
+  const hideQr =
+    url.searchParams.has('public') ||
+    url.searchParams.get('public') === '1' ||
+    url.searchParams.get('hide_qr') === '1'
+  const hideMeta =
+    url.searchParams.get('hide_meta') === '1' ||
+    url.searchParams.has('hide_meta')
 
-    const buf = Buffer.from(pdfBytes)
-    const body = new Uint8Array(buf) // ✅ BodyInit compatible
-    return new Response(body, {
+  const key = makeKey(tsISO, locale, hideQr, hideMeta)
+
+  // Cache (surtout utile pour les rendus publics/iframes)
+  const isPublicish = hideQr || hideMeta || url.searchParams.get('public') === '1'
+  const ttlMs = isPublicish ? 5 * 60_000 : 0
+  const cached = getCached(key)
+  if (cached) {
+    return new Response(cached, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
-        'Cache-Control': 'no-store',
+        'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0,10))}.pdf"`,
+        'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
         'Vary': 'Accept-Language',
       },
     })
-  } catch (e) {
+  }
+
+  // Single-flight: si déjà en génération → on attend la même promesse
+  let p = inflight.get(key)
+  if (!p) {
+    p = withSemaphore(async () => {
+      const tryOnce = async () => {
+        // Charge le claim le plus récent
+        const claim = await loadClaimRow(tsISO)
+        if (!claim) throw new Error('not_found')
+
+        // Style + custom bg
+        const raw = String(claim.cert_style || 'neutral')
+        let customBgDataUrl: string | undefined = undefined
+        if (raw.toLowerCase() === 'custom') {
+          customBgDataUrl = await loadCustomBg(tsISO)
+        }
+        const safeStyle: CertStyle = toCertStyle(raw, !!customBgDataUrl)
+
+        // Public URL (pour QR)
+        const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
+        const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0,10))}`
+
+        // Nom affiché
+        const displayName =
+          claim.claim_display_name ||
+          claim.owner_username ||
+          claim.owner_legacy_display_name ||
+          (locale === 'fr' ? 'Anonyme' : 'Anonymous')
+
+        // Génération PDF
+        const pdfBytes = await generateCertificatePDF({
+          ts: tsISO,
+          display_name: displayName,
+          title: claim.title || null,
+          message: claim.message || null,
+          link_url: claim.link_url || '',
+          claim_id: String(claim.claim_id),
+          hash: claim.cert_hash || 'no-hash',
+          public_url: publicUrl,
+          style: safeStyle,                    // ✅ CertStyle
+          locale,
+          timeLabelMode: toTimeLabelMode(claim.time_display) as any,
+          localDateOnly: !!claim.local_date_only,
+          textColorHex: (/^#[0-9a-f]{6}$/i.test(claim.text_color || '') ? String(claim.text_color).toLowerCase() : '#1a1f2a'),
+          customBgDataUrl,                     // fourni si "custom" + dispo
+          hideQr,
+          hideMeta,
+        })
+
+        return new Uint8Array(Buffer.from(pdfBytes))
+      }
+
+      try {
+        return await tryOnce()
+      } catch {
+        await delay(200) // backoff court
+        return await tryOnce()
+      }
+    })
+
+    inflight.set(key, p)
+  }
+
+  try {
+    const body = await p
+    inflight.delete(key)
+    if (ttlMs > 0) putCache(key, body, ttlMs)
+
+    return new Response(body, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0,10))}.pdf"`,
+        'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
+        'Vary': 'Accept-Language',
+      },
+    })
+  } catch (e: any) {
+    inflight.delete(key)
+    const msg = String(e?.message || e)
+    if (msg === 'not_found') {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }
