@@ -1548,7 +1548,7 @@ function GoldCTA({ href, children, ariaLabel }: { href: string; children: React.
             'Un certificat HD (PDF/JPG) prêt à imprimer, unique ' +
             'Chaque date est vendue une seule fois.',
           note:
-            'Chaque certificat inclut un QR scannable vers votre page souvenir et une empreinte d’intégrité (SHA-256).1',
+            'Chaque certificat inclut un QR scannable vers votre page souvenir et une empreinte d’intégrité (SHA-256).WXCV',
           cards: [
             {
               style: 'romantic' as PreviewStyle,
