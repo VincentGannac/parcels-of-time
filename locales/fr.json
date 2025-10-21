@@ -23,7 +23,7 @@
   "registry": {
     "eyebrow": "Registre public",
     "title": "Une galerie participative d’archives personnelles",
-    "paragraph": "Des propriétaires choisissent d’exposer leur certificat (date, titre, extrait, photo). Vous contrôlez la visibilité depuis votre compte. C’est une démarche symbolique et artistique.",
+    "paragraph": "Des propriétaires choisissent d’exposer leur certificat (date, titre, extrait, photo).\nVous contrôlez la visibilité depuis votre compte. C’est une démarche symbolique et artistique.",
     "cta": "Voir le Registre public",
     "moderation": "Modération des contenus publics",
     "visibility": "Contrôle total de la visibilité"
