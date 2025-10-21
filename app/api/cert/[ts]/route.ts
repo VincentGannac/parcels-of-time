@@ -7,7 +7,12 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { generateCertificatePDF } from '@/lib/cert'
 
-/* ========================= Date utils ========================= */
+/* ========================= Utils ========================= */
+function mkTraceId() {
+  return 'cert_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+}
+
+/* Date utils */
 function normIsoDay(s: string): string | null {
   if (!s) return null
   let d: Date
@@ -26,12 +31,7 @@ function toTimeLabelMode(td?: string) {
   return 'utc'
 }
 
-/* ========================= Message normalizer =========================
-   - Retire l’attestation du message brut (pour pouvoir la régénérer proprement).
-   - Détecte si l’attestation était cochée (hadAttestation).
-   - Récupère “Offert par / Gifted by …”.
-   - Détecte [[HIDE_OWNED_BY]] sans laisser ce token dans le message final PDF.
-======================================================================= */
+/* ========================= Message normalizer ========================= */
 function normalizeClaimMessage(raw: unknown) {
   const inp = String(raw || '').trim()
   if (!inp) return { message: '', giftedBy: '', hideOwned: false, hadAttestation: false }
@@ -139,44 +139,202 @@ async function loadCustomBg(tsISO: string): Promise<string | undefined> {
 
 /* ========================= Handler ========================= */
 export async function GET(req: Request, ctx: any) {
-  // paramètre : /api/cert/[ts] (YYYY-MM-DD[.pdf])
+  const traceId = mkTraceId()
+  const t0 = Date.now()
+
+  // ---- params & flags
   const raw = String(ctx?.params?.ts || '')
   const decoded = decodeURIComponent(raw).replace(/\.pdf$/i, '')
   const tsISO = normIsoDay(decoded)
-  if (!tsISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
+  const url = new URL(req.url)
 
-  // locale + options
   const accLang = (req.headers.get('accept-language') || '').toLowerCase()
   const locale: 'fr' | 'en' = accLang.startsWith('fr') ? 'fr' : 'en'
-  const url = new URL(req.url)
   const hideQr   = url.searchParams.has('public') || url.searchParams.get('public') === '1' || url.searchParams.get('hide_qr') === '1'
   const hideMeta = url.searchParams.get('hide_meta') === '1' || url.searchParams.has('hide_meta')
-
   const isPublicish = hideQr || hideMeta || url.searchParams.get('public') === '1'
   const ttlMs = isPublicish ? 5 * 60_000 : 0
 
+  const wantsJson  = url.searchParams.get('debug') === '1' ||
+    (req.headers.get('accept') || '').toLowerCase().includes('application/json')
+  const wantsProbe = url.searchParams.get('probe') === '1'
+
+  const baseHeaders: Record<string, string> = {
+    'X-Trace-Id': traceId,
+    'Vary': 'Accept-Language',
+  }
+
+  if (!tsISO) {
+    const body = { error: 'bad_ts', trace_id: traceId, message: 'ts param must be YYYY-MM-DD or ISO date', received: raw }
+    return new NextResponse(JSON.stringify(body), {
+      status: 400,
+      headers: { ...baseHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    })
+  }
+
   const key = makeKey(tsISO, locale, hideQr, hideMeta)
   const cached = getCached(key)
+
+  // ------------------------------------------------------------------
+  // 💡 MODE DEBUG JSON — NE PAS UTILISER inflight (évite le type mixte)
+  // ------------------------------------------------------------------
+  if (wantsJson) {
+    const tDb0 = Date.now()
+    let claim: any = null
+    try { claim = await loadClaimRow(tsISO) } catch {}
+    const tDb1 = Date.now()
+
+    if (!claim) {
+      const diag = {
+        ok: false,
+        error: 'not_found',
+        trace_id: traceId,
+        tsISO, ymd: tsISO.slice(0,10), locale, hideQr, hideMeta, isPublicish,
+        cache: cached ? 'hit' : 'miss',
+        db_lookup_ms: tDb1 - tDb0,
+        hint: 'No DB row for this day. If this follows a recent purchase, retry later.',
+        elapsed_ms: Date.now() - t0,
+      }
+      return new NextResponse(JSON.stringify(diag, null, 2), {
+        status: 200,
+        headers: { ...baseHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      })
+    }
+
+    // Style & fond custom
+    const styleRaw = String(claim.cert_style || 'neutral').toLowerCase()
+    const known = new Set(['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'])
+    let customBgDataUrl: string | undefined
+    let safeStyle: any = 'neutral'
+    if (styleRaw === 'custom') {
+      try { customBgDataUrl = await loadCustomBg(tsISO) } catch {}
+      safeStyle = customBgDataUrl ? 'custom' : 'neutral'
+    } else {
+      safeStyle = known.has(styleRaw) ? styleRaw : 'neutral'
+    }
+
+    // URL publique (QR)
+    const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
+    const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0, 10))}`
+
+    // Normalisation du message
+    const { message: msgNoAttest, giftedBy, hideOwned, hadAttestation } = normalizeClaimMessage(claim.message)
+
+    // Nom affiché
+    const displayName =
+      hideOwned ? null
+      : (claim.claim_display_name || claim.owner_username || claim.owner_legacy_display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'))
+
+    // Attestation
+    const ymd = tsISO.slice(0,10)
+    const ownerForText = (displayName && displayName.trim()) ? displayName.trim() : (locale === 'fr' ? 'Anonyme' : 'Anonymous')
+    const attestation =
+      locale === 'fr'
+        ? `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${ymd}. Le présent document confirme la validité et l'authenticité de cette acquisition.`
+        : `This certificate attests that ${ownerForText} is recognized as the symbolic owner of the day ${ymd}. This document confirms the validity and authenticity of this acquisition.`
+
+    const parts: string[] = []
+    if (msgNoAttest) parts.push(msgNoAttest)
+    if (giftedBy) parts.push((/^[A-Za-zÀ-ÿ]/.test(giftedBy) ? (locale === 'fr' ? `Offert par: ${giftedBy}` : `Gifted by: ${giftedBy}`) : String(giftedBy)))
+    if (hadAttestation) parts.push(attestation)
+    const finalMessage = parts.join('\n').trim() || null
+
+    const textColorHex = /^#[0-9a-f]{6}$/i.test(claim.text_color || '') ? String(claim.text_color).toLowerCase() : '#1a1f2a'
+
+    // Si probe => tenter la génération en local (pas d’inflight, pas de cache)
+    let genOk = false
+    let genErr: any = null
+    let genBytes = 0
+    let genMs = 0
+    if (wantsProbe) {
+      const tGen0 = Date.now()
+      try {
+        const pdf = await generateCertificatePDF({
+          ts: tsISO,
+          display_name: displayName,
+          title: claim.title || null,
+          message: finalMessage,
+          link_url: claim.link_url || '',
+          claim_id: String(claim.claim_id),
+          hash: claim.cert_hash || 'no-hash',
+          public_url: publicUrl,
+          style: safeStyle,
+          locale,
+          timeLabelMode: toTimeLabelMode(claim.time_display) as any,
+          localDateOnly: !!claim.local_date_only,
+          textColorHex,
+          customBgDataUrl,
+          hideQr,
+          hideMeta,
+        })
+        const u8 = pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf as any)
+        genOk = true
+        genBytes = u8.byteLength
+      } catch (e: any) {
+        genErr = { message: String(e?.message || e), stack_trunc: String(e?.stack || '').slice(0, 800) }
+      } finally {
+        genMs = Date.now() - tGen0
+      }
+    }
+
+    const diag = {
+      ok: true,
+      mode: wantsProbe ? 'debug_probe' : 'debug',
+      tsISO, ymd, locale, hideQr, hideMeta, isPublicish,
+      cache: cached ? 'hit' : 'miss',
+      db: { found: true, claim_id: String(claim.claim_id) },
+      style: { requested: styleRaw, resolved: safeStyle, has_custom_bg: !!customBgDataUrl },
+      message_meta: { hadAttestation, giftedBy_present: !!giftedBy, hideOwned },
+      display_name_present: !!displayName,
+      text_color: textColorHex,
+      timings_ms: { db: tDb1 - tDb0, probe_gen: genMs },
+      generator_ok: genOk,
+      generator_error: genErr,
+      pdf_bytes: genBytes,
+      hint: genOk ? 'Generator OK' : (wantsProbe ? 'Generator FAILURE (see generator_error)' : 'Add &probe=1 to test generation'),
+      elapsed_ms: Date.now() - t0,
+    }
+
+    return new NextResponse(JSON.stringify(diag, null, 2), {
+      status: 200,
+      headers: { ...baseHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    })
+  }
+
+  // ------------------------------------------------------------------
+  // 💾 Fast-path cache PDF (réponse binaire)
+  // ------------------------------------------------------------------
   if (cached) {
     const ab = toPlainArrayBuffer(cached)
     return new Response(ab, {
       headers: {
+        ...baseHeaders,
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
         'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
-        'Vary': 'Accept-Language',
+        'X-Cert-Cache': 'hit',
+        'X-Cert-Locale': locale,
+        'X-Cert-Opts': `qr:${hideQr?1:0},meta:${hideMeta?1:0}`,
         'Content-Length': String(cached.byteLength),
       },
     })
   }
 
-  // Single-flight + retries
-  let p = inflight.get(key)
+  // ------------------------------------------------------------------
+  // 🛠️ Single-flight (PDF uniquement) — inflight = Promise<Uint8Array>
+  // ------------------------------------------------------------------
+  let p: Promise<Uint8Array> | undefined = inflight.get(key)
   if (!p) {
-    p = withSemaphore(async () => {
-      const attempt = async () => {
+    const pNew: Promise<Uint8Array> = withSemaphore(async () => {
+      const attempt = async (): Promise<Uint8Array> => {
+        const tDb0 = Date.now()
         const claim = await loadClaimRow(tsISO)
-        if (!claim) throw new Error('not_found')
+        const tDb1 = Date.now()
+        if (!claim) {
+          const err: any = new Error('not_found')
+          err.__diag = { tsISO, ymd: tsISO.slice(0,10), locale, hideQr, hideMeta, db_lookup_ms: tDb1 - tDb0 }
+          throw err
+        }
 
         // Style & fond custom
         const styleRaw = String(claim.cert_style || 'neutral').toLowerCase()
@@ -194,44 +352,36 @@ export async function GET(req: Request, ctx: any) {
         const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
         const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0, 10))}`
 
-        // Normalisation du message stocké
+        // Normalisation du message
         const { message: msgNoAttest, giftedBy, hideOwned, hadAttestation } = normalizeClaimMessage(claim.message)
 
-        // Nom affiché : si hideOwned => null (le générateur doit gérer l’anonymat)
+        // Nom affiché
         const displayName =
           hideOwned ? null
           : (claim.claim_display_name || claim.owner_username || claim.owner_legacy_display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'))
 
-        // Attestation (si l’utilisateur l’avait cochée)
+        // Attestation
         const ymd = tsISO.slice(0,10)
-        const ownerForText = (displayName && displayName.trim())
-          ? displayName.trim()
-          : (locale === 'fr' ? 'Anonyme' : 'Anonymous')
-
+        const ownerForText = (displayName && displayName.trim()) ? displayName.trim() : (locale === 'fr' ? 'Anonyme' : 'Anonymous')
         const attestation =
           locale === 'fr'
             ? `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${ymd}. Le présent document confirme la validité et l'authenticité de cette acquisition.`
             : `This certificate attests that ${ownerForText} is recognized as the symbolic owner of the day ${ymd}. This document confirms the validity and authenticity of this acquisition.`
 
-        // Reconstruire le message final pour le PDF :
-        // - message utilisateur (sans attestation)
-        // - “Offert par …” éventuel
-        // - attestation si cochée
         const parts: string[] = []
         if (msgNoAttest) parts.push(msgNoAttest)
         if (giftedBy) parts.push((/^[A-Za-zÀ-ÿ]/.test(giftedBy) ? (locale === 'fr' ? `Offert par: ${giftedBy}` : `Gifted by: ${giftedBy}`) : String(giftedBy)))
         if (hadAttestation) parts.push(attestation)
         const finalMessage = parts.join('\n').trim() || null
 
-        // Couleur
         const textColorHex = /^#[0-9a-f]{6}$/i.test(claim.text_color || '') ? String(claim.text_color).toLowerCase() : '#1a1f2a'
 
-        // Génération PDF
+        const tGen0 = Date.now()
         const pdf = await generateCertificatePDF({
           ts: tsISO,
-          display_name: displayName,               // ← null si masqué
+          display_name: displayName,
           title: claim.title || null,
-          message: finalMessage,                   // ← contient l’attestation si cochée
+          message: finalMessage,
           link_url: claim.link_url || '',
           claim_id: String(claim.claim_id),
           hash: claim.cert_hash || 'no-hash',
@@ -245,41 +395,70 @@ export async function GET(req: Request, ctx: any) {
           hideQr,
           hideMeta,
         })
+        const u8 = pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf as any)
+        const genMs = Date.now() - tGen0
 
-        return pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf as any)
+        // cache public only
+        if (ttlMs > 0) putCache(key, u8, ttlMs)
+
+        // On renvoie UNIQUEMENT l’u8 ici (jamais Response) => type OK
+        ;(u8 as any)._genMs = genMs  // (optionnel) stocker pour header après await
+        return u8
       }
 
-      // retries progressifs (utile juste après un achat)
+      // retries progressifs
       const tries = [0, 200, 500, 1000]
-      let lastErr: unknown
+      let lastErr: any
       for (const d of tries) {
         try { if (d) await sleep(d); return await attempt() }
-        catch (e) { lastErr = e }
+        catch (e: any) { lastErr = e }
       }
       throw lastErr
     })
-    inflight.set(key, p)
+    inflight.set(key, pNew)
+    p = pNew
   }
 
   try {
     const body = await p
     inflight.delete(key)
-    if (ttlMs > 0) putCache(key, body, ttlMs)
 
     const ab = toPlainArrayBuffer(body)
+    const genMs = (body as any)._genMs ? String((body as any)._genMs) : undefined
+
     return new Response(ab, {
       headers: {
+        ...baseHeaders,
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
         'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
-        'Vary': 'Accept-Language',
+        'X-Cert-Cache': 'miss',
+        'X-Cert-Locale': locale,
+        'X-Cert-Opts': `qr:${hideQr?1:0},meta:${hideMeta?1:0}`,
+        ...(genMs ? { 'X-Cert-Genms': genMs } : {}),
         'Content-Length': String(body.byteLength),
       },
     })
   } catch (e: any) {
     inflight.delete(key)
-    const msg = String(e?.message || e)
-    if (msg === 'not_found') return NextResponse.json({ error: 'not_found' }, { status: 404 })
-    return NextResponse.json({ error: 'internal' }, { status: 500 })
+    const errMsg = String(e?.message || e)
+    const diag = e?.__diag || null
+    console.error('[api/cert] error', { traceId, err: errMsg, diag })
+
+    const status = errMsg === 'not_found' ? 404 : 500
+    const payload = {
+      error: errMsg === 'not_found' ? 'not_found' : 'internal',
+      trace_id: traceId,
+      cause: errMsg,
+      diag: diag || {
+        tsISO, ymd: tsISO.slice(0,10), locale, hideQr, hideMeta, isPublicish,
+        note: 'Add ?debug=1 for full diagnostics or ?debug=1&probe=1 to test PDF generation.'
+      }
+    }
+    return new NextResponse(JSON.stringify(payload), {
+      status,
+      headers: { ...baseHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    })
   }
 }
+

@@ -9,6 +9,7 @@ import { pool } from '@/lib/db'
 import { readSession, ownerIdForDay } from '@/lib/auth'
 import EditClient from './EditClient'
 import DangerRelease from './DangerRelease'
+import Script from 'next/script'
 
 type Params = { locale: string; ts: string }
 type SearchParams = {
@@ -803,7 +804,106 @@ export default async function Page({
                       ? <>Votre navigateur ne peut pas afficher le PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Ouvrir le PDF dans un nouvel onglet</a>.</>
                       : <>Your browser cannot display the PDF. <a href={pdfHref} target="_blank" rel="noreferrer" style={{color:'var(--color-text)'}}>Open the PDF in a new tab</a>.</>}
                   </div>
+
+                  {/* Bloc diagnostic riche */}
+                  <div id="pdf-diag-box" style={{
+                    margin: '8px 12px',
+                    padding: '10px 12px',
+                    border: '1px dashed var(--color-border)',
+                    borderRadius: 10,
+                    background: 'rgba(228,183,61,.06)',
+                    fontSize: 12,
+                    lineHeight: 1.35
+                  }}>
+                    <strong>{locale==='fr' ? 'Diagnostic technique' : 'Technical diagnostics'}</strong>
+                    <div id="pdf-diag-status" style={{marginTop:6, opacity:.85}}>
+                      {locale==='fr' ? 'Collecte des informations…' : 'Collecting information…'}
+                    </div>
+                    <pre id="pdf-diag-json" style={{marginTop:8, whiteSpace:'pre-wrap', wordBreak:'break-word', maxHeight:180, overflow:'auto'}}></pre>
+                  </div>
+
+                  {/* Script de diagnostic (après interaction) */}
+                  <Script id={`pdf-diag-${encodeURIComponent(tsYMD!)}`} strategy="afterInteractive">
+                    {`
+                      (function(){
+                        const box = document.getElementById('pdf-diag-box');
+                        const st  = document.getElementById('pdf-diag-status');
+                        const pre = document.getElementById('pdf-diag-json');
+                        if (!box || !st || !pre) return;
+
+                        const pdfHref = ${JSON.stringify(pdfHref)};
+                        const locale  = ${JSON.stringify(locale)};
+                        const ua = navigator.userAgent;
+                        const lang = navigator.language;
+                        const dpr = window.devicePixelRatio || 1;
+                        const w = window.innerWidth, h = window.innerHeight;
+
+                        function safeJson(x){ try { return JSON.stringify(x, null, 2) } catch { return String(x) } }
+                        function addStatus(msg){ st.textContent = msg; }
+
+                        async function call(url){
+                          try {
+                            const res = await fetch(url, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+                            const text = await res.text();
+                            let json = null;
+                            try { json = JSON.parse(text); } catch { /* not JSON */ }
+                            const headers = {
+                              trace_id: res.headers.get('x-trace-id'),
+                              cache: res.headers.get('x-cert-cache'),
+                              locale: res.headers.get('x-cert-locale'),
+                              style: res.headers.get('x-cert-style'),
+                              genms: res.headers.get('x-cert-genms'),
+                              opts: res.headers.get('x-cert-opts')
+                            };
+                            return { ok: res.ok, status: res.status, headers, body: json ?? text };
+                          } catch (e) {
+                            return { ok:false, status:0, headers:{}, body: String(e) };
+                          }
+                        }
+
+                        (async () => {
+                          const sep = pdfHref.includes('?') ? '&' : '?';
+                          addStatus(locale==='fr' ? 'Test API (debug)…' : 'Testing API (debug)…');
+                          const r1 = await call(pdfHref + sep + 'debug=1');
+
+                          if (!r1.ok) {
+                            addStatus((locale==='fr' ? 'Échec debug. Statut ' : 'Debug failed. Status ') + r1.status);
+                            pre.textContent = safeJson({ step:'debug', r1, env:{ ua, lang, dpr, viewport:{w,h} } });
+                            return;
+                          }
+
+                          // Si la DB n'a pas trouvé le claim, ça ne sert à rien de "probe"
+                          const r1body = r1.body || {};
+                          const dbFound = !!(r1body && r1body.db && r1body.db.found);
+                          if (!dbFound) {
+                            addStatus(locale==='fr' ? 'Aucun enregistrement en base pour ce jour.' : 'No database record for this day.');
+                            pre.textContent = safeJson({ step:'debug', r1, env:{ ua, lang, dpr, viewport:{w,h} } });
+                            return;
+                          }
+
+                          addStatus(locale==='fr' ? 'Test génération PDF (probe)…' : 'Testing PDF generation (probe)…');
+                          const r2 = await call(pdfHref + sep + 'debug=1&probe=1');
+                          if (!r2.ok) {
+                            addStatus((locale==='fr' ? 'Échec probe. Statut ' : 'Probe failed. Status ') + r2.status);
+                            pre.textContent = safeJson({ step:'probe_http', r1, r2, env:{ ua, lang, dpr, viewport:{w,h} } });
+                            return;
+                          }
+
+                          const ok = r2.body && r2.body.generator_ok;
+                          if (!ok) {
+                            addStatus(locale==='fr' ? 'Générateur PDF en erreur.' : 'PDF generator failed.');
+                            pre.textContent = safeJson({ step:'probe_logic', r1, r2, env:{ ua, lang, dpr, viewport:{w,h} } });
+                            return;
+                          }
+
+                          addStatus(locale==='fr' ? 'OK : PDF générable (problème d’affichage embarqué probable).' : 'OK: PDF can be generated (likely embed/display issue).');
+                          pre.textContent = safeJson({ step:'probe_ok', r1, r2, env:{ ua, lang, dpr, viewport:{w,h} } });
+                        })();
+                      })();
+                    `}
+                  </Script>
                 </object>
+
               )}
             </div>
           </aside>
