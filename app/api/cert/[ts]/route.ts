@@ -7,23 +7,17 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
 import { generateCertificatePDF } from '@/lib/cert'
 
-/** ---------- Utils date ---------- */
+/* ========================= Date utils ========================= */
 function normIsoDay(s: string): string | null {
   if (!s) return null
   let d: Date
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    d = new Date(`${s}T00:00:00.000Z`)
-  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(s) && !/[Z+-]\d{2}:?\d{2}$/.test(s)) {
-    d = new Date(`${s}Z`)
-  } else {
-    d = new Date(s)
-  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(`${s}T00:00:00.000Z`)
+  else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/.test(s) && !/[Z+-]\d{2}:?\d{2}$/.test(s)) d = new Date(`${s}Z`)
+  else d = new Date(s)
   if (isNaN(d.getTime())) return null
   d.setUTCHours(0, 0, 0, 0)
   return d.toISOString()
 }
-
-/** Map legacy time_display -> timeLabelMode */
 function toTimeLabelMode(td?: string) {
   const v = String(td || 'local+utc')
   if (v === 'utc+local') return 'utc_plus_local'
@@ -31,65 +25,87 @@ function toTimeLabelMode(td?: string) {
   return 'utc'
 }
 
-/** ---------- Single-flight + concurrency gate + tiny cache ---------- */
+/* ========================= Message normalizer =========================
+   Objectif : ne JAMAIS passer l’attestation dans message (le renderer la gère),
+   préserver “Offert par / Gifted by”, et propager [[HIDE_OWNED_BY]].
+======================================================================= */
+function normalizeClaimMessage(raw: unknown, locale: 'fr' | 'en') {
+  const inp = String(raw || '').trim()
+  if (!inp) return { message: '', giftedBy: '', hideOwned: false, hadAttestation: false }
+
+  const RE_ATTEST_FR = /Ce certificat atteste que[\s\S]+?cette acquisition\./i
+  const RE_ATTEST_EN = /This certificate attests that[\s\S]+?this acquisition\./i
+  const hadAttestation = RE_ATTEST_FR.test(inp) || RE_ATTEST_EN.test(inp)
+
+  let msg = inp.replace(RE_ATTEST_FR, '').replace(RE_ATTEST_EN, '').trim()
+
+  let hideOwned = false
+  if (/\[\[\s*HIDE_OWNED_BY\s*\]\]/i.test(msg)) {
+    hideOwned = true
+    msg = msg.replace(/\s*\[\[\s*HIDE_OWNED_BY\s*\]\]\s*/gi, '').trim()
+  }
+
+  let giftedBy = ''
+  const giftedRe = /(?:^|\n)\s*(?:Offert\s+par|Gifted\s+by)\s*:\s*(.+)\s*$/i
+  const m = msg.match(giftedRe)
+  if (m) {
+    giftedBy = (m[1] || '').trim().slice(0, 40)
+    msg = msg.replace(giftedRe, '').trim()
+  }
+
+  // On ré-appose proprement gifted + hideOwned pour que le renderer les voie si besoin.
+  let out = msg
+  if (giftedBy) out = (out ? out + '\n' : '') + (locale === 'fr' ? `Offert par: ${giftedBy}` : `Gifted by: ${giftedBy}`)
+  if (hideOwned) out = (out ? out + '\n' : '') + '[[HIDE_OWNED_BY]]'
+
+  return { message: out, giftedBy, hideOwned, hadAttestation }
+}
+
+/* ========================= In-memory cache & single-flight ========================= */
 type Key = string
 type CacheEntry = { at: number; buf: Uint8Array; ttl: number }
-const inflight = new Map<Key, Promise<Uint8Array>>()
 const cache = new Map<Key, CacheEntry>()
+const inflight = new Map<Key, Promise<Uint8Array>>()
 const MAX_CACHE = 96
 
 let active = 0
 const waiters: Array<() => void> = []
 const MAX_CONCURRENCY = 2
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
 function makeKey(tsISO: string, locale: 'fr' | 'en', hideQr: boolean, hideMeta: boolean) {
   return [tsISO.slice(0, 10), locale, hideQr ? 'q1' : 'q0', hideMeta ? 'm1' : 'm0'].join('|')
 }
 function getCached(key: Key): Uint8Array | null {
-  const now = Date.now()
   const ent = cache.get(key)
   if (!ent) return null
-  if (now - ent.at > ent.ttl) {
-    cache.delete(key)
-    return null
-  }
+  if (Date.now() - ent.at > ent.ttl) { cache.delete(key); return null }
   return ent.buf
 }
-function putCache(key: Key, buf: Uint8Array, ttlMs: number) {
-  if (ttlMs <= 0) return
-  if (cache.size >= MAX_CACHE) {
-    const first = cache.keys().next().value
-    if (first) cache.delete(first)
-  }
-  cache.set(key, { at: Date.now(), buf, ttl: ttlMs })
+function putCache(key: Key, buf: Uint8Array, ttl: number) {
+  if (ttl <= 0) return
+  if (cache.size >= MAX_CACHE) { const first = cache.keys().next().value; if (first) cache.delete(first) }
+  cache.set(key, { at: Date.now(), buf, ttl })
 }
 async function withSemaphore<T>(fn: () => Promise<T>): Promise<T> {
-  if (active >= MAX_CONCURRENCY) {
-    await new Promise<void>((resolve) => waiters.push(resolve))
-  }
+  if (active >= MAX_CONCURRENCY) await new Promise<void>(r => waiters.push(r))
   active++
-  try {
-    return await fn()
-  } finally {
-    active = Math.max(0, active - 1)
-    const next = waiters.shift()
-    if (next) next()
-  }
+  try { return await fn() }
+  finally { active = Math.max(0, active - 1); const n = waiters.shift(); if (n) n() }
 }
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-/** Convertit un Uint8Array en ArrayBuffer "pur" (jamais SharedArrayBuffer) */
-function toPlainArrayBuffer(view: Uint8Array): ArrayBuffer {
-  const ab = new ArrayBuffer(view.byteLength)
-  new Uint8Array(ab).set(view)
+/** Copie vers un ArrayBuffer *non partagé* pour éviter l’erreur TS durant le build */
+function toPlainArrayBuffer(u8: Uint8Array): ArrayBuffer {
+  const ab = new ArrayBuffer(u8.byteLength)
+  new Uint8Array(ab).set(u8)
   return ab
 }
 
-/** ---------- DB helpers ---------- */
+/* ========================= DB helpers ========================= */
 async function loadClaimRow(tsISO: string) {
   const { rows } = await pool.query(
-    `
-      select
+    `select
         c.id as claim_id,
         c.ts,
         c.title,
@@ -107,51 +123,42 @@ async function loadClaimRow(tsISO: string) {
       join owners o on o.id = c.owner_id
       where date_trunc('day', c.ts) = $1::timestamptz
       order by c.ts desc
-      limit 1
-    `,
+      limit 1`,
     [tsISO]
   )
   return rows[0] || null
 }
-
 async function loadCustomBg(tsISO: string): Promise<string | undefined> {
-  // Exact match (ts) puis fallback day-trunc pour compat ancien enregistrements
-  const ex1 = await pool.query(`select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`, [tsISO])
-  if (ex1.rows[0]?.data_url) return ex1.rows[0].data_url as string
-  const ex2 = await pool.query(
+  const r1 = await pool.query(`select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`, [tsISO])
+  if (r1.rows[0]?.data_url) return r1.rows[0].data_url as string
+  const r2 = await pool.query(
     `select data_url from claim_custom_bg where date_trunc('day', ts) = $1::timestamptz limit 1`,
     [tsISO]
   )
-  return ex2.rows[0]?.data_url || undefined
+  return r2.rows[0]?.data_url || undefined
 }
 
-/** ---------- Handler ---------- */
+/* ========================= Handler ========================= */
 export async function GET(req: Request, ctx: any) {
-  // Param "YYYY-MM-DD[.pdf]"
-  const rawParam = String(ctx?.params?.ts || '')
-  const decoded = decodeURIComponent(rawParam).replace(/\.pdf$/i, '')
+  // paramètre : /api/cert/[ts] (YYYY-MM-DD[.pdf])
+  const raw = String(ctx?.params?.ts || '')
+  const decoded = decodeURIComponent(raw).replace(/\.pdf$/i, '')
   const tsISO = normIsoDay(decoded)
   if (!tsISO) return NextResponse.json({ error: 'bad_ts' }, { status: 400 })
 
-  // Locale déduite (pour QR) + options d’affichage
+  // locale + options
   const accLang = (req.headers.get('accept-language') || '').toLowerCase()
   const locale: 'fr' | 'en' = accLang.startsWith('fr') ? 'fr' : 'en'
-
   const url = new URL(req.url)
-  const hideQr =
-    url.searchParams.has('public') ||
-    url.searchParams.get('public') === '1' ||
-    url.searchParams.get('hide_qr') === '1'
+  const hideQr   = url.searchParams.has('public') || url.searchParams.get('public') === '1' || url.searchParams.get('hide_qr') === '1'
   const hideMeta = url.searchParams.get('hide_meta') === '1' || url.searchParams.has('hide_meta')
 
-  const key = makeKey(tsISO, locale, hideQr, hideMeta)
-
-  // Cache (utile pour rendus "publics" → évite les rafales d’iframes)
   const isPublicish = hideQr || hideMeta || url.searchParams.get('public') === '1'
-  const ttlMs = isPublicish ? 5 * 60_000 : 0 // 5 minutes pour le public
+  const ttlMs = isPublicish ? 5 * 60_000 : 0
+
+  const key = makeKey(tsISO, locale, hideQr, hideMeta)
   const cached = getCached(key)
   if (cached) {
-    const len = cached.byteLength
     const ab = toPlainArrayBuffer(cached)
     return new Response(ab, {
       headers: {
@@ -159,82 +166,59 @@ export async function GET(req: Request, ctx: any) {
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
         'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
         'Vary': 'Accept-Language',
-        'Content-Length': String(len),
+        'Content-Length': String(cached.byteLength),
       },
     })
   }
 
-  // Single-flight: si déjà en génération → on attend la même promesse
+  // Single-flight + retries
   let p = inflight.get(key)
   if (!p) {
     p = withSemaphore(async () => {
-      // petit retry si la génération jette (race/asset)
-      const tryOnce = async () => {
-        // Charge le claim le plus récent
+      const attempt = async () => {
         const claim = await loadClaimRow(tsISO)
         if (!claim) throw new Error('not_found')
 
-        // Détermination du style (type-sûr) + fond custom strictement au ts
+        // Style & fond custom
         const styleRaw = String(claim.cert_style || 'neutral').toLowerCase()
+        const known = new Set(['neutral','romantic','birthday','wedding','birth','christmas','newyear','graduation','custom'])
         let customBgDataUrl: string | undefined
-        let safeStyle:
-          | 'neutral'
-          | 'romantic'
-          | 'birthday'
-          | 'wedding'
-          | 'birth'
-          | 'christmas'
-          | 'newyear'
-          | 'graduation'
-          | 'custom' = 'neutral'
-
-        const known = new Set([
-          'neutral',
-          'romantic',
-          'birthday',
-          'wedding',
-          'birth',
-          'christmas',
-          'newyear',
-          'graduation',
-          'custom',
-        ])
+        let safeStyle: any = 'neutral'
         if (styleRaw === 'custom') {
           customBgDataUrl = await loadCustomBg(tsISO)
           safeStyle = customBgDataUrl ? 'custom' : 'neutral'
-        } else if (known.has(styleRaw)) {
-          safeStyle = styleRaw as any
         } else {
-          safeStyle = 'neutral'
+          safeStyle = known.has(styleRaw) ? styleRaw : 'neutral'
         }
 
-        // Public URL (pour QR)
+        // URL publique (QR)
         const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
         const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0, 10))}`
 
-        // Normalisation du nom affiché (aucun champ requis)
-        const displayName =
-          claim.claim_display_name ||
-          claim.owner_username ||
-          claim.owner_legacy_display_name ||
-          (locale === 'fr' ? 'Anonyme' : 'Anonymous')
+        // Normalisation message + hideOwned
+        const { message: messageNorm, hideOwned } = normalizeClaimMessage(claim.message, locale)
 
-        // Couleur de texte sûre
-        const textColorHex = /^#[0-9a-f]{6}$/i.test(claim.text_color || '')
-          ? String(claim.text_color).toLowerCase()
-          : '#1a1f2a'
+        // Nom à afficher :
+        //  - si hideOwned => on passe null (le renderer gèrera attestation “anonymous” si nécessaire)
+        //  - sinon on applique les fallbacks lisibles
+        const displayName = hideOwned
+          ? null
+          : (claim.claim_display_name || claim.owner_username || claim.owner_legacy_display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'))
+
+        // Couleur texte sûre
+        const textColorHex = /^#[0-9a-f]{6}$/i.test(claim.text_color || '') ? String(claim.text_color).toLowerCase() : '#1a1f2a'
 
         // Génération PDF
-        const pdfBytes = await generateCertificatePDF({
+        const pdf = await generateCertificatePDF({
           ts: tsISO,
-          display_name: displayName,
+          display_name: displayName,               // <- peut être null si masqué
           title: claim.title || null,
-          message: claim.message || null,
+          message: messageNorm || null,            // <- jamais l’attestation
           link_url: claim.link_url || '',
           claim_id: String(claim.claim_id),
           hash: claim.cert_hash || 'no-hash',
           public_url: publicUrl,
-          style: safeStyle, // ← typé CertStyle
+          style: safeStyle,
           locale,
           timeLabelMode: toTimeLabelMode(claim.time_display) as any,
           localDateOnly: !!claim.local_date_only,
@@ -244,19 +228,18 @@ export async function GET(req: Request, ctx: any) {
           hideMeta,
         })
 
-        // ✅ garanti Uint8Array
-        return pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes as any)
+        return pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf as any)
       }
 
-      try {
-        return await tryOnce()
-      } catch {
-        // Backoff court puis un 2e essai (pour races d’assets / fs à froid)
-        await delay(200)
-        return await tryOnce()
+      // retries progressifs (utile juste après un achat / assets encore tièdes)
+      const tries = [0, 200, 500, 1000]
+      let lastErr: unknown
+      for (const delay of tries) {
+        try { if (delay) await sleep(delay); return await attempt() }
+        catch (e) { lastErr = e }
       }
+      throw lastErr
     })
-
     inflight.set(key, p)
   }
 
@@ -265,24 +248,20 @@ export async function GET(req: Request, ctx: any) {
     inflight.delete(key)
     if (ttlMs > 0) putCache(key, body, ttlMs)
 
-    const len = body.byteLength
     const ab = toPlainArrayBuffer(body)
-
     return new Response(ab, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
         'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
         'Vary': 'Accept-Language',
-        'Content-Length': String(len),
+        'Content-Length': String(body.byteLength),
       },
     })
   } catch (e: any) {
     inflight.delete(key)
     const msg = String(e?.message || e)
-    if (msg === 'not_found') {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
-    }
+    if (msg === 'not_found') return NextResponse.json({ error: 'not_found' }, { status: 404 })
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }
