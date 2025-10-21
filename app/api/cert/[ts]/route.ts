@@ -18,6 +18,7 @@ function normIsoDay(s: string): string | null {
   d.setUTCHours(0, 0, 0, 0)
   return d.toISOString()
 }
+
 function toTimeLabelMode(td?: string) {
   const v = String(td || 'local+utc')
   if (v === 'utc+local') return 'utc_plus_local'
@@ -26,10 +27,12 @@ function toTimeLabelMode(td?: string) {
 }
 
 /* ========================= Message normalizer =========================
-   Objectif : ne JAMAIS passer l’attestation dans message (le renderer la gère),
-   préserver “Offert par / Gifted by”, et propager [[HIDE_OWNED_BY]].
+   - Retire l’attestation du message brut (pour pouvoir la régénérer proprement).
+   - Détecte si l’attestation était cochée (hadAttestation).
+   - Récupère “Offert par / Gifted by …”.
+   - Détecte [[HIDE_OWNED_BY]] sans laisser ce token dans le message final PDF.
 ======================================================================= */
-function normalizeClaimMessage(raw: unknown, locale: 'fr' | 'en') {
+function normalizeClaimMessage(raw: unknown) {
   const inp = String(raw || '').trim()
   if (!inp) return { message: '', giftedBy: '', hideOwned: false, hadAttestation: false }
 
@@ -53,12 +56,7 @@ function normalizeClaimMessage(raw: unknown, locale: 'fr' | 'en') {
     msg = msg.replace(giftedRe, '').trim()
   }
 
-  // On ré-appose proprement gifted + hideOwned pour que le renderer les voie si besoin.
-  let out = msg
-  if (giftedBy) out = (out ? out + '\n' : '') + (locale === 'fr' ? `Offert par: ${giftedBy}` : `Gifted by: ${giftedBy}`)
-  if (hideOwned) out = (out ? out + '\n' : '') + '[[HIDE_OWNED_BY]]'
-
-  return { message: out, giftedBy, hideOwned, hadAttestation }
+  return { message: msg, giftedBy, hideOwned, hadAttestation }
 }
 
 /* ========================= In-memory cache & single-flight ========================= */
@@ -128,6 +126,7 @@ async function loadClaimRow(tsISO: string) {
   )
   return rows[0] || null
 }
+
 async function loadCustomBg(tsISO: string): Promise<string | undefined> {
   const r1 = await pool.query(`select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`, [tsISO])
   if (r1.rows[0]?.data_url) return r1.rows[0].data_url as string
@@ -195,25 +194,44 @@ export async function GET(req: Request, ctx: any) {
         const base = process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin
         const publicUrl = `${base}/${locale}/m/${encodeURIComponent(tsISO.slice(0, 10))}`
 
-        // Normalisation message + hideOwned
-        const { message: messageNorm, hideOwned } = normalizeClaimMessage(claim.message, locale)
+        // Normalisation du message stocké
+        const { message: msgNoAttest, giftedBy, hideOwned, hadAttestation } = normalizeClaimMessage(claim.message)
 
-        // Nom à afficher :
-        //  - si hideOwned => on passe null (le renderer gèrera attestation “anonymous” si nécessaire)
-        //  - sinon on applique les fallbacks lisibles
-        const displayName = hideOwned
-          ? null
+        // Nom affiché : si hideOwned => null (le générateur doit gérer l’anonymat)
+        const displayName =
+          hideOwned ? null
           : (claim.claim_display_name || claim.owner_username || claim.owner_legacy_display_name || (locale === 'fr' ? 'Anonyme' : 'Anonymous'))
 
-        // Couleur texte sûre
+        // Attestation (si l’utilisateur l’avait cochée)
+        const ymd = tsISO.slice(0,10)
+        const ownerForText = (displayName && displayName.trim())
+          ? displayName.trim()
+          : (locale === 'fr' ? 'Anonyme' : 'Anonymous')
+
+        const attestation =
+          locale === 'fr'
+            ? `Ce certificat atteste que ${ownerForText} est reconnu(e) comme propriétaire symbolique de la journée du ${ymd}. Le présent document confirme la validité et l'authenticité de cette acquisition.`
+            : `This certificate attests that ${ownerForText} is recognized as the symbolic owner of the day ${ymd}. This document confirms the validity and authenticity of this acquisition.`
+
+        // Reconstruire le message final pour le PDF :
+        // - message utilisateur (sans attestation)
+        // - “Offert par …” éventuel
+        // - attestation si cochée
+        const parts: string[] = []
+        if (msgNoAttest) parts.push(msgNoAttest)
+        if (giftedBy) parts.push((/^[A-Za-zÀ-ÿ]/.test(giftedBy) ? (locale === 'fr' ? `Offert par: ${giftedBy}` : `Gifted by: ${giftedBy}`) : String(giftedBy)))
+        if (hadAttestation) parts.push(attestation)
+        const finalMessage = parts.join('\n').trim() || null
+
+        // Couleur
         const textColorHex = /^#[0-9a-f]{6}$/i.test(claim.text_color || '') ? String(claim.text_color).toLowerCase() : '#1a1f2a'
 
         // Génération PDF
         const pdf = await generateCertificatePDF({
           ts: tsISO,
-          display_name: displayName,               // <- peut être null si masqué
+          display_name: displayName,               // ← null si masqué
           title: claim.title || null,
-          message: messageNorm || null,            // <- jamais l’attestation
+          message: finalMessage,                   // ← contient l’attestation si cochée
           link_url: claim.link_url || '',
           claim_id: String(claim.claim_id),
           hash: claim.cert_hash || 'no-hash',
@@ -231,11 +249,11 @@ export async function GET(req: Request, ctx: any) {
         return pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf as any)
       }
 
-      // retries progressifs (utile juste après un achat / assets encore tièdes)
+      // retries progressifs (utile juste après un achat)
       const tries = [0, 200, 500, 1000]
       let lastErr: unknown
-      for (const delay of tries) {
-        try { if (delay) await sleep(delay); return await attempt() }
+      for (const d of tries) {
+        try { if (d) await sleep(d); return await attempt() }
         catch (e) { lastErr = e }
       }
       throw lastErr
