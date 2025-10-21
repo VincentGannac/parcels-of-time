@@ -1545,7 +1545,7 @@ function GoldCTA({ href, children, ariaLabel }: { href: string; children: React.
           eyebrow: 'Ce que vous recevez',
           title: 'Gardez une journée qui compte',
           lead:
-            'Un certificat HD (PDF/JPG) prêt à imprimer, unique et vérifiable — à votre nom. ' +
+            'Un certificat HD (PDF/JPG) prêt à imprimer, unique ' +
             'Chaque date est vendue une seule fois.',
           note:
             'Chaque certificat inclut un QR scannable vers votre page souvenir et une empreinte d’intégrité (SHA-256).',
