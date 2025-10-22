@@ -48,7 +48,11 @@ function ymdSafe(input: string) {
 async function getPublicStateDb(tsISO: string): Promise<boolean> {
   try {
     const { rows } = await pool.query(
-      `select exists(select 1 from minute_public where date_trunc('day', ts) = $1::timestamptz) as ok`,
+      `select exists(
+  select 1 from minute_public
+  where ts >= $1::timestamptz
+    and ts  < ($1::timestamptz + interval '1 day')
+) as ok`,
       [tsISO]
     )
     return !!rows[0]?.ok
@@ -104,7 +108,8 @@ async function getClaimForEdit(tsISO: string): Promise<ClaimForEdit | null> {
               c.title_public, c.message_public
          from claims c
          left join owners o on o.id = c.owner_id
-        where date_trunc('day', c.ts) = $1::timestamptz`,
+        where c.ts >= $1::timestamptz
+  and c.ts  < ($1::timestamptz + interval '1 day')`,
       [tsISO]
     )
     if (!rows.length) return null
@@ -129,7 +134,8 @@ async function getClaimMeta(tsISO: string) {
     const { rows } = await pool.query(
       `select id as claim_id, cert_hash
          from claims
-        where date_trunc('day', ts) = $1::timestamptz`,
+        where ts >= $1::timestamptz
+        and ts  < ($1::timestamptz + interval '1 day')`,
       [tsISO]
     )
     if (!rows.length) return null
@@ -183,7 +189,8 @@ async function readActiveListing(tsISO: string): Promise<ListingRow | null> {
               coalesce(l.hide_claim_details,false) as hide_claim_details
          from listings l
          join owners o on o.id = l.seller_owner_id
-        where l.ts = $1::timestamptz
+        where l.ts >= $1::timestamptz
+  and l.ts  < ($1::timestamptz + interval '1 day')
           and l.status = 'active'
         limit 1`,
       [tsISO]
@@ -837,6 +844,9 @@ export default async function Page({
                         const lang = navigator.language;
                         const dpr = window.devicePixelRatio || 1;
                         const w = window.innerWidth, h = window.innerHeight;
+                        // Détection du support PDF natif et de la présence de PDF.js
+                        const pdfSupport = !!(navigator.mimeTypes && (navigator.mimeTypes['application/pdf'] || navigator.mimeTypes['application/x-pdf']));
+                        const pep = (typeof window !== 'undefined' && (window as any).pdfjsLib) ? 'pdfjs-present' : 'no-pdfjs';
 
                         function safeJson(x){ try { return JSON.stringify(x, null, 2) } catch { return String(x) } }
                         function addStatus(msg){ st.textContent = msg; }
@@ -849,11 +859,17 @@ export default async function Page({
                             try { json = JSON.parse(text); } catch { /* not JSON */ }
                             const headers = {
                               trace_id: res.headers.get('x-trace-id'),
-                              cache: res.headers.get('x-cert-cache'),
-                              locale: res.headers.get('x-cert-locale'),
-                              style: res.headers.get('x-cert-style'),
-                              genms: res.headers.get('x-cert-genms'),
-                              opts: res.headers.get('x-cert-opts')
+                                cache: res.headers.get('x-cert-cache'),
+                                locale: res.headers.get('x-cert-locale'),
+                                style: res.headers.get('x-cert-style'),
+                                genms: res.headers.get('x-cert-genms'),
+                                opts: res.headers.get('x-cert-opts'),
+                                vercel: res.headers.get('x-vercel-id'),
+                                server_timing: res.headers.get('server-timing'),
+                                content_type: res.headers.get('content-type'),
+                                content_length: res.headers.get('content-length'),
+                                age: res.headers.get('age'),
+                                x_cache: res.headers.get('x-cache')
                             };
                             return { ok: res.ok, status: res.status, headers, body: json ?? text };
                           } catch (e) {
@@ -864,11 +880,17 @@ export default async function Page({
                         (async () => {
                           const sep = pdfHref.includes('?') ? '&' : '?';
                           addStatus(locale==='fr' ? 'Test API (debug)…' : 'Testing API (debug)…');
-                          const r1 = await call(pdfHref + sep + 'debug=1');
+                          const t0 = performance.now()
+                          const r1 = await call(pdfHref + sep + 'debug=1')
+                          r1.ttfb_ms = Math.round(performance.now() - t0)
+
+                          const t2 = performance.now()
+                          const r3 = await call(pdfHref + sep + 'nocache=1')
+                          r3.ttfb_ms = Math.round(performance.now() - t2)
 
                           if (!r1.ok) {
                             addStatus((locale==='fr' ? 'Échec debug. Statut ' : 'Debug failed. Status ') + r1.status);
-                            pre.textContent = safeJson({ step:'debug', r1, env:{ ua, lang, dpr, viewport:{w,h} } });
+                            pre.textContent = safeJson({ step:'debug', r1, env:{ ua, lang, dpr, viewport:{w,h}, pdfSupport, pep } });
                             return;
                           }
 
@@ -877,7 +899,8 @@ export default async function Page({
                           const dbFound = !!(r1body && r1body.db && r1body.db.found);
                           if (!dbFound) {
                             addStatus(locale==='fr' ? 'Aucun enregistrement en base pour ce jour.' : 'No database record for this day.');
-                            pre.textContent = safeJson({ step:'debug', r1, env:{ ua, lang, dpr, viewport:{w,h} } });
+                            pre.textContent = safeJson({ step:'probe_http', r1, r2, env:{ ua, lang, dpr, viewport:{w,h}, pdfSupport, pep } });
+
                             return;
                           }
 
@@ -892,12 +915,12 @@ export default async function Page({
                           const ok = r2.body && r2.body.generator_ok;
                           if (!ok) {
                             addStatus(locale==='fr' ? 'Générateur PDF en erreur.' : 'PDF generator failed.');
-                            pre.textContent = safeJson({ step:'probe_logic', r1, r2, env:{ ua, lang, dpr, viewport:{w,h} } });
+                           pre.textContent = safeJson({ step:'probe_logic', r1, r2, env:{ ua, lang, dpr, viewport:{w,h}, pdfSupport, pep } });
                             return;
                           }
 
                           addStatus(locale==='fr' ? 'OK : PDF générable (problème d’affichage embarqué probable).' : 'OK: PDF can be generated (likely embed/display issue).');
-                          pre.textContent = safeJson({ step:'probe_ok', r1, r2, env:{ ua, lang, dpr, viewport:{w,h} } });
+                         pre.textContent = safeJson({ step:'probe_ok', r1, r2, env:{ ua, lang, dpr, viewport:{w,h}, pdfSupport, pep } });
                         })();
                       })();
                     `}

@@ -12,6 +12,32 @@ function mkTraceId() {
   return 'cert_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
 
+/* Pool stats & DB env for diagnostics */
+function poolStats() {
+  const any = pool as any
+  return {
+    total: any?.totalCount ?? null,
+    idle: any?.idleCount ?? null,
+    waiting: any?.waitingCount ?? null,
+  }
+}
+
+async function dbEnv() {
+  try {
+    const { rows } = await pool.query(`
+      select
+        current_setting('TimeZone')                         as tz,
+        current_setting('server_version')                   as server_version,
+        current_setting('statement_timeout', true)          as statement_timeout,
+        to_char(now() at time zone 'utc','YYYY-MM-DD"T"HH24:MI:SSOF') as now_utc,
+        to_char(now(),                'YYYY-MM-DD"T"HH24:MI:SSOF')     as now_db
+    `)
+    return rows[0]
+  } catch {
+    return null
+  }
+}
+
 /* Date utils */
 function normIsoDay(s: string): string | null {
   if (!s) return null
@@ -119,7 +145,8 @@ async function loadClaimRow(tsISO: string) {
         o.display_name as owner_legacy_display_name
       from claims c
       join owners o on o.id = c.owner_id
-      where date_trunc('day', c.ts) = $1::timestamptz
+      where c.ts >= $1::timestamptz
+        and c.ts  < ($1::timestamptz + interval '1 day')
       order by c.ts desc
       limit 1`,
     [tsISO]
@@ -131,7 +158,9 @@ async function loadCustomBg(tsISO: string): Promise<string | undefined> {
   const r1 = await pool.query(`select data_url from claim_custom_bg where ts = $1::timestamptz limit 1`, [tsISO])
   if (r1.rows[0]?.data_url) return r1.rows[0].data_url as string
   const r2 = await pool.query(
-    `select data_url from claim_custom_bg where date_trunc('day', ts) = $1::timestamptz limit 1`,
+    `select data_url from claim_custom_bg
+      where ts >= $1::timestamptz and ts < ($1::timestamptz + interval '1 day')
+      limit 1`,
     [tsISO]
   )
   return r2.rows[0]?.data_url || undefined
@@ -158,6 +187,7 @@ export async function GET(req: Request, ctx: any) {
   const wantsJson  = url.searchParams.get('debug') === '1' ||
     (req.headers.get('accept') || '').toLowerCase().includes('application/json')
   const wantsProbe = url.searchParams.get('probe') === '1'
+  const noCache    = url.searchParams.get('nocache') === '1'
 
   const baseHeaders: Record<string, string> = {
     'X-Trace-Id': traceId,
@@ -173,7 +203,6 @@ export async function GET(req: Request, ctx: any) {
   }
 
   const key = makeKey(tsISO, locale, hideQr, hideMeta)
-  const cached = getCached(key)
 
   // ------------------------------------------------------------------
   // 💡 MODE DEBUG JSON — NE PAS UTILISER inflight (évite le type mixte)
@@ -184,14 +213,19 @@ export async function GET(req: Request, ctx: any) {
     try { claim = await loadClaimRow(tsISO) } catch {}
     const tDb1 = Date.now()
 
+    const envDb = await dbEnv()
+    const pstats = poolStats()
+
     if (!claim) {
       const diag = {
         ok: false,
         error: 'not_found',
         trace_id: traceId,
         tsISO, ymd: tsISO.slice(0,10), locale, hideQr, hideMeta, isPublicish,
-        cache: cached ? 'hit' : 'miss',
+        cache: 'miss', // on bypass volontairement le cache en debug
         db_lookup_ms: tDb1 - tDb0,
+        db_env: envDb,
+        pool: pstats,
         hint: 'No DB row for this day. If this follows a recent purchase, retry later.',
         elapsed_ms: Date.now() - t0,
       }
@@ -281,16 +315,18 @@ export async function GET(req: Request, ctx: any) {
       ok: true,
       mode: wantsProbe ? 'debug_probe' : 'debug',
       tsISO, ymd, locale, hideQr, hideMeta, isPublicish,
-      cache: cached ? 'hit' : 'miss',
-      db: { found: true, claim_id: String(claim.claim_id) },
+      cache: 'miss',
+      db: { found: true, claim_id: String(claim.claim_id), lookup_ms: tDb1 - tDb0 },
       style: { requested: styleRaw, resolved: safeStyle, has_custom_bg: !!customBgDataUrl },
       message_meta: { hadAttestation, giftedBy_present: !!giftedBy, hideOwned },
       display_name_present: !!displayName,
       text_color: textColorHex,
-      timings_ms: { db: tDb1 - tDb0, probe_gen: genMs },
       generator_ok: genOk,
       generator_error: genErr,
       pdf_bytes: genBytes,
+      db_env: envDb,
+      pool: pstats,
+      timings_ms: { db: tDb1 - tDb0, probe_gen: genMs },
       hint: genOk ? 'Generator OK' : (wantsProbe ? 'Generator FAILURE (see generator_error)' : 'Add &probe=1 to test generation'),
       elapsed_ms: Date.now() - t0,
     }
@@ -302,22 +338,27 @@ export async function GET(req: Request, ctx: any) {
   }
 
   // ------------------------------------------------------------------
-  // 💾 Fast-path cache PDF (réponse binaire)
+  // 💾 Fast-path cache PDF (réponse binaire) — sauf quand nocache=1
   // ------------------------------------------------------------------
-  if (cached) {
-    const ab = toPlainArrayBuffer(cached)
-    return new Response(ab, {
-      headers: {
-        ...baseHeaders,
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
-        'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
-        'X-Cert-Cache': 'hit',
-        'X-Cert-Locale': locale,
-        'X-Cert-Opts': `qr:${hideQr?1:0},meta:${hideMeta?1:0}`,
-        'Content-Length': String(cached.byteLength),
-      },
-    })
+  if (!noCache) {
+    const cached = getCached(key)
+    if (cached) {
+      const poolHdr = poolStats()
+      return new Response(toPlainArrayBuffer(cached), {
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
+          'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
+          'X-Cert-Cache': 'hit',
+          'X-Cert-Locale': locale,
+          'X-Cert-Opts': `qr:${hideQr?1:0},meta:${hideMeta?1:0},nocache:${noCache?1:0}`,
+          'X-Pool': `t:${poolHdr.total ?? '-'} i:${poolHdr.idle ?? '-'} w:${poolHdr.waiting ?? '-'}`,
+          'Server-Timing': 'cache;desc="hit"',
+          'Content-Length': String(cached.byteLength),
+        },
+      })
+    }
   }
 
   // ------------------------------------------------------------------
@@ -398,11 +439,13 @@ export async function GET(req: Request, ctx: any) {
         const u8 = pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf as any)
         const genMs = Date.now() - tGen0
 
-        // cache public only
-        if (ttlMs > 0) putCache(key, u8, ttlMs)
+        // cache public only (sauf nocache)
+        if (!noCache && ttlMs > 0) putCache(key, u8, ttlMs)
 
         // On renvoie UNIQUEMENT l’u8 ici (jamais Response) => type OK
-        ;(u8 as any)._genMs = genMs  // (optionnel) stocker pour header après await
+        ;(u8 as any)._genMs = genMs
+        ;(u8 as any)._dbMs  = tDb1 - tDb0
+        ;(u8 as any)._style = safeStyle
         return u8
       }
 
@@ -423,19 +466,32 @@ export async function GET(req: Request, ctx: any) {
     const body = await p
     inflight.delete(key)
 
-    const ab = toPlainArrayBuffer(body)
-    const genMs = (body as any)._genMs ? String((body as any)._genMs) : undefined
+    const ab   = toPlainArrayBuffer(body)
+    const genMs = (body as any)._genMs
+    const dbMs  = (body as any)._dbMs
+    const style = (body as any)._style
+
+    const stHdr = [
+      dbMs != null  ? `db;dur=${Number(dbMs)}`   : null,
+      genMs != null ? `gen;dur=${Number(genMs)}` : null,
+    ].filter(Boolean).join(', ')
+
+    const poolHdr = poolStats()
 
     return new Response(ab, {
       headers: {
         ...baseHeaders,
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="cert-${encodeURIComponent(tsISO.slice(0, 10))}.pdf"`,
-        'Cache-Control': isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60',
+        'Cache-Control': noCache ? 'no-store' :
+          (isPublicish ? 'public, max-age=300, stale-while-revalidate=3600' : 'private, max-age=60'),
         'X-Cert-Cache': 'miss',
         'X-Cert-Locale': locale,
-        'X-Cert-Opts': `qr:${hideQr?1:0},meta:${hideMeta?1:0}`,
-        ...(genMs ? { 'X-Cert-Genms': genMs } : {}),
+        ...(style ? { 'X-Cert-Style': String(style) } : {}),
+        'X-Cert-Opts': `qr:${hideQr?1:0},meta:${hideMeta?1:0},nocache:${noCache?1:0}`,
+        ...(genMs ? { 'X-Cert-Genms': String(genMs) } : {}),
+        ...(stHdr ? { 'Server-Timing': stHdr } : {}),
+        'X-Pool': `t:${poolHdr.total ?? '-'} i:${poolHdr.idle ?? '-'} w:${poolHdr.waiting ?? '-'}`,
         'Content-Length': String(body.byteLength),
       },
     })
@@ -443,17 +499,26 @@ export async function GET(req: Request, ctx: any) {
     inflight.delete(key)
     const errMsg = String(e?.message || e)
     const diag = e?.__diag || null
-    console.error('[api/cert] error', { traceId, err: errMsg, diag })
+    const code = (e && (e.code || e.name)) || null
+    const pstats = poolStats()
+    const envDb = await dbEnv().catch(()=>null as any)
+
+    console.error('[api/cert] error', { traceId, err: errMsg, code, diag })
 
     const status = errMsg === 'not_found' ? 404 : 500
     const payload = {
       error: errMsg === 'not_found' ? 'not_found' : 'internal',
       trace_id: traceId,
       cause: errMsg,
+      code,
+      region: process.env.VERCEL_REGION || process.env.FLY_REGION || null,
+      node: process.version,
       diag: diag || {
         tsISO, ymd: tsISO.slice(0,10), locale, hideQr, hideMeta, isPublicish,
         note: 'Add ?debug=1 for full diagnostics or ?debug=1&probe=1 to test PDF generation.'
-      }
+      },
+      pool: pstats,
+      db_env: envDb
     }
     return new NextResponse(JSON.stringify(payload), {
       status,
@@ -461,4 +526,3 @@ export async function GET(req: Request, ctx: any) {
     })
   }
 }
-
